@@ -8,35 +8,40 @@
    half is x > 0, y is up from the surface the book lies on.
    ───────────────────────────────────────────────────────────── */
 const Book = (() => {
-  const T = THREE, SEG = 34, TURN = 0.8, LAM = 0.017, EPS = 0.00022;
+  const T = THREE, SEG = 34, ZS = 4, TURN = 0.8, LAM = 0.017, EPS = 0.00022, TWIST = 0.35;
   const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const dip = u => 1 - Math.exp(-u / LAM);           /* page height factor: 0 in the gutter, 1 a few cm out */
 
-  /* a sheet: a strip from the spine (u = 0) to the fore-edge (u = w); front face up */
+  /* a sheet: a strip from the spine (u = 0) to the fore-edge (u = w), in ZS bands from its top (z = −h/2) to its
+     bottom; front face up */
   function sheetGeos(w, h) {
-    const n = (SEG + 1) * 2, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uvF = new Float32Array(n * 2), uvB = new Float32Array(n * 2), idx = [];
-    for (let i = 0; i <= SEG; i++) for (let j = 0; j < 2; j++) {
-      const k = i * 2 + j, u = Math.pow(i / SEG, 1.35);           /* denser near the gutter where the page bends */
-      pos[k * 3] = u * w; pos[k * 3 + 2] = j === 0 ? -h / 2 : h / 2; nor[k * 3 + 1] = 1;
-      uvF[k * 2] = u; uvF[k * 2 + 1] = j === 0 ? 1 : 0; uvB[k * 2] = 1 - u; uvB[k * 2 + 1] = j === 0 ? 1 : 0;
+    const C = ZS + 1, n = (SEG + 1) * C, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uvF = new Float32Array(n * 2), uvB = new Float32Array(n * 2), idx = [];
+    for (let i = 0; i <= SEG; i++) for (let j = 0; j < C; j++) {
+      const k = i * C + j, u = Math.pow(i / SEG, 1.35), v = 1 - j / ZS;           /* denser near the gutter where the page bends */
+      pos[k * 3] = u * w; pos[k * 3 + 2] = (j / ZS - 0.5) * h; nor[k * 3 + 1] = 1;
+      uvF[k * 2] = u; uvF[k * 2 + 1] = v; uvB[k * 2] = 1 - u; uvB[k * 2 + 1] = v;
     }
-    for (let i = 0; i < SEG; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    for (let i = 0; i < SEG; i++) for (let j = 0; j < ZS; j++) { const a = i * C + j, b = a + C; idx.push(a, a + 1, b, a + 1, b + 1, b); }
     const P = new T.BufferAttribute(pos, 3), N = new T.BufferAttribute(nor, 3); P.setUsage(T.DynamicDrawUsage); N.setUsage(T.DynamicDrawUsage);
     const mk = uv => { const g = new T.BufferGeometry(); g.setAttribute('position', P); g.setAttribute('normal', N); g.setAttribute('uv', new T.BufferAttribute(uv, 2)); g.setIndex(idx); g.boundingSphere = new T.Sphere(new T.Vector3(), Math.hypot(w, h) * 1.2); return g; };
     const U = []; for (let i = 0; i <= SEG; i++) U.push(Math.pow(i / SEG, 1.35) * w);
     return { f: mk(uvF), b: mk(uvB), P, N, w, h, U };
   }
   /* bend a sheet: th = 0 on the right block, π on the left; it rides the gutter curve at both ends and the
-     fore-edge trails while it turns. yR, yL: the heights it rests at on each side. */
+     fore-edge trails while it turns. yR, yL: the heights it rests at on each side. A page is turned by its corner
+     nearest the reader, so the bottom of the sheet leads a little and the curl runs across it on a slant (each band
+     keeps its length; at rest, where sin th is 0, every band lies flat). */
   function bend(G, th, yR, yL, dir) {
-    const p = G.P.array, n = G.N.array, w = G.w, s = Math.sin(th), lag = 0.9 * s * (dir || 1), m = th / Math.PI, y0 = yR + (yL - yR) * m;
-    let x = 0, y = 0, prev = 0;
-    for (let i = 0; i <= SEG; i++) {
-      const u = G.U[i], du = u - prev; prev = u;
-      const phi = th - lag * Math.pow(u / w, 1.6);
-      if (i > 0) { x += Math.cos(phi) * du; y += Math.sin(phi) * du; }
-      const lift = y0 * dip(u) + 0.004 * s, ny = Math.cos(phi), nx = -Math.sin(phi);
-      for (let j = 0; j < 2; j++) { const k = (i * 2 + j) * 3; p[k] = x; p[k + 1] = y + lift; n[k] = nx; n[k + 1] = ny; n[k + 2] = 0; }
+    const p = G.P.array, n = G.N.array, w = G.w, C = ZS + 1, s = Math.sin(th), m = th / Math.PI, y0 = yR + (yL - yR) * m, d = dir || 1;
+    for (let j = 0; j < C; j++) {
+      const tj = Math.min(Math.PI, Math.max(0, th + TWIST * s * (j / ZS - 0.5) * d)), lag = 0.9 * Math.sin(tj) * d;
+      let x = 0, y = 0, prev = 0;
+      for (let i = 0; i <= SEG; i++) {
+        const u = G.U[i], du = u - prev; prev = u;
+        const phi = tj - lag * Math.pow(u / w, 1.6);
+        if (i > 0) { x += Math.cos(phi) * du; y += Math.sin(phi) * du; }
+        const k = (i * C + j) * 3; p[k] = x; p[k + 1] = y + y0 * dip(u) + 0.004 * s; n[k] = -Math.sin(phi); n[k + 1] = Math.cos(phi); n[k + 2] = 0;
+      }
     }
     G.P.needsUpdate = true; G.N.needsUpdate = true;
   }

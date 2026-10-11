@@ -2,7 +2,7 @@
 import { open, shot, wait, until } from './lib.mjs';
 const only = process.argv[2];
 const { browser, page } = await open({});
-const state = () => page.evaluate(() => { const c = window.__cove; return { camT: +c.st.camT.toFixed(2), pending: !!c.rd.pending, page: document.getElementById('rPage').textContent, mode: window.Engine && Engine.paper ? Engine.paper.mode : '', spread: Engine.books.menu.spread }; });
+const state = () => page.evaluate(() => { const c = window.__cove; return { camT: +c.st.camT.toFixed(2), pending: !!c.rd.pending, page: document.getElementById('rPage').textContent, mode: typeof Engine !== 'undefined' && Engine.paper ? Engine.paper.mode : '', spread: Engine.books.menu.spread }; });
 for (const id of ['plans', 'stack', 'making', 'notes', 'contact', 'milestones']) {
   if (only && id !== only) continue;
   await page.evaluate(id => window.__cove.openChapter(id), id);
