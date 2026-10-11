@@ -377,11 +377,36 @@ vec3 skyRefl(vec3 d){
   return c;
 }
 
-struct Wv { float foam; float lip; float cover; float depth; float wet; float slope; };
+/* gloss: a film of water still on the sand; mark: the pale line a wave leaves where it stopped; sf: how much of the
+   foam is the swash's froth (bubbles left lying) rather than the open water's */
+struct Wv { float foam; float lip; float cover; float depth; float wet; float slope; float gloss; float mark; float sf; };
 /* how far up the sand the swash runs, along the beach: long sweeps, and the scallops of beach cusps every ten or
    fifteen metres (the same numbers are in engine.js, which decides what the bigger waves reach) */
 float runK(float nB, float a){ return 0.72 + 0.4*nB + 0.16*sin(a*0.43 + 0.8) + 0.1*sin(a*0.79 + 2.3); }
-void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, float spd, float sb, float k3, float nB){
+/* hashed on integers, so engine.js can work out exactly the same tongues */
+uint hashU(uint n){ n = (n ^ 61u) ^ (n >> 16u); n *= 9u; n ^= n >> 4u; n *= 0x27d4eb2du; return n ^ (n >> 15u); }
+/* a wave's run-up ends in tongues: in every cell of width cw along the beach a rounded lobe with a place, width and reach
+   of its own, and a cusp where two lobes meet; sd gives every wave its own set */
+float lobes(float a, float cw, uint sd){
+  float c = floor(a/cw), m = 0.0;
+  for (int i = -1; i <= 1; i++){
+    float ci = c + float(i);
+    uint h = hashU(uint(ci + 1048576.0)*0x9E3779B1u ^ sd);
+    vec3 r = vec3(uvec3(h, h >> 10u, h >> 20u) & 1023u)/1023.0;
+    float d = (a - (ci + 0.2 + 0.6*r.x)*cw)/(cw*(0.55 + 0.45*r.y));
+    m = max(m, (0.3 + 0.7*r.z)*sqrt(max(1.0 - d*d, 0.0)));
+  }
+  return m;
+}
+/* how far this wave runs up the sand here: the beach's sweeps and cusps, then the wave's own big lobes (a few metres
+   across) and small tongues (about one); how much later than the plain front it gets there; and the tongue, for the
+   froth on its tip. engine.js has the same, for what the water knocks over and the tyre tracks it smooths */
+vec3 reach(float a, float nB, float amp, uint sd){
+  uint hb = hashU(sd), hs = hashU(sd ^ 0x5bd1e995u);
+  float Lb = lobes(a, 3.4 + 3.0*float(hb & 255u)/255.0, hb), Ls = lobes(a, 0.9 + 0.7*float(hs & 255u)/255.0, hs);
+  return vec3((0.85 + 0.75*amp)*runK(nB, a)*(0.5 + 0.4*Lb + 0.42*Ls), 0.6*(Lb - 0.5), Ls);
+}
+void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, float spd, float sb, float k3, float nB, uint sd, float rv){
   float tsw = TS*(0.85 + 0.15*max(amp, 1.0));
   if (s > sb - 1.0){
     float x = s + tau*spd, lam = 1.4 + 0.035*s;
@@ -404,46 +429,72 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
       w.lip = max(w.lip, exp(-dlt*dlt/0.02)*onset*min(amp, 2.0)*sect);
     }
   }
-  if (s < 0.2 && tau > 0.0 && tau < tsw + 12.0){
-    float R = (0.85 + 0.75*amp)*runK(nB, a);
-    /* the front of the swash is lacy: fingers of water run on ahead or fall short, different for every wave */
-    float fing = tN(p*vec2(0.9, 0.5) + vec2(k3*5.3, k3*1.7), 4.5).g;
-    float r = -s - (fing - 0.5)*0.55*min(R, 2.2), u = tau/tsw;
-    if (r < R){
-      float q = max(r, 0.0)/R;
-      float u1 = U0*(1.0 - sqrt(1.0 - q)), u2 = U0 + (1.0 - U0)*pow(1.0 - q, 0.625);
-      if (u > u1 && u < u2){
-        float fr = (u < U0) ? R*(1.0 - (1.0-u/U0)*(1.0-u/U0)) : R*(1.0 - pow((u-U0)/(1.0-U0), 1.6));
-        float behind = fr - r;
-        w.cover = max(w.cover, smoothstep(0.0, 0.03, behind));
-        w.depth = max(w.depth, clamp(behind/(0.32 + R*0.45), 0.0, 1.0)*(1.0 - 0.6*smoothstep(U0, 1.0, u)));
-        float edge = exp(-behind/0.22)*(u < U0 ? 1.0 : 0.5);
-        w.foam = max(w.foam, max(edge, exp(-u*2.6)*0.32)*smoothstep(0.0, 0.02, behind));
-      } else if (u >= u2){
-        /* left behind, the sand dries in patches, not along a line */
-        float dryP = tN(p*0.8 + vec2(k3*3.3, 0.0), 3.2).a;
-        w.wet = max(w.wet, exp(-(u - u2)*tsw/(3.0 + 7.0*dryP)));
+  /* (above the furthest any of this wave's tongues could reach there's nothing to work out) */
+  if (s < 0.2 && tau > 0.0 && tau < tsw + 15.0 && -s < (0.85 + 0.75*amp)*runK(nB, a)*1.32 + 0.2){
+    vec3 RD = reach(a, nB, amp, sd);
+    float R = RD.x;
+    if (-s < R + 0.18){
+      /* a fine lace on the edge, and patches that drain, dull and pop at their own pace: new for every wave */
+      vec4 nw = tN(p*vec2(0.8, 0.6) + vec2(k3*5.3, k3*1.7), 5.0);
+      float r = -s - (nw.a - 0.5)*0.14*min(R, 2.5), tl = tau - RD.y, u = tl/tsw;
+      float q = clamp(r/R, 0.0, 1.0), u1 = U0*(1.0 - sqrt(1.0 - q));
+      if (r < R && u > u1){
+        float fr = u < U0 ? R*(1.0 - (1.0-u/U0)*(1.0-u/U0)) : R, behind = fr - r, tpk = tl - U0*tsw;
+        float fade = smoothstep(tsw + 15.0, tsw + 8.0, tau);
+        /* the backwash doesn't peel back along a line: the thin top sinks in first, then the sheet goes patch by patch,
+           and the rills that drain it last, so its edge comes apart as it thins */
+        float ud = max(U0 + (1.0 - U0)*pow(1.0 - q, 0.625) + 0.34*(nw.r - 0.5) + 0.1*(nw.g - 0.5) + 0.12*(nw.a - 0.5) + 0.3*smoothstep(0.55, 0.85, rv) - 0.05, u1 + 0.04);
+        float wedge = smoothstep(0.0, 0.05, behind);
+        if (u < ud){
+          float th = clamp(min(behind/(0.32 + R*0.45), (ud - u)*tsw/2.2), 0.0, 1.0);
+          w.cover = max(w.cover, smoothstep(0.0, 0.03, behind)*smoothstep(0.0, 0.03, ud - u));
+          w.depth = max(w.depth, th*(1.0 - 0.6*smoothstep(U0, 1.0, u)));
+          w.wet = max(w.wet, wedge); w.gloss = max(w.gloss, wedge);
+        } else {
+          /* left behind, the sand shines for a moment and then dulls, and stays dark a good while longer; both go patch
+             by patch (the patches matter more than the height, or the drying would walk down the beach in a line),
+             and soonest high up the beach, where the water sinks in faster */
+          float dt = (u - ud)*tsw, hi = smoothstep(0.3, 2.6, r);
+          w.gloss = max(w.gloss, exp(-dt/(mix(2.6, 0.8, hi)*(0.35 + 1.3*nw.g)))*wedge*fade);
+          w.wet = max(w.wet, exp(-dt/(mix(14.0, 6.0, hi)*(0.15 + 1.1*nw.r + 0.6*nw.a)))*wedge*fade);
+        }
+        /* foam: thick on the running edge, thickest at the tongues' tips; where the wave stops its froth is stranded
+           along the reach, and that and the sheet's own foam thin into lace and bubbles and pop away in spots. A later
+           wave sweeps away what an earlier one left (the waves come oldest first) */
+        float band = exp(-behind/(0.14 + 0.16*RD.z)), film = exp(-u*2.6)*0.34*(0.3 + 1.2*nw.r);
+        float fs = (u < U0 ? max(band, film) : (band*0.9 + film)*exp(-tpk/mix(0.8, 5.0, nw.a*0.6 + nw.g*0.4)))*smoothstep(0.0, 0.02, behind);
+        float swept = 1.0 - smoothstep(0.06, 0.2, behind);
+        w.sf = max(w.sf*swept, fs);
+        /* the high-water line: where a wave stopped, a faint pale seam follows its edge, tongue for tongue, until a later
+           wave runs over it; the bigger the wave, the plainer the line */
+        w.mark *= swept;
+        w.mark = max(w.mark, exp(-behind*behind/0.0036)*smoothstep(0.0, 1.5, tpk)*exp(-tpk/22.0)*smoothstep(0.55, 1.2, amp)*(0.35 + 0.65*smoothstep(0.3, 0.7, nw.r))*fade);
       }
-      float tm = tau - U0*tsw;
-      if (tm > 0.0) w.foam = max(w.foam, exp(-tm/3.0)*exp(-pow((r - R*0.985)/0.05, 2.0))*0.75*smoothstep(0.3, 0.6, fing));
     }
   }
 }
 Wv waves(float s, float a, float t, vec2 p){
-  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   float nA = 0.5 + 0.24*sin(a*0.19 + 1.3) + 0.18*sin(a*0.071 + 0.4) + 0.12*sin(a*0.53 + 2.0);   /* where along the beach the swell breaks sooner or later */
   float nB = 0.5 + 0.3*sin(a*0.23 + 2.1) + 0.2*sin(a*0.097 + 1.7);
+  /* rills down the beach face, narrow and running straight down the slope, where the backwash drains last */
+  float rv = 0.0;
+  if (s < 0.2) rv = texture2DGradEXT(uNoise, vec2(a, s*0.16)/3.4, vec2(gDx.x, -gDx.y*0.16)/3.4, vec2(gDy.x, -gDy.y*0.16)/3.4).g;
+  /* every wave carries a seed of its own for its tongues: a tide swell's from its phase, a clicked one's from when it lands
+     (not from its slot, which shifts as swells come and go) */
   for (int j = 0; j < 6; j++){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w);
-    wave1(w, s, a, t, p, tau, W.y, WC, 3.0 + 7.0*nA*W.y, W.z*3.7, nB);
+    wave1(w, s, a, t, p, tau, W.y, WC, 3.0 + 7.0*nA*W.y, W.z*3.7, nB, uint(W.z*4096.0), rv);
   }
   for (int k = 0; k < 3; k++){
     vec4 U = uUw[k]; if (U.y <= 0.0) continue;
     float amp = userAmp(U, a, t); if (amp < 0.02) continue;
-    wave1(w, s, a, t, p, t - U.x, amp, CU, userSb(amp, nA, U), U.z*0.37 + float(k)*1.7, nB);
+    wave1(w, s, a, t, p, t - U.x, amp, CU, userSb(amp, nA, U), fract(U.x*0.1173)*23.0, nB, uint(U.x*64.0), rv);
   }
-  { float wb = tN(vec2(p.x*0.7, p.y*0.4), 8.0).r; w.wet = max(w.wet, smoothstep(-0.35 - 0.9*wb, -0.12, s)); }
+  /* the foot of the beach is always wet, and where the water table meets the surface it is glassy */
+  { float wb = tN(vec2(p.x*0.7, p.y*0.4), 8.0).r, lo = smoothstep(-0.35 - 0.9*wb, -0.12, s); w.wet = max(w.wet, lo); w.gloss = max(w.gloss, lo*lo*0.8); }
+  w.foam = max(w.foam, w.sf);
   return w;
 }
 
@@ -488,8 +539,13 @@ void main(){
   float shK = length(p - uShC.xy) < uShC.z ? mix(1.0, shadowAt(wp), uShadowK) : 1.0;
   bool glit = dot(uMoonGlit + uSunGlit, vec3(1.0)) > 1e-6;
 
-  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-  if ((uDbgG & 1) == 0 && s > -4.0 && s < 70.0) w = waves(s, p.x, t, p);
+  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  /* the swash runs a few metres up the sand, further under a storm's swells and much further under a big clicked one:
+     look for it as far as the biggest wave about could reach, or it would stop short along a line */
+  float sUp = 4.0;
+  for (int j = 0; j < 6; j++) sUp = max(sUp, 1.85*(0.85 + 0.75*uWv[j].y) + 0.3);
+  for (int k = 0; k < 3; k++) sUp = max(sUp, 1.85*(0.85 + 0.9*uUw[k].y) + 0.3);
+  if ((uDbgG & 1) == 0 && s > -sUp && s < 70.0) w = waves(s, p.x, t, p);
 
   /* ocean surface: four octaves of directional chop; what the pixel can't resolve becomes roughness */
   vec3 Nw = vec3(0.0, 1.0, 0.0);
@@ -564,8 +620,13 @@ void main(){
     vec3 alb = vec3(0.60, 0.50, 0.35)*(0.84 + 0.24*nb.r + 0.1*(nm.g - 0.5))*(0.93 + 0.1*grain)*(1.0 - 0.08*trample);
     alb *= mix(0.92, 1.04, dryness);
     alb = mix(alb, vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g), veg);
-    float wet = max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg))*(1.0 - veg*0.4);
+    /* the high-water line: a faint pale seam of fine sand and burst bubbles, drier than the sand below it */
+    float mark = w.mark*(1.0 - veg)*(1.0 - w.cover)*(1.0 - 0.7*uWet);
+    float wet = max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg))*(1.0 - veg*0.4)*(1.0 - 0.5*mark);
+    /* fresh from the water the sand is glassy, a film that sinks in within seconds; damp sand is only dark */
+    float gloss = max(max(w.gloss, w.cover), uWet*0.55)*(1.0 - veg)*(1.0 - mark);
     vec3 a = alb*mix(1.0, 0.46, wet);
+    a = mix(a, alb*1.2, mark*0.45);
     a = mix(a, dec.rgb/max(dec.a, 1e-3), dec.a);
     float ao = 1.0 - rel.b*0.85;
     if (camp) art = artLight(wp, N);
@@ -574,12 +635,14 @@ void main(){
     float qz = smoothstep(0.986, 1.0, grain)*(1.0 - wet)*smoothstep(0.08, 0.02, fpL);
     lit += uKeyCol*qz*pow(max(dot(N, normalize(Lk + V)), 0.0), 8.0)*1.6;
     if (wet > 0.01){
-      vec3 Ns = normalize(mix(N, Nw, 0.3));
+      /* a film of water left on the sand is a still, smooth mirror for the sky and the moon (only the sheet still running
+         over it ripples); damp sand keeps a little sheen, with the grain's sparkle */
+      vec3 Ns = normalize(mix(mix(N, Nw, 0.3*(1.0 - gloss)), vec3(0.0, 1.0, 0.0), 0.6*gloss));
       float F = 0.02 + 0.98*pow(1.0 - max(dot(Ns, V), 0.0), 5.0);
       vec3 R = reflect(-V, Ns); R.y = abs(R.y);
       vec3 sheen = skyRefl(R)*F + art*0.06;
-      if (glit) sheen += seaSpec(Ns, V, uMoonDirV, uMoonGlit, 0.006) + seaSpec(Ns, V, uSunDirV, uSunGlit, 0.006);
-      lit += sheen*wet*0.85;
+      if (glit) sheen += (seaSpec(Ns, V, uMoonDirV, uMoonGlit, 0.006) + seaSpec(Ns, V, uSunDirV, uSunGlit, 0.006))*(0.25 + 0.75*gloss);
+      lit += sheen*mix(wet*0.45, max(wet, gloss), gloss)*0.85;
     }
     sandC = lit;
   }
@@ -613,9 +676,9 @@ void main(){
   float seaMix = smoothstep(-0.02, 0.24, s);
   col = mix(sandC, seaC, seaMix);
 
-  /* swash sheet */
+  /* swash sheet: a film draining away looks much like the glassy sand under it, so it fades as it thins */
   if (w.cover > 0.001){
-    float cov = w.cover*(1.0 - seaMix);
+    float cov = w.cover*(1.0 - seaMix)*(0.4 + 0.6*smoothstep(0.0, 0.4, w.depth));
     float F = 0.02 + 0.98*pow(1.0 - max(dot(Nw, V), 0.0), 5.0);
     vec3 R = reflect(-V, Nw); R.y = abs(R.y);
     vec3 sheet = col*mix(0.82, 0.62, w.depth) + skyRefl(R)*F*0.9;
@@ -625,12 +688,14 @@ void main(){
 
   /* foam: dense whitewater with holes that open up into marbled lace */
   if ((uDbgG & 16) == 0 && (w.foam > 0.02 || w.lip > 0.02)){
-    vec2 fuv = p - sn*WC*0.3*min(w.foam, 1.0);
+    /* the swash's froth is bubbles, and stays where it was left; the open water's foam is a marbled web that rides on */
+    float swf = clamp(w.sf/max(w.foam, 0.02), 0.0, 1.0);
+    vec2 fuv = p - sn*WC*0.3*min(w.foam, 1.0)*(1.0 - swf);
     vec4 fa = tW(fuv + vec2(t*0.014, t*0.005), 3.6), fb = tW(fuv - vec2(t*0.022, -t*0.01) + 0.74, 2.3);
     vec4 fn = tW(vec2(fuv.x*0.7, fuv.y*1.2) + vec2(t*0.01, 0.0), 4.8);
     float holes = min(fa.a, fb.a + 0.12), net = max(fn.b, fb.b*0.7);
     float dens = clamp(w.foam, 0.0, 1.0);
-    float lace = mix(net, holes, smoothstep(0.25, 0.75, dens));
+    float lace = mix(net, holes, max(smoothstep(0.25, 0.75, dens), swf));
     float thr = 0.97 - dens*1.02;
     float fw = max(0.07, fwidth(lace)*1.6);
     float foamV = mix(smoothstep(thr - fw, thr + fw, lace), clamp(dens*0.85, 0.0, 1.0), smoothstep(0.12, 0.45, fw))*smoothstep(0.03, 0.14, dens);
