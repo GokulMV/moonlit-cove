@@ -236,16 +236,15 @@ const Engine = (() => {
   function rockHits(wt0, wt1, cx, cz, maxD = 32) {
     const out = []; if (!world) return out;
     const WT = 9.0;
-    world.wet.forEach((p0, i) => {
-      const p = { x: p0.x + world.P * Math.round((cx - p0.x) / world.P), z: p0.z, rad: p0.rad };   /* the copy of this rock nearest the listener */
-      const d = Math.hypot(p.x - cx, p.z - cz); if (d > maxD) return;
+    for (const p of world.wetNear(cx, cz, maxD)) {
+      const d = Math.hypot(p.x - cx, p.z - cz), i = p.id;
       const g = shoreDZ(p.x), s = Math.max(0, (Layout.shoreZ(p.x) - p.z) / Math.sqrt(1 + g * g));
       for (let k = Math.floor(wt0 / WT) - 1; k <= Math.ceil(wt1 / WT) + 1; k++) {
         const h = n => hash(k * n + 0.37), T0 = k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(p.x * 0.11 + h(2.71) * 6.283) + p.x * 0.03 * (h(0.93) - 0.5) - s / WCJ;
         if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'r' + k + '_' + i, wave: 'w' + k, x: T0, amp: 0.55 + 0.6 * h(3.33), d, rad: p.rad, px: p.x });
       }
       for (const w of surge.waves) { const T0 = w.x - s / CU; if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'ru' + w.t0.toFixed(2) + '_' + i, wave: 'u' + w.t0.toFixed(2), x: T0, amp: 1 + 0.6 * userAmpJS(w, p.x, T0), d, rad: p.rad, px: p.x }); }
-    });
+    }
     return out;
   }
   const surgeState = () => surge;
@@ -434,12 +433,25 @@ const Engine = (() => {
     const nearSea = new T.Mesh(ng, nearMat); nearSea.frustumCulled = false; scene.add(nearSea); nearMesh = nearSea;
 
     /* the coast beyond the camp, without end: headlands, surf rocks with foam, the forest on its hills;
-       and the small lives of the shore, its shells laid along every chunk of it */
+       and the small lives of the shore, its shells laid along every chunk of it as the chunk is built.
+       The chunk round the camp is built now, the rest a little at a time as the camera comes near */
+    coastFollow(Layout.cameras.wide.pos[0]);
     world = World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
+    world.prime();
     post = makePost();
     return { casters: nCast };
   }
+
+  /* the shoreline the shaders draw: the headlands nearest the camera and the coast's waves, measured from a reference
+     near it (Layout.coastGL), refreshed as the camera moves along the coast */
+  let coastX = NaN, coastV = -1;
+  function coastFollow(x) {
+    if (Math.abs(x - coastX) < 24 && coastV === Layout.coastVer) return;
+    coastX = x; coastV = Layout.coastVer;
+    const U = Mats.coastU; Layout.coastGL(x, U.uHeadL.value, U.uCoast.value, U.uCoastP.value, U.uCoastQ.value);
+  }
+  Object.assign(api, { coastFollow });
 
   const lerp = (a, b, t) => a + (b - a) * t;
   function setCamera(c, aspect, shift = 0) {
@@ -464,11 +476,13 @@ const Engine = (() => {
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
-    /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, and the copies of the land */
+    /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
+       draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     { const cx = Math.round(camera.position.x / 4) * 4; if (nearMesh && cx !== nearX) { nearX = cx; nearMesh.position.x = cx; gU.uNearRect.value.set(cx - 48, -62, cx + 48, -2); } }
     skyMesh.position.copy(camera.position);
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
-    if (world) world.follow(camera.position.x);
+    coastFollow(camera.position.x);
+    if (world) world.update(camera.position.x, o.buildMs ?? 4);
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;
       const sc = o.shadowC || (away ? [Math.round(lk[0]), Math.round(lk[2])] : [Layout.camp.x, Layout.camp.z]);

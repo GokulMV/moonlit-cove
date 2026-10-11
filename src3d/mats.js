@@ -13,6 +13,10 @@ const Mats = (() => {
     uVanInv: { value: new THREE.Matrix4() }, uHead: { value: V4() }, uHeadDir: { value: V3(1, 0, 0) }, uFireSh: { value: null }, uCanSh: { value: null }, uFireShM: { value: new THREE.Matrix4() }, uCanShM: { value: new THREE.Matrix4() }, uShOn: { value: 0 },
     uFog: { value: V4(0, 0, 0, 1) }
   };
+  /* the shoreline the shaders draw (glsl.js), kept up to date by the engine as the camera moves along the coast;
+     shaders built without U take these on their own */
+  const coastU = { uHeadL: { value: Array.from({ length: Layout.NGL }, () => V4(0, 1, 0, 0)) }, uCoast: { value: V4() }, uCoastP: { value: V4() }, uCoastQ: { value: V4() } };
+  Object.assign(U, coastU);
   /* aerial perspective, the same as the ground's: far things fade toward the horizon's colour */
   const FOG = `
 uniform vec4 uFog;
@@ -182,5 +186,5 @@ void main(){
     });
     return m;
   }
-  return { U, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
+  return { U, coastU, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
 })();

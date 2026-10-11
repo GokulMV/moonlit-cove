@@ -4,19 +4,86 @@
    Sea is z < shoreZ(x); dry beach up to vegZ(x); coastal forest beyond.
    ───────────────────────────────────────────────────────────── */
 const Layout = (() => {
-  /* the coast repeats every P metres, so the beach runs on forever: every wave of the shoreline has a whole
-     number of periods in P. Four rocky headlands per stretch, each different, with a strip of sand left at
-     the foot of each so the van can drive round the point. Everything is evaluated on the wrapped x. */
-  const P = 1024, TAU = Math.PI * 2, wrap = u => u - P * Math.floor(u / P + 0.5);
-  const SH = { base: -8.6, a1: 1.5, f1: 9 * TAU / P, p1: 0.7, a2: 0.55, f2: 29 * TAU / P, p2: 2.0, tilt: -0.03, P,
-               h: [[-125, 16, 17], [132, 17, 19], [395, 13, 13], [-385, 22, 24]] };   /* [x, half-width, how far it juts out] */
-  const TL = SH.tilt * P / TAU;                            /* the old gentle tilt of the bay, as one long wave */
-  const head = x => SH.h.reduce((a, [hx, w, d]) => a + d * Math.exp(-((wrap(x - hx) / w) ** 2)), 0);
-  const headD = x => SH.h.reduce((a, [hx, w, d]) => { const u = wrap(x - hx); return a - d * 2 * u / (w * w) * Math.exp(-((u / w) ** 2)); }, 0);
-  const shoreZ = x => { const q = wrap(x); return SH.base + SH.a1 * Math.sin(q * SH.f1 + SH.p1) + SH.a2 * Math.sin(q * SH.f2 + SH.p2) + TL * Math.sin(q * TAU / P) - head(q); };
-  const shoreDZ = x => { const q = wrap(x); return SH.a1 * SH.f1 * Math.cos(q * SH.f1 + SH.p1) + SH.a2 * SH.f2 * Math.cos(q * SH.f2 + SH.p2) + SH.tilt * Math.cos(q * TAU / P) - headD(q); };
-  const VG = { base: 1.7, a1: 0.9, f1: 15 * TAU / P, p1: 1.3, a2: 0.45, f2: 37 * TAU / P, tl: 0.6 * TL };   /* the forest edge follows the long wave part way */
-  const vegZ = x => { const q = wrap(x); return VG.base + VG.a1 * Math.sin(q * VG.f1 + VG.p1) + VG.a2 * Math.sin(q * VG.f2) + VG.tl * Math.sin(q * TAU / P) - 0.55 * head(q); };
+  const TAU = Math.PI * 2;
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  /* ── the coast: it runs on for ever and never comes round again ──
+     The shoreline is the bay's own long waves (as they always were), slower waves that leave the camp's bay alone,
+     and rocky headlands: one chance of a headland in every 280 m cell along the coast, decided by a hash of the
+     cell, so any stretch can be worked out on its own, in any order, and always comes out the same. The two cells
+     either side of the camp hold the camp's own two points. Every headland leaves a strip of sand at its foot, so
+     the van can drive round it. Coast is all in coast coordinates; the world sees it through the origin O below. */
+  const S = { base: -8.6, a1: 1.5, f1: 0.0552233084, p1: 0.7, a2: 0.55, f2: 0.177941771, p2: 2.0, tl: -4.88923985, kt: 0.00613592315,
+              a3: 0.8, f3: 0.0213, p3: 0.4, a4: 2.2, f4: 0.00387, p4: 2.1, a5: 1.1, f5: 0.0091, p5: 4.4, tilt: -0.03 };
+  const VG = { base: 1.7, a1: 0.9, f1: 0.0920388473, p1: 1.3, a2: 0.45, f2: 0.227029157, tl: -2.93354391, x: 0.85 };   /* x: how much of the slow waves the forest edge follows */
+  const WIN = { x: 0.6, r0: 175, r1: 460 };   /* the slow waves come in between these distances from the camp's bay */
+  const Coast = (() => {
+    const CELL = 280, EDGE = 55, ODDS = 0.74, WMAX = 24, REACH = 6;   /* a headland's shape counts out to REACH half-widths */
+    const FIX = new Map([[-1, { hx: -125, w: 16, d: 17, ht: 1, st: 1.7, gap: 9.5, stacks: 1 }], [0, { hx: 132, w: 17, d: 19, ht: 1.12, st: 1.9, gap: 10, stacks: 2 }]]);
+    /* an integer hash of (cell, which number), as a fraction */
+    const hash = (i, k) => { let h = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul((k | 0) + 0x3c6ef372, 0x165667b1); h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+      h = Math.imul(h ^ (h >>> 12), 0x297a2d39); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
+    const memo = new Map();
+    /* the headland of cell i (or null): its point hx, half-width w, how far it juts out d, height ht, the step of its
+       rock terraces st, the sand left at its foot gap, its sea stacks; kept clear of the cells either side */
+    function cell(i) {
+      let h = memo.get(i); if (h !== undefined) return h;
+      h = FIX.has(i) ? Object.assign({}, FIX.get(i)) : null;
+      if (!h && hash(i, 1) < ODDS) {
+        const q = k => hash(i, k), w = 12 + 12 * q(3), d = w * (0.86 + 0.32 * q(4)), ht = 0.7 + 0.68 * q(5);
+        h = { hx: i * CELL + EDGE + q(2) * (CELL - 2 * EDGE), w, d, ht, st: 1.3 + 1.25 * (ht - 0.7) + 0.25 * q(6), gap: 7.6 + 0.145 * d + 0.4 * q(7), stacks: q(8) < 0.15 ? 0 : q(8) < 0.7 ? 1 : 2 };
+      }
+      if (h) { h.i = i; h.seed = 1 + Math.floor(hash(i, 9) * 1e9); }
+      memo.set(i, h); return h;
+    }
+    /* the headlands whose points lie between x0 and x1 */
+    function heads(x0, x1) { const out = []; for (let i = Math.floor(x0 / CELL), n = Math.floor(x1 / CELL); i <= n; i++) { const h = cell(i); if (h && h.hx >= x0 && h.hx <= x1) out.push(h); } return out; }
+    function head(x) {
+      let a = 0;
+      for (let i = Math.floor((x - REACH * WMAX) / CELL), n = Math.floor((x + REACH * WMAX) / CELL); i <= n; i++) {
+        const h = cell(i); if (!h) continue; const u = (x - h.hx) / h.w; if (u > -REACH && u < REACH) a += h.d * Math.exp(-u * u);
+      }
+      return a;
+    }
+    function headD(x) {
+      let a = 0;
+      for (let i = Math.floor((x - REACH * WMAX) / CELL), n = Math.floor((x + REACH * WMAX) / CELL); i <= n; i++) {
+        const h = cell(i); if (!h) continue; const u = (x - h.hx) / h.w; if (u > -REACH && u < REACH) a -= 2 * h.d * u / h.w * Math.exp(-u * u);
+      }
+      return a;
+    }
+    const slow = x => S.a3 * Math.sin(x * S.f3 + S.p3) + S.a4 * Math.sin(x * S.f4 + S.p4) + S.a5 * Math.sin(x * S.f5 + S.p5);
+    const slowD = x => S.a3 * S.f3 * Math.cos(x * S.f3 + S.p3) + S.a4 * S.f4 * Math.cos(x * S.f4 + S.p4) + S.a5 * S.f5 * Math.cos(x * S.f5 + S.p5);
+    const win = x => sm(WIN.r0, WIN.r1, Math.abs(x - WIN.x));
+    const winD = x => { const a = x - WIN.x, t = Math.max(0, Math.min(1, (Math.abs(a) - WIN.r0) / (WIN.r1 - WIN.r0))); return Math.sign(a) * 6 * t * (1 - t) / (WIN.r1 - WIN.r0); };
+    const shoreZ = x => S.base + S.a1 * Math.sin(x * S.f1 + S.p1) + S.a2 * Math.sin(x * S.f2 + S.p2) + S.tl * Math.sin(x * S.kt) + win(x) * slow(x) - head(x);
+    const shoreDZ = x => S.a1 * S.f1 * Math.cos(x * S.f1 + S.p1) + S.a2 * S.f2 * Math.cos(x * S.f2 + S.p2) + S.tilt * Math.cos(x * S.kt) + winD(x) * slow(x) + win(x) * slowD(x) - headD(x);
+    const vegZ = x => VG.base + VG.a1 * Math.sin(x * VG.f1 + VG.p1) + VG.a2 * Math.sin(x * VG.f2) + VG.tl * Math.sin(x * S.kt) + VG.x * win(x) * slow(x) - 0.55 * head(x);
+    return { CELL, WMAX, REACH, hash, cell, heads, head, headD, shoreZ, shoreDZ, vegZ };
+  })();
+
+  /* where the world sits on the coast: world (x, z) is coast (x + O.x, z + O.z). It is (0, 0), the camp in its bay;
+     setOrigin moves the camp somewhere else along the coast (the world must then be built again) */
+  const O = { x: 0, z: 0 }; let coastVer = 0;
+  function setOrigin(ox, oz) { O.x = ox; O.z = oz; coastVer++; }
+  const shoreZ = x => Coast.shoreZ(x + O.x) - O.z, shoreDZ = x => Coast.shoreDZ(x + O.x), vegZ = x => Coast.vegZ(x + O.x) - O.z;
+  const head = x => Coast.head(x + O.x), headD = x => Coast.headD(x + O.x);
+  const heads = (x0, x1) => Coast.heads(x0 + O.x, x1 + O.x).map(h => Object.assign({}, h, { hx: h.hx - O.x }));
+
+  /* the same shoreline for the shaders (glsl.js): the 12 headlands nearest x, and the phases of the coast's waves at
+     a reference x near it, so the GPU works with small numbers however far along the coast the camera is.
+     Fills the four vec4 uniforms H[12] (point − reference, half-width, how far out, 1/half-width), C, P and Q.
+     The headlands go in in order along the coast, so a shader can stop at the first one beyond its reach */
+  const NGL = 12, cand = [];
+  function coastGL(x, H, C, P, Q) {
+    const xr = Math.round(x / 1024) * 1024, X = xr + O.x, ph = a => a - TAU * Math.floor(a / TAU);
+    C.set(xr, X - WIN.x, S.base - O.z, VG.base - O.z);
+    P.set(ph(X * S.f1 + S.p1), ph(X * S.f2 + S.p2), ph(X * S.kt), ph(X * VG.f1 + VG.p1));
+    Q.set(ph(X * VG.f2), ph(X * S.f3 + S.p3), ph(X * S.f4 + S.p4), ph(X * S.f5 + S.p5));
+    const cx = x + O.x, c0 = Math.floor(cx / Coast.CELL); cand.length = 0;
+    for (let i = c0 - 14; i <= c0 + 14; i++) { const h = Coast.cell(i); if (h) cand.push(h); }
+    cand.sort((a, b) => Math.abs(a.hx - cx) - Math.abs(b.hx - cx)); if (cand.length > NGL) cand.length = NGL; cand.sort((a, b) => a.hx - b.hx);
+    for (let k = 0; k < NGL; k++) { const h = cand[k]; if (h) H[k].set(h.hx - X, h.w, h.d, 1 / h.w); else H[k].set(1e9, 1, 0, 1); }
+  }
 
   const camp = { x: 0.6, z: -2.7 };
   const rug = { x: 0.6, z: -2.7, w: 3.9, d: 2.8, rot: 0.06 };
@@ -72,6 +139,6 @@ const Layout = (() => {
     van: [-7.6, 2.4, -3.5], lights: [0.6, 2.7, -5.0], table: [0.6, 0.7, -2.7], fire: [6.9, 1.0, -4.5], bottle: [-3.6, 0.3, -8.05]
   };
 
-  return { shoreZ, shoreDZ, vegZ, SH, VG, head, wrap, P, camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood,
-           van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots };
+  return { shoreZ, shoreDZ, vegZ, head, headD, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, coastGL, NGL, SH: S, VG, WIN,
+           camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots };
 })();

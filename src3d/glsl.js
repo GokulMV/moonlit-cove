@@ -4,21 +4,45 @@
    ───────────────────────────────────────────────────────────── */
 const GLSL = (() => {
   const f = n => (Math.round(n * 1e5) / 1e5).toFixed(5);
-  const SH = Layout.SH, VG = Layout.VG;
-  /* the shoreline in GLSL, written once from Layout's numbers: the same periodic curve, so the endless beach
-     repeats seamlessly. sx names this copy (each shader stage that needs it gets its own set of names). */
-  const PER = Layout.P, KP = 2 * Math.PI / PER, TL = SH.tilt * PER / (2 * Math.PI);
+  const SH = Layout.SH, VG = Layout.VG, WIN = Layout.WIN, NH = Layout.NGL;
+  /* the shoreline in GLSL: the same curve as Layout's, drawn from uniforms the engine keeps up to date as the camera
+     moves (Layout.coastGL): the headlands nearest the camera, and the waves' phases at a reference x near it, so
+     everything is measured from there and the GPU's single floats stay exact however far along the coast it is.
+     The coast itself goes into a shader once, whichever pieces include it; names gives each piece its own entry
+     points (sx, the piece's old suffix, is no longer needed). */
+  const g9 = n => n.toPrecision(9);
+  const COAST = `
+#ifndef COAST_FN
+#define COAST_FN
+uniform vec4 uHeadL[${NH}];   /* headlands in order along the coast: point (from uCoast.x), half-width, how far it juts out, 1/half-width */
+uniform vec4 uCoast;         /* reference x, its distance along from the camp's bay, the shore's and the forest edge's base z */
+uniform vec4 uCoastP, uCoastQ;   /* the waves' phases at the reference */
+/* (a headland's shape reaches six half-widths; past the first one beyond reach, the rest are too: they are 110 m apart or more) */
+float coastHead(float xl){ float h = 0.0;
+  for (int i = 0; i < ${NH}; i++){ vec4 H = uHeadL[i]; float u = (xl - H.x)*H.w; if (u < -6.0) break; if (u < 6.0) h += H.z*exp(-u*u); }
+  return h; }
+float coastHeadD(float xl){ float r = 0.0;
+  for (int i = 0; i < ${NH}; i++){ vec4 H = uHeadL[i]; float u = (xl - H.x)*H.w; if (u < -6.0) break; if (u < 6.0) r -= 2.0*H.z*u*H.w*exp(-u*u); }
+  return r; }
+/* the slow waves, which leave the camp's bay alone */
+float coastWin(float xl){ return smoothstep(${g9(WIN.r0)}, ${g9(WIN.r1)}, abs(xl + uCoast.y)); }
+float coastWinD(float xl){ float a = xl + uCoast.y, t = clamp((abs(a) - ${g9(WIN.r0)})/${g9(WIN.r1 - WIN.r0)}, 0.0, 1.0); return sign(a)*6.0*t*(1.0 - t)/${g9(WIN.r1 - WIN.r0)}; }
+float coastSlow(float xl){ return ${g9(SH.a3)}*sin(xl*${g9(SH.f3)} + uCoastQ.y) + ${g9(SH.a4)}*sin(xl*${g9(SH.f4)} + uCoastQ.z) + ${g9(SH.a5)}*sin(xl*${g9(SH.f5)} + uCoastQ.w); }
+float coastSlowD(float xl){ return ${g9(SH.a3 * SH.f3)}*cos(xl*${g9(SH.f3)} + uCoastQ.y) + ${g9(SH.a4 * SH.f4)}*cos(xl*${g9(SH.f4)} + uCoastQ.z) + ${g9(SH.a5 * SH.f5)}*cos(xl*${g9(SH.f5)} + uCoastQ.w); }
+float coastZ(float x){ float xl = x - uCoast.x;
+  return uCoast.z + ${g9(SH.a1)}*sin(xl*${g9(SH.f1)} + uCoastP.x) + ${g9(SH.a2)}*sin(xl*${g9(SH.f2)} + uCoastP.y) + ${g9(SH.tl)}*sin(xl*${g9(SH.kt)} + uCoastP.z) + coastWin(xl)*coastSlow(xl) - coastHead(xl); }
+float coastDZ(float x){ float xl = x - uCoast.x;
+  return ${g9(SH.a1 * SH.f1)}*cos(xl*${g9(SH.f1)} + uCoastP.x) + ${g9(SH.a2 * SH.f2)}*cos(xl*${g9(SH.f2)} + uCoastP.y) + ${g9(SH.tilt)}*cos(xl*${g9(SH.kt)} + uCoastP.z)
+       + coastWinD(xl)*coastSlow(xl) + coastWin(xl)*coastSlowD(xl) - coastHeadD(xl); }
+float coastVeg(float x){ float xl = x - uCoast.x;
+  return uCoast.w + ${g9(VG.a1)}*sin(xl*${g9(VG.f1)} + uCoastP.w) + ${g9(VG.a2)}*sin(xl*${g9(VG.f2)} + uCoastQ.x) + ${g9(VG.tl)}*sin(xl*${g9(SH.kt)} + uCoastP.z) + ${g9(VG.x)}*coastWin(xl)*coastSlow(xl) - 0.55*coastHead(xl); }
+#endif
+`;
   function shoreGL(sx, names) {
-    const g9 = n => n.toPrecision(9);   /* full precision: the coast must close on itself exactly */
-    const W = `wrapP${sx}`, H = names.head, HD = names.headD;
-    const hsum = SH.h.map(([hx, w, d]) => `${g9(d)}*exp(-pow(${W}(x - (${g9(hx)}))/${g9(w)}, 2.0))`).join(' + ');
-    const hdsum = SH.h.map(([hx, w, d]) => `u = ${W}(x - (${g9(hx)})); r += ${g9(-2 * d / (w * w))}*u*exp(-u*u/${g9(w * w)});`).join(' ');
-    let o = `float ${W}(float u){ return u - ${g9(PER)}*floor(u/${g9(PER)} + 0.5); }\n`;
-    o += `float ${H}(float x){ return ${hsum}; }\n`;
-    if (HD) o += `float ${HD}(float x){ float u, r = 0.0; ${hdsum} return r; }\n`;
-    o += `float ${names.z}(float x){ float q = ${W}(x); return ${g9(SH.base)} + ${g9(SH.a1)}*sin(q*${g9(SH.f1)}+${g9(SH.p1)}) + ${g9(SH.a2)}*sin(q*${g9(SH.f2)}+${g9(SH.p2)}) + ${g9(TL)}*sin(q*${g9(KP)}) - ${H}(q); }\n`;
-    if (names.dz) o += `float ${names.dz}(float x){ float q = ${W}(x); return ${g9(SH.a1 * SH.f1)}*cos(q*${g9(SH.f1)}+${g9(SH.p1)}) + ${g9(SH.a2 * SH.f2)}*cos(q*${g9(SH.f2)}+${g9(SH.p2)}) + ${g9(SH.tilt)}*cos(q*${g9(KP)}) - ${HD}(q); }\n`;
-    if (names.veg) o += `float ${names.veg}(float x){ float q = ${W}(x); return ${g9(VG.base)} + ${g9(VG.a1)}*sin(q*${g9(VG.f1)}+${g9(VG.p1)}) + ${g9(VG.a2)}*sin(q*${g9(VG.f2)}) + ${g9(VG.tl)}*sin(q*${g9(KP)}) - 0.55*${H}(q); }\n`;
+    let o = COAST;
+    o += `float ${names.z}(float x){ return coastZ(x); }\n`;
+    if (names.dz) o += `float ${names.dz}(float x){ return coastDZ(x); }\n`;
+    if (names.veg) o += `float ${names.veg}(float x){ return coastVeg(x); }\n`;
     return o;
   }
 

@@ -551,31 +551,22 @@
   const car = { on: false, k: 0, x: 0, z: 0, h: 0, v: 0, steer: 0, spin: 0, roll: 0, pitch: 0, odo: 0, trackOdo: 0, splashT: 0, camK: 0, camP: null, camL: null, yaw: 0, lastV: 0, knocks: 0, wheels: null, bumpT: 0 };
   const keys = new Set(), touch = { x: 0, y: 0, on: false };
   const isTouch = matchMedia('(pointer: coarse)').matches;
-  /* what the van drives round: the camp's own things (only at the camp), the rocks and trunks of the coast
-     (in every copy of it, kept in buckets along the stretch so only the near ones are looked at), and the trees
-     that fill the clearing in every copy but the camp's */
-  const obstacles = [], campObs = [], fillObs = [], OB = { bw: 8, b: [], P: 1e9, X0: 0 };
+  /* what the van drives round: the camp's own things, and the rocks and trunks of whichever chunks of the coast
+     are built where it is (the world keeps them in buckets along each chunk, so only the near ones are looked at) */
+  const obstacles = [], campObs = [];
   function buildObstacles() {
     for (const [x, z] of Layout.palms.map(p => [p[0], p[1]])) campObs.push([x, z, 0.4]);
     for (const t of Layout.trees) campObs.push([t[0], t[1], 0.5]);
     for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
-    const W = Engine.world; if (!W) return;
-    Object.assign(OB, { P: W.P, X0: W.X0, b: Array.from({ length: Math.ceil(W.P / OB.bw) }, () => []) });
-    for (const o of W.obstacles) OB.b[Math.floor((W.base(o[0]) - W.X0) / OB.bw) % OB.b.length].push(o);
-    fillObs.push(...W.fillObstacles);
-    obstacles.push(...campObs, ...W.obstacles);
+    obstacles.push(...campObs);
   }
   /* the obstacles near (x, z), each as [dx, dz, radius, the obstacle] measured from it to the point */
   function obstaclesNear(x, z) {
     const out = [], W = Engine.world;
     for (const o of campObs) if (Math.abs(x - o[0]) < 6) out.push([x - o[0], z - o[1], o[2], o]);
-    if (!W) return out;
-    const n = OB.b.length, i = Math.floor((W.base(x) - W.X0) / OB.bw);
-    for (let d = -1; d <= 1; d++) for (const o of OB.b[(i + d + n) % n]) out.push([W.wrapD(x - o[0]), z - o[1], o[2], o]);
-    const k = Math.round(x / W.P);
-    if (k !== 0) for (const o of fillObs) { const dx = x - (o[0] + k * W.P); if (Math.abs(dx) < 6) out.push([dx, z - o[1], o[2], o]); }
+    if (W) for (const o of W.obstaclesNear(x, z)) out.push([x - o[0], z - o[1], o[2], o]);
     return out;
   }
   const DRIVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift'];
