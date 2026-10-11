@@ -227,6 +227,29 @@ const Engine = (() => {
   const nBof = a => 0.5 + 0.3 * Math.sin(a * 0.23 + 2.1) + 0.2 * Math.sin(a * 0.097 + 1.7);
   const runK = (nB, a) => 0.72 + 0.4 * nB + 0.16 * Math.sin(a * 0.43 + 0.8) + 0.1 * Math.sin(a * 0.79 + 2.3);   /* as in the ground shader */
   const tsOf = amp => TSJ * (0.85 + 0.15 * Math.max(amp, 1));
+  /* each wave's run-up ends in tongues, exactly as the ground shader draws them (it hashes the same integers the same
+     way): big lobes a few metres across and small ones about a metre, rounded, with cusps between, new for every wave */
+  const hashU = n => { n = (n ^ 61 ^ (n >>> 16)) >>> 0; n = Math.imul(n, 9) >>> 0; n = (n ^ (n >>> 4)) >>> 0; n = Math.imul(n, 0x27d4eb2d) >>> 0; return (n ^ (n >>> 15)) >>> 0; };
+  function lobes(a, cw, sd) {
+    const c = Math.floor(a / cw); let m = 0;
+    for (let i = -1; i <= 1; i++) {
+      const ci = c + i, h = hashU((Math.imul(ci + 1048576, 0x9E3779B1) ^ sd) >>> 0);
+      const d = (a - (ci + 0.2 + 0.6 * (h & 1023) / 1023) * cw) / (cw * (0.55 + 0.45 * ((h >>> 10) & 1023) / 1023));
+      m = Math.max(m, (0.3 + 0.7 * ((h >>> 20) & 1023) / 1023) * Math.sqrt(Math.max(0, 1 - d * d)));
+    }
+    return m;
+  }
+  /* [how far up the sand a wave of amplitude amp runs at x, how much later than the plain front its edge gets there] */
+  function reach(a, amp, sd) {
+    const hb = hashU(sd), hs = hashU((sd ^ 0x5bd1e995) >>> 0);
+    const Lb = lobes(a, 3.4 + 3.0 * (hb & 255) / 255, hb), Ls = lobes(a, 0.9 + 0.7 * (hs & 255) / 255, hs);
+    return [(0.85 + 0.75 * amp) * runK(nBof(a), a) * (0.5 + 0.4 * Lb + 0.42 * Ls), 0.6 * (Lb - 0.5)];
+  }
+  /* the seeds the shader uses: a clicked swell's from when it lands, a tide swell's from its phase (as the GPU's floats) */
+  const seedU = w => Math.floor(Math.fround(w.x) * 64), seedW = W => Math.floor(Math.fround(W.z) * 4096);
+  /* where the water's edge is, a fraction u of the way through a swash that runs up to R: the front climbing, then the
+     sheet draining back (the shader breaks that edge up into patches and rills; this is its mean) */
+  const swashEdge = (R, u) => u < U0J ? R * (1 - Math.pow(1 - u / U0J, 2)) : R * (1 - Math.pow((u - U0J) / (1 - U0J), 1.6));
   function seaPick(nx, ny) {
     const v = new T.Vector3(nx * 2 - 1, -(ny * 2 - 1), 0.5).unproject(camera).sub(camera.position).normalize();
     if (v.y >= -1e-4) return null;
@@ -243,22 +266,19 @@ const Engine = (() => {
     let w = surge.waves.find(q => q.x - wt > 1.2 && Math.abs(q.xc - h.x) < 14 && wt - q.t0 < 4.5);
     if (w) { w.amp = Math.min(7.5, w.amp + 1.15); w.xc += (h.x - w.xc) * 0.3; }
     else { w = { t0: wt, x: wt + s0 / CU, amp: 1.5, xc: h.x, s0 }; surge.waves.push(w); }
-    surge.waves = surge.waves.filter(q => wt - q.x < tsOf(q.amp) + 12).slice(-3);
+    surge.waves = surge.waves.filter(q => wt - q.x < tsOf(q.amp) + 15).slice(-3);   /* as long as the shader still draws its wet sand */
     return { x: h.x, z: h.z, combo: surge.combo, amp: w.amp, eta: w.x - wt, reach: (0.85 + 0.75 * w.amp) };
   }
   const userAmpJS = (w, x, wt) => { const sc = Math.max(w.s0 - (wt - (w.x - w.s0 / CU)) * CU, 0), hw = Math.min(4 + 0.9 * (w.s0 - sc), 46), dx = (x - w.xc) / hw;
     const along = 0.82 + 0.36 * (0.5 + 0.25 * Math.sin(x * 0.31 + w.xc) + 0.25 * Math.sin(x * 0.13 + 1.7 * w.xc)); return w.amp * along * Math.exp(-dx * dx); };
-  /* is (x, z) under the swash of a click-swell at time wt? (mirrors the ground shader) */
+  /* is (x, z) under the swash of a click-swell at time wt? (mirrors the ground shader, tongues and all) */
   function swashAt(x, z, wt) {
     const r = -sOf(x, z); let best = null;
     for (const w of surge.waves) {
       const amp = userAmpJS(w, x, wt); if (amp < 0.05) continue;
-      const T_ = tsOf(amp), u = (wt - w.x) / T_;
-      if (u <= 0 || u >= 1) continue;
-      const R = (0.85 + 0.75 * amp) * runK(nBof(x), x);
-      if (r > R) continue;
-      const fr = u < U0J ? R * (1 - Math.pow(1 - u / U0J, 2)) : R * (1 - Math.pow((u - U0J) / (1 - U0J), 1.6));
-      if (r < fr) best = { R, r, depth: R - r, tPeak: w.x + U0J * T_, tEnd: w.x + T_, back: u > U0J };
+      const T_ = tsOf(amp), [R, dl] = reach(x, amp, seedU(w)), u = (wt - w.x - dl) / T_;
+      if (u <= 0 || u >= 1 || r > R) continue;
+      if (r < swashEdge(R, u)) best = { R, r, depth: R - r, tPeak: w.x + dl + U0J * T_, tEnd: w.x + dl + T_, back: u > U0J };
     }
     return best;
   }
@@ -377,20 +397,48 @@ const Engine = (() => {
     trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackCx.drawImage(tmp, dpx, 0);
     R.x -= dpx * R.z / TRK.W; trackDirty = true;
   }
-  let washT = 0;
+  /* the sea smooths the tracks (and whatever else is pressed into that canvas) only where it really runs: each wave to
+     its own reach, tongue for tongue, and most where the water stands deepest and longest, so they wear away by degrees
+     and unevenly, and their worn ends follow the waves. It rubs out through a coarse mask, a quarter metre a cell. The
+     canvas holds 8 bits, which a very light touch can't wear down, so that is dealt out as the odd firmer dab instead.
+     Until something has been pressed in (trackStamp sets trackInk) there is nothing to wash, nor to send to the GPU */
+  const WM = { w: 384, h: 160, min: 0.1 };
+  let washT = 0, washWt = null, washCv = null, washCx = null, washImg = null, trackInk = false;
   function trackWash(wt) {
     const now = performance.now(); if (now - washT < 220) return; washT = now;
-    const R = gU.uTrackRect.value, sx = TRK.W / R.z, sz = TRK.H / R.w, x = trackCx;
-    /* how far up the sand the water runs right now: the tide's swash, or a big clicked wave's surge */
-    let reach = 1.7; for (const w of surge.waves) { const T_ = tsOf(w.amp), u = (wt - w.x) / T_; if (u > 0 && u < 1) reach = Math.max(reach, (0.85 + 0.75 * w.amp) * 1.1); }
-    x.fillStyle = 'rgba(0,0,0,0.075)'; x.beginPath();
-    for (let i = 0; i <= 48; i++) { const wx = R.x + R.z * i / 48; x.lineTo((wx - R.x) * sx, (Layout.shoreZ(wx) + reach - R.y) * sz); }
-    for (let i = 48; i >= 0; i--) { const wx = R.x + R.z * i / 48; x.lineTo((wx - R.x) * sx, (Layout.shoreZ(wx) - 12 - R.y) * sz); }
-    x.closePath(); x.fill(); trackDirty = true;
+    const dt = washWt === null ? 0 : Math.min(1, wt - washWt); washWt = wt;
+    if (!trackInk || !(dt > 0)) return;
+    if (!washCv) { washCv = document.createElement('canvas'); washCv.width = WM.w; washCv.height = WM.h; washCx = washCv.getContext('2d'); washImg = washCx.createImageData(WM.w, WM.h); }
+    const R = gU.uTrackRect.value, px = washImg.data, cw = R.z / WM.w, ch = R.w / WM.h;
+    const tide = gU.uWv.value.filter(W => W.y > 0).map(W => [W.x, W.y, W.z, W.w, seedW(W)]);
+    px.fill(0);
+    for (let i = 0; i < WM.w; i++) {
+      const x = R.x + (i + 0.5) * cw, g = shoreDZ(x), k = Math.sqrt(1 + g * g), sz = Layout.shoreZ(x);
+      /* how far up the sand the water is here and now, of every swell on the beach */
+      let top = -0.3;
+      for (const [x0, amp, ph, ob, sd] of tide) {
+        const T_ = tsOf(amp), tau = wt - (x0 + 0.9 * Math.sin(x * 0.11 + ph) + x * 0.03 * ob); if (tau <= 0 || tau > T_ + 1) continue;
+        const [Rw, dl] = reach(x, amp, sd), u = (tau - dl) / T_; if (u > 0 && u < 1) top = Math.max(top, swashEdge(Rw, u));
+      }
+      for (const w of surge.waves) {
+        const amp = userAmpJS(w, x, wt); if (amp < 0.02) continue;
+        const T_ = tsOf(amp), [Rw, dl] = reach(x, amp, seedU(w)), u = (wt - w.x - dl) / T_; if (u > 0 && u < 1) top = Math.max(top, swashEdge(Rw, u));
+      }
+      const j0 = Math.max(0, Math.floor((sz - 3.5 - R.y) / ch)), j1 = Math.min(WM.h - 1, Math.ceil((sz + top * k - R.y) / ch));
+      for (let j = j0; j <= j1; j++) {
+        const z = R.y + (j + 0.5) * ch, r = (z - sz) / k, d = top - r; if (d <= 0) continue;
+        /* gone soonest in the sea and under deep water, slowest at the thin edge, and patchily */
+        const n = 0.55 + 0.25 * Math.sin(x * 2.3 + 1.7 * Math.sin(z * 1.9)) + 0.2 * Math.sin(z * 3.1 + 1.3 * Math.sin(x * 1.7 + 0.5));
+        const a = 1 - Math.exp(-dt * (r < -0.3 ? 1.5 : 0.35 * Math.min(1, d / 0.5) * (0.4 + n)));
+        if (a >= WM.min) px[(j * WM.w + i) * 4 + 3] = a * 255;
+        else if (Math.random() < a / WM.min) px[(j * WM.w + i) * 4 + 3] = WM.min * 255;
+      }
+    }
+    washCx.putImageData(washImg, 0, 0); trackCx.drawImage(washCv, 0, 0, TRK.W, TRK.H); trackDirty = true;
   }
   function trackStamp(segs) {
     const R = gU.uTrackRect.value, sx = TRK.W / R.z, sz = TRK.H / R.w, x = trackCx;
-    x.lineCap = 'round';
+    x.lineCap = 'round'; trackInk = true;
     for (const [x0, z0, x1, z1, w, a] of segs) {
       x.strokeStyle = `rgba(255,255,255,${a})`; x.lineWidth = w * sx;
       x.beginPath(); x.moveTo((x0 - R.x) * sx, (z0 - R.y) * sz); x.lineTo((x1 - R.x) * sx, (z1 - R.y) * sz); x.stroke();
