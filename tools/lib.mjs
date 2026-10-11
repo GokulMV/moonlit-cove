@@ -11,7 +11,12 @@ async function takeSlot() {
   for (;;) {
     for (const d of SLOTS) {
       try { fs.mkdirSync(d); fs.writeFileSync(d + '/pid', String(process.pid)); return d; }
-      catch (e) { try { const st = fs.statSync(d); if (Date.now() - st.mtimeMs > 15 * 60e3) fs.rmSync(d, { recursive: true, force: true }); } catch (e2) { /* gone already */ } }
+      catch (e) {
+        /* a slot whose owner has gone (killed, or the machine restarted) is free at once; one older than 15 minutes too */
+        try { const st = fs.statSync(d); let alive = true;
+          try { const pid = +fs.readFileSync(d + '/pid', 'utf8'); if (pid) { try { process.kill(pid, 0); } catch (e3) { alive = e3.code === 'EPERM'; } } }
+          catch (e4) { alive = Date.now() - st.mtimeMs < 10e3; }   /* (no pid written yet: just taken, unless it has been like that a while) */
+          if (!alive || Date.now() - st.mtimeMs > 15 * 60e3) fs.rmSync(d, { recursive: true, force: true }); } catch (e2) { /* gone already */ } }
     }
     await new Promise(r => setTimeout(r, 1500));
   }

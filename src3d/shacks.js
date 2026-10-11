@@ -60,7 +60,7 @@ const Shacks = (() => {
   /* a fishing net: knotted diamonds, the rest see-through */
   function net() {
     const c = cv(128, 128), a = c.getContext('2d');
-    a.strokeStyle = 'rgba(52,66,52,0.95)'; a.lineWidth = 1.6;
+    a.strokeStyle = 'rgba(58,72,56,1)'; a.lineWidth = 3.2;
     for (let i = -128; i < 256; i += 16) { a.beginPath(); a.moveTo(i, 0); a.lineTo(i + 128, 128); a.stroke(); a.beginPath(); a.moveTo(i + 128, 0); a.lineTo(i, 128); a.stroke(); }
     return c;
   }
@@ -91,7 +91,7 @@ const Shacks = (() => {
     for (let y = 0; y < 160; y += 40) { a.fillStyle = 'rgba(0,0,0,0.16)'; a.fillRect(0, y, 512, 2); }
     a.strokeStyle = fg; a.globalAlpha = 0.7; a.lineWidth = 4; a.strokeRect(12, 12, 488, 136); a.globalAlpha = 1;
     a.fillStyle = fg; a.textAlign = 'center'; a.textBaseline = 'middle';
-    a.font = "700 70px Caveat, 'Segoe Print', 'Bradley Hand', cursive"; a.fillText(name, 256, 66);
+    a.font = "700 76px Caveat, 'Segoe Print', 'Bradley Hand', cursive"; a.lineWidth = 3; a.strokeStyle = fg; a.strokeText(name, 256, 64); a.fillText(name, 256, 64);
     a.font = "500 28px 'Instrument Sans', system-ui, sans-serif"; a.fillText(sub, 256, 122);
     return c;
   }
@@ -147,7 +147,7 @@ const Shacks = (() => {
       white: lit({ map: tx(Paint.plank(75, '#e3dccb', 1)), roughness: 0.8 }),
       dark: lit({ color: new T.Color('#16110c'), roughness: 1 }),
       glass: lit({ color: new T.Color('#2b4a3a'), roughness: 0.25, metalness: 0.1 }),
-      net: lit({ map: tx(net()), transparent: false, alphaTest: 0.4, side: T.DoubleSide, roughness: 1 }),
+      net: lit({ map: tx(net()), transparent: false, alphaTest: 0.22, side: T.DoubleSide, roughness: 1 }),
       rope: lit({ color: new T.Color('#9c8460'), roughness: 1 }),
       /* a window or doorway with a lamp behind it: warm after dark, dark glass by day */
       glowWin: lit({ color: new T.Color('#2a2016'), emissive: new T.Color(1, 0.62, 0.3), emissiveIntensity: 0, roughness: 0.6 }),
@@ -346,9 +346,8 @@ const Shacks = (() => {
       /* a shelter: an A-frame of thatch down to the sand */
       const W = 3.0 + r(), D = 2.4, H = 2.3;
       for (const sx of [-1, 1]) { const len = Math.hypot(D / 2, H), a = Math.atan2(D / 2, H);
-        S.add(M.thatch, boxG(W, len, 0.16, 1.2), f(0, H / 2, sx * D / 4, sx * a)); }
+        S.add(M.thatch, boxG(W, len, 0.16, 1.2), f(0, H / 2, sx * D / 4, -sx * a)); }
       S.add(M.thatchDark, cylG(0.1, 0.1, W + 0.3, 6), f(0, H, 0, 0, 0, Math.PI / 2));
-      S.add(M.dark, boxG(W - 0.2, H - 0.2, 0.05), f(0, (H - 0.2) / 2, D * 0.18));
       ch.obstacle(...wpos(f, 0, 0), Math.max(W, D) * 0.55, 'hut');
       /* a lantern on a post by it, lit at night */
       const lx = W / 2 + 0.8;

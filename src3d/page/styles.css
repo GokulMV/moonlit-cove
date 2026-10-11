@@ -467,3 +467,4 @@ body.pick-hover #scene { cursor: pointer; }
 @media (max-width: 999px) { .radio { bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); } }
 @media (max-width: 720px) { .seat-hint { top: calc(env(safe-area-inset-top, 0px) + 74px); } .rd-vol input { width: 80px; } }
 @media (prefers-reduced-motion: reduce) { .wish, .radio { animation: none; } }
+.credits .ccopy { margin: 18px 0 2px; padding-top: 12px; border-top: 1px solid var(--line); font: 400 12px/1.5 var(--body); color: var(--dim); }

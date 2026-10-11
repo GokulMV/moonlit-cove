@@ -364,6 +364,7 @@
 
   /* ── credits: every sound, typeface, library and idea that came from someone else ── */
   function renderCredits() {
+    $('cYear').textContent = String(Math.max(2026, new Date().getFullYear()));
     $('cBody').innerHTML = Content.credits.map(g => `<section><h3>${esc(g.group)}</h3><ul>${g.items.map(i => `<li><b>${esc(i.what)}</b><span>${esc(i.who)}</span><span class="cl">${i.link ? `<a href="${esc(i.link[1])}" target="_blank" rel="noopener">${esc(i.link[0])} ↗</a>` : ''}${i.licence ? `<em>${esc(i.licence)}</em>` : ''}</span></li>`).join('')}</ul></section>`).join('');
   }
   function toggleCredits(open) { const c = $('credits'), o = open ?? c.hidden; c.hidden = !o; if (o) { renderCredits(); toggleSettings(false); c.scrollTop = 0; } }
@@ -1377,10 +1378,13 @@
   const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const lerpCam = (a, b, t) => ({ pos: a.pos.map((v, i) => v + (b.pos[i] - v) * t), look: a.look.map((v, i) => v + (b.look[i] - v) * t), fov: a.fov + (b.fov - a.fov) * t, focus: (a.focus || 25) + ((b.focus || 25) - (a.focus || 25)) * t });
 
-  function frame(now) {
-    requestAnimationFrame(frame);
+  /* (filming: the film maker stops the page's own frames and steps the scene itself, one exact frame at a time) */
+  const film = { on: false, dt: 0 };
+  function filmStep(dt) { film.dt = dt; frame((st.last || performance.now()) + dt * 1000, true); film.dt = 0; }
+  function frame(now, stepped) {
+    if (!stepped) { if (window.__coveFilm) { film.on = true; return; } requestAnimationFrame(frame); }
     if (!ready) return;
-    const dtR = st.last ? Math.min(window.__coveDtCap || 0.1, (now - st.last) / 1000) : 1 / 60; st.last = now;   /* (the test bench raises the cap: software GL draws a frame every few seconds) */
+    const dtR = film.dt ? film.dt : st.last ? Math.min(window.__coveDtCap || 0.1, (now - st.last) / 1000) : 1 / 60; st.last = now;   /* (the test bench raises the cap: software GL draws a frame every few seconds) */
     st.t += dtR * st.motion;
     st.offset += dtR * 1000 * (st.flow - 1);
     const ms = nowMs();
@@ -1935,5 +1939,5 @@
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS });
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt });
 })();
