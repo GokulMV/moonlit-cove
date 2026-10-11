@@ -455,7 +455,7 @@ const Engine = (() => {
     return { pos: L(a.pos, b.pos), look: L(a.look, b.look), fov: lerp(a.fov, b.fov, t), focus: lerp(a.focus || 25, b.focus || 25, t) };
   }
 
-  let lastCW = 0, lastCH = 0;
+  let lastCW = 0, lastCH = 0, fabT = null;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
        or a resized window shows the frame in only part of it */
@@ -522,6 +522,8 @@ const Engine = (() => {
     (camp.vanGlow || []).forEach(v => { v.m.emissiveIntensity = v.k * L.van * vf; });
     { const k = 0.45 * F.i * (0.7 + 0.4 * ff); camp.coals.color.setRGB(1.0 * k, 0.28 * k, 0.05 * k); }
     Nature.sway(nature, t, o.wind ?? 1);
+    /* the camp's cloth (the van's valance, the towel on the chair) flaps on the scene's own clock */
+    { const dt = fabT === null ? 0 : Math.max(0, Math.min(0.25, t - fabT)); fabT = t; Camp.flutter(camp, dt, o.wind ?? 1, camera); }
     /* the menu: turn pages, and keep it readable after dark (its paper carries a little light of its own) */
     { const rk = (o.read || 0) * 0.36 * (1 - 0.9 * S.day) / Math.max(0.05, S.exposure * (o.expMul || 1));
       for (const b of [camp.book, camp.journal]) if (b) { b.update(); b.setReadLight(rk); }
@@ -612,6 +614,12 @@ const Engine = (() => {
     return [(v.x * 0.5 + 0.5), (-v.y * 0.5 + 0.5), v.z];
   }
   function finish() { const px = new Uint8Array(4); const gl = R.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+  /* the camp's cloth, for the test bench: whether each piece moved last frame, how far its free edge is from where
+     it hangs at rest, and a fingerprint of its shape (to tell two frames apart) */
+  function fabric() {
+    return camp.fabric.map(F => { const c = F.cl, P = c.P, R = c.R; let far = 0, sum = 0; for (let i = 0; i < c.n * 3; i++) { far = Math.max(far, Math.abs(P[i] - R[i])); sum += P[i] * ((i % 7) + 1); } return { live: F.live, particles: c.n, far: +far.toFixed(4), print: +sum.toFixed(5) }; });
+  }
+  Object.assign(api, { fabric });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
   Object.assign(api, { init, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });

@@ -340,19 +340,24 @@ void main(){
       for (let i = 0; i < n; i++) for (let j = 0; j < 6; j++) { const a = i * 7 + j, b2 = a + 7; idx.push(a, b2, a + 1, b2, b2 + 1, a + 1); }
       const ag = new T.BufferGeometry(); ag.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); ag.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); ag.setIndex(idx); ag.computeVertexNormals();
       awn.add(mesh(ag, cloth));
-      const vp = [], vu = [], vi = [];
-      for (let i = 0; i <= 48; i++) { const u = i / 48, x = AW.x0 + (AW.x1 - AW.x0) * u, y = AW.yo - Math.sin(Math.PI * u) * 0.05, drop = 0.1 + 0.035 * Math.abs(Math.sin(u * Math.PI * 12));
-        vp.push(x, y, AW.zo, x, y - drop, AW.zo); vu.push(u * 2.2, 0, u * 2.2, 1); }
-      for (let i = 0; i < 48; i++) { const a = i * 2; vi.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-      const vg = new T.BufferGeometry(); vg.setAttribute('position', new T.Float32BufferAttribute(vp, 3)); vg.setAttribute('uv', new T.Float32BufferAttribute(vu, 2)); vg.setIndex(vi); vg.computeVertexNormals();
-      awn.add(mesh(vg, cloth));
+      /* the scalloped valance is cloth, pinned along the awning's sagging edge: it lifts and flaps in the breeze,
+         more in a storm (a column for every 1/48 of its length, so the twelve scallops keep their round) */
+      const VN = 49, VR = 4, drop = i => 0.1 + 0.035 * Math.abs(Math.sin(i / (VN - 1) * Math.PI * 12));
+      const vcl = Cloth.create({ grids: [{ nx: VN, ny: VR, at: (i, j) => { const u = i / (VN - 1); return [AW.x0 + (AW.x1 - AW.x0) * u, AW.yo - Math.sin(Math.PI * u) * 0.05 - drop(i) * j / (VR - 1), AW.zo]; },
+        pin: (i, j) => j === 0, uv: (i, j) => [i / (VN - 1) * 2.2, j / (VR - 1)], stretch: 1, shear: 0.5, bend: 0.08, tether: true }], step: 1 / 120, iters: 4, maxSteps: 12, damp: 1.2, air: 2.2 });
+      const vm = mesh(vcl.geometry(0), cloth); vm.geometry.boundingSphere = new T.Sphere(new T.Vector3((AW.x0 + AW.x1) / 2, AW.yo - 0.1, AW.zo), (AW.x1 - AW.x0) / 2 + 0.4); awn.add(vm);
+      refs.fabric.push({ cl: vcl, mesh: vm, frame: awn, gust: 1, r: (AW.x1 - AW.x0) / 2 + 0.4, c: vm.geometry.boundingSphere.center });
       for (const x of [AW.x0 + 0.03, AW.x1 - 0.03]) { const pl = at(mesh(new T.CylinderGeometry(0.014, 0.016, AW.yo, 8), chrome), x, AW.yo / 2, AW.zo); awn.add(pl); refs.vanAwning.poles.push(pl); }
       const rail = mesh(new T.CylinderGeometry(0.03, 0.03, AW.x1 - AW.x0 + 0.1, 12), L('#d9d4c8', { roughness: 0.5 })); rail.rotation.z = Math.PI / 2; at(rail, (AW.x0 + AW.x1) / 2, AW.yi + 0.02, AW.zi - 0.02); g.add(rail);
     }
     /* fairy lights along the awning edge */
     const pts = [];
     for (let i = 0; i <= 30; i++) { const t = i / 30, x = AW.x0 + 0.05 + t * (AW.x1 - AW.x0 - 0.1), sc = Math.sin(((i % 6) / 6) * Math.PI); pts.push({ p: new T.Vector3(x, AW.yo - 0.13 - sc * 0.07, AW.zo - 0.02), order: t }); }
-    awn.add(instancedLights(pts, 0.021, U.fairy));
+    const fl = instancedLights(pts, 0.021, U.fairy); awn.add(fl);
+    /* the string hangs from the valance's hem, so each light goes where the hem above it goes */
+    { const V = refs.fabric[refs.fabric.length - 1], vc = V.cl, nx = vc.grids[0].nx, e = (vc.grids[0].ny - 1) * nx, m4 = new T.Matrix4();
+      const col = pts.map(q => e + Math.round((q.p.x - AW.x0) / (AW.x1 - AW.x0) * (nx - 1))), off = pts.map((q, k) => [q.p.x - vc.R[col[k] * 3], q.p.y - vc.R[col[k] * 3 + 1], q.p.z - vc.R[col[k] * 3 + 2]]);
+      V.after = () => { const P = vc.P; for (let k = 0; k < col.length; k++) { const i = col[k] * 3; m4.makeTranslation(P[i] + off[k][0], P[i + 1] + off[k][1], P[i + 2] + off[k][2]); fl.setMatrixAt(k, m4); } fl.instanceMatrix.needsUpdate = true; }; }
     /* doormat + sandals + a camp stool */
     g.updateMatrixWorld(true);
     { const mat = grp(0, 0, 0); g.add(mat);
@@ -520,7 +525,7 @@ void main(){
       const arm = P(0.42 - xBack + 0.05, 0.024, 0.135); at(arm, (0.42 + xBack) / 2 + 0.01, yArm + 0.012, z); g.add(arm);
       g.add(at(P(0.1, 0.07, 0.03), 0.3, yArm - 0.05, z + Math.sign(z) * 0.03));
     }
-    g.userData.back = { x0, y0, beta, up, bn, yc, phi };
+    g.userData.back = { x0, y0, beta, up, bn, yc, phi, xBack, yArm };
     return g;
   }
   /* a wool throw draped over a chair back: front flap, over the top, long fall behind, loose sides */
@@ -589,6 +594,41 @@ void main(){
       const cu = mesh(new T.SphereGeometry(1, 24, 14), Mats.lit({ map: Mats.tex(Paint.stripes('#2f4d5e', '#e8dfc8', 9)), roughness: 0.95 }));
       cu.scale.set(0.24, 0.05, 0.27); cu.rotation.z = phi; at(cu, 0.1, yc(0.1) + 0.11, 0); c2.add(cu);
       const gt = guitar(); gt.position.set(0.5, 0.17, -0.48); gt.rotation.set(-0.08, 0.35, 0.36, 'YXZ'); c2.add(gt); }
+    towel(chs[1], refs);
+  }
+  /* a beach towel left over the second chair's back to dry by the fire. It is cloth: the two rows lying over the
+     top of the back are pinned there, the front half rests on the slats, the back half hangs free and lifts in the
+     gusts. Rows run from the front end, up over the top (rows jf and jf + 1) and down the back. */
+  function towel(ch, refs) {
+    const { x0, y0, up, bn, xBack, yArm } = ch.userData.back, fw = new T.Vector3(-bn.x, -bn.y, 0);   /* fw: out of the front of the back */
+    const NXt = 7, NYt = 13, jf = 5, TW = 0.48, FRONT = 0.4, BACK = 0.62, FOLD = 0.07, LEN = FRONT + FOLD + BACK;
+    const top = z => 0.85 - 0.11 * Math.min(1, (z / 0.21) ** 2);                /* the fanned slats: the middle one is longest */
+    const s = j => j <= jf ? FRONT * j / jf : FRONT + FOLD + BACK * (j - jf - 1) / (NYt - jf - 2);
+    const at = (i, j) => {
+      const z = (i / (NXt - 1) - 0.5) * TW, p = new T.Vector3(x0, y0, z).addScaledVector(up, top(z) + 0.012);
+      return (j <= jf ? p.addScaledVector(fw, 0.024).addScaledVector(up, s(j) - FRONT) : p.addScaledVector(bn, 0.046).add(new T.Vector3(0, FRONT + FOLD - s(j), 0))).toArray();
+    };
+    const tex = Mats.tex(Paint.stripes('#e7dcc3', '#3e6a6c', 7), { repeat: true });
+    const cl = Cloth.create({ grids: [{ nx: NXt, ny: NYt, at, pin: (i, j) => j === jf || j === jf + 1, uv: (i, j) => [s(j) / LEN * 2, i / (NXt - 1)], stretch: 1, shear: 0.6, bend: 0.25, tether: true }],
+      step: 1 / 120, iters: 5, maxSteps: 12, damp: 1, air: 1.6, friction: 0.6 });
+    /* the back of the chair as a wall the towel stays either side of (front half in front, back half behind, below
+       the top), the arms as rods, and the sand (a plane worked out each frame, as the chair can be knocked over) */
+    const d0 = fw.x * x0 + fw.y * y0;
+    cl.collide = (P, Q, n, W, contact) => {
+      for (let i = 0; i < n; i++) {
+        if (W[i] === 0) continue;
+        const k = i * 3, j = Math.floor(i / NXt), x = P[k], y = P[k + 1], z = P[k + 2];
+        if (up.x * (x - x0) + up.y * (y - y0) > top(z) + 0.01) continue;
+        const d = fw.x * x + fw.y * y - d0;
+        if (j < jf && d < 0.022) { const e = 0.022 - d; P[k] += fw.x * e; P[k + 1] += fw.y * e; contact(i, fw.x, fw.y, 0, e, 0.6); }
+        if (j > jf + 1 && d > -0.045) { const e = d + 0.045; P[k] -= fw.x * e; P[k + 1] -= fw.y * e; contact(i, -fw.x, -fw.y, 0, e, 0.6); }
+      }
+    };
+    for (const zs of [-1, 1]) cl.colliders.push({ type: 'capsule', a: [xBack, yArm + 0.012, zs * 0.335], b: [0.43, yArm + 0.012, zs * 0.335], r: 0.075 });
+    const ground = { type: 'plane', n: [0, 1, 0], d: 0.02 }; cl.colliders.push(ground);
+    const m = mesh(cl.geometry(0), Mats.lit({ map: tex, side: T.DoubleSide, roughness: 0.97 }));
+    const c = new T.Vector3(x0 - 0.2, 0.75, 0); m.geometry.boundingSphere = new T.Sphere(c.clone(), 0.9); ch.add(m);
+    refs.fabric.push({ cl, mesh: m, frame: ch, gust: 0.8, r: 0.9, c, ground });
   }
   /* split firewood stacked by the fire */
   function woodpile(root, refs) {
@@ -644,10 +684,38 @@ void main(){
   }
 
   function build(root, U) {
-    const refs = { candles: [], lanterns: [], dyn: [], vanHead: [], vanTail: [], vanWheels: [] };
+    const refs = { candles: [], lanterns: [], dyn: [], vanHead: [], vanTail: [], vanWheels: [], fabric: [] };
     picnic(root, refs); lanterns(root, refs); stringLights(root, refs, U); van(root, refs, U); campfire(root, refs); chairs(root, refs); woodpile(root, refs); shoreBits(root, refs);
     refs.pool = poolMap(refs.bulbs);
     return refs;
   }
-  return { build, extrude, rshape };
+
+  /* each frame, the camp's cloth moves on: every piece in its own frame (the awning, the chair), under the world's
+     gravity and the breeze, both turned into that frame. wind: 1 on a calm night, up to about 3 in a storm. Cloth that
+     is hidden (the awning packed away), far off or out of view is left as it is. */
+  const _q = new T.Quaternion(), _v = new T.Vector3(), _m = new T.Matrix4(), _fr = new T.Frustum(), _s = new T.Sphere();
+  function flutter(refs, dt, wind, cam) {
+    _m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _fr.setFromProjectionMatrix(_m);
+    for (const F of refs.fabric) {
+      F.live = false;
+      let vis = true; for (let o = F.mesh; o && vis; o = o.parent) vis = o.visible;
+      if (!vis) continue;
+      F.frame.getWorldQuaternion(_q);                      /* (this brings the frame's world matrix up to date too) */
+      _s.center.copy(F.c).applyMatrix4(F.frame.matrixWorld); _s.radius = F.r;
+      if (_s.center.distanceToSquared(cam.position) > 70 * 70 || !_fr.intersectsSphere(_s)) continue;
+      const cl = F.cl; _q.invert();
+      _v.set(0, -9.81, 0).applyQuaternion(_q); cl.g[0] = _v.x; cl.g[1] = _v.y; cl.g[2] = _v.z;
+      _v.set(Layout.wind[0], 0, Layout.wind[1]).normalize().applyQuaternion(_q); cl.wind.dir[0] = _v.x; cl.wind.dir[1] = _v.y; cl.wind.dir[2] = _v.z;
+      /* a breeze of a couple of metres a second that gusts; a storm blows harder and gustier */
+      cl.wind.speed = 1.7 * wind * F.gust; cl.wind.gust = Math.min(0.85, 0.5 + 0.12 * (wind - 1));
+      if (F.ground) {
+        /* the sand, in the chair's frame: world up turned in, at the height the chair stands */
+        _v.set(0, 1, 0).applyQuaternion(_q); F.ground.n[0] = _v.x; F.ground.n[1] = _v.y; F.ground.n[2] = _v.z;
+        F.ground.d = 0.02 - F.frame.matrixWorld.elements[13];
+      }
+      cl.update(dt); cl.write(); if (F.after) F.after();
+      F.live = true;
+    }
+  }
+  return { build, flutter, extrude, rshape };
 })();
