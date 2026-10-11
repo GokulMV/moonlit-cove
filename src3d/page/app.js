@@ -809,37 +809,79 @@
     if (camp >= 0 || van >= 0) hintOff();
     if (camp !== wbar.camp) { wbar.camp = camp; $('bWalkCamp').hidden = camp < 0; if (camp >= 0) $('bWalkCamp').textContent = label(camp, 'Back to camp'); }
     if (van !== wbar.van) { wbar.van = van; $('bWalkVan').hidden = van < 0; if (van >= 0) $('bWalkVan').textContent = label(van, 'Go to the van'); }
+    /* parked a long way from the camp, and looking at the van: the camp can come here */
+    const pitchOK = on && !pitchS.on && !Engine.pitching && car.k <= 0 && Math.hypot(wbar.vx - P0[0], wbar.vz - P0[2]) > 60 && Math.hypot(wbar.vx - px, wbar.vz - pz) < 30;
+    if (pitchOK !== wbar.pitch) { wbar.pitch = pitchOK; $('bPitch').hidden = !pitchOK; }
+  }
+
+  /* ── pitching camp where the van is parked. The spot has to take the camp: as much dry sand as the camp's own bay
+     has, and no rock in the way. Then, while the screen is dark for a moment, the coast is moved under the camp so
+     that the van stands where it always stands at the camp, on the beach it was parked on; the camera is set at
+     the camp, and the camp goes up again one thing at a time ── */
+  const pitchS = { on: false, phase: 0, t0: 0, ox: 0, oz: 0, fade: 1 };
+  function pitchSpot(P = Engine.vanPose()) {
+    const O = Layout.O, Co = Layout.Coast, W = Engine.world, cx = Layout.camp.x, V = Layout.van;
+    const ox = O.x + P.x - V.x, oz = Co.shoreZ(cx + ox) - Co.shoreZ(cx);
+    for (let x = cx - 16; x <= cx + 16; x += 2) {
+      const sz = Co.shoreZ(x + ox), w = Co.vegZ(x + ox) - sz, w0 = Co.vegZ(x) - Co.shoreZ(x);
+      if (Co.head(x + ox) > 0.5) return { ok: false, why: 'rock' };
+      if (w < w0 - 1.6) return { ok: false, why: 'narrow' };
+      /* (the rock is looked up in the world as it is now: the new spot's coast point, in today's coordinates) */
+      if (W) for (let z = sz - oz + 1; z <= Co.vegZ(x + ox) - oz + 4; z += 1.5) if (W.massif(x + ox - O.x, z + oz - O.z) > 0.05) return { ok: false, why: 'rock' };
+    }
+    return { ok: true, ox, oz };
+  }
+  function startPitch() {
+    if (pitchS.on || !ready || car.on || wk.on || Engine.pitching) return;
+    const sp = pitchSpot();
+    if (!sp.ok) { toast(sp.why === 'rock' ? 'Too much rock here for the camp. Try further along the beach.' : 'Not enough dry sand here for the camp. Try a wider stretch of beach.', false, 3800); return; }
+    Object.assign(pitchS, { on: true, phase: 1, t0: performance.now(), ox: sp.ox, oz: sp.oz });
+    $('bPitch').hidden = true; wbar.pitch = false; hintOff();
+  }
+  $('bPitch').addEventListener('click', startPitch);
+  /* each frame: the screen dims, the camp moves, the screen comes back up on it; returns the screen's brightness */
+  function stepPitch() {
+    if (!pitchS.on) return 1;
+    const t = (performance.now() - pitchS.t0) / 1000;
+    if (pitchS.phase === 1) {
+      if (t < 0.45) return 1 - sstep(0, 0.45, t);
+      const V = Layout.van;
+      Engine.moveCamp(pitchS.ox, pitchS.oz, P0[0]);
+      Engine.setVan({ x: V.x, z: V.z, heading: V.rot, roll: 0, pitch: 0, lift: 0, spin: 0, steer: 0, k: 1, head: 0, brake: 0 });
+      Object.assign(car, { x: V.x, z: V.z, h: V.rot, v: 0, k: 1, camK: 0, camP: null, yaw: 0, roll: 0, pitch: 0, steer: 0 });
+      wbar.vx = V.x; wbar.vz = V.z;
+      /* the camera at the camp, as if it had always been here */
+      pvC.x = wbC.x = flr.y = NaN;     /* (what was worked out about the sand here belonged to the old beach) */
+      orbAt(P0[0], P0[2], 0, 0); for (let i = 0; i < 5; i++) orb.T[i] = orb.v[i] = HOME[i]; orb.pz = P0[2];
+      st.from = st.to = orbCam; st.camT = 1; st.wrecked = false;
+      Engine.pitchStart(); unlock('pitch');
+      pitchS.phase = 2; pitchS.t0 = performance.now();
+      return 0;
+    }
+    if (t >= 0.8) { pitchS.on = false; return 1; }
+    return sstep(0.05, 0.8, t);
   }
 
   /* ── driving the camper van ── */
   const car = { on: false, k: 0, x: 0, z: 0, h: 0, v: 0, steer: 0, spin: 0, roll: 0, pitch: 0, odo: 0, trackOdo: 0, splashT: 0, camK: 0, camP: null, camL: null, yaw: 0, lastV: 0, knocks: 0, wheels: null, bumpT: 0 };
   const keys = new Set(), touch = { x: 0, y: 0, on: false };
   const isTouch = matchMedia('(pointer: coarse)').matches;
-  /* what the van drives round: the camp's own things (only at the camp), the rocks and trunks of the coast
-     (in every copy of it, kept in buckets along the stretch so only the near ones are looked at), and the trees
-     that fill the clearing in every copy but the camp's */
-  const obstacles = [], campObs = [], fillObs = [], OB = { bw: 8, b: [], P: 1e9, X0: 0 };
+  /* what the van drives round: the camp's own things, and the rocks and trunks of whichever chunks of the coast
+     are built where it is (the world keeps them in buckets along each chunk, so only the near ones are looked at) */
+  const obstacles = [], campObs = [];
   function buildObstacles() {
     for (const [x, z] of Layout.palms.map(p => [p[0], p[1]])) campObs.push([x, z, 0.4]);
     for (const t of Layout.trees) campObs.push([t[0], t[1], 0.5]);
     for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
-    const W = Engine.world; if (!W) return;
-    Object.assign(OB, { P: W.P, X0: W.X0, b: Array.from({ length: Math.ceil(W.P / OB.bw) }, () => []) });
-    for (const o of W.obstacles) OB.b[Math.floor((W.base(o[0]) - W.X0) / OB.bw) % OB.b.length].push(o);
-    fillObs.push(...W.fillObstacles);
-    obstacles.push(...campObs, ...W.obstacles);
+    obstacles.push(...campObs);
   }
   /* the obstacles near (x, z), each as [dx, dz, radius, the obstacle] measured from it to the point */
   function obstaclesNear(x, z) {
     const out = [], W = Engine.world;
     for (const o of campObs) if (Math.abs(x - o[0]) < 6) out.push([x - o[0], z - o[1], o[2], o]);
-    if (!W) return out;
-    const n = OB.b.length, i = Math.floor((W.base(x) - W.X0) / OB.bw);
-    for (let d = -1; d <= 1; d++) for (const o of OB.b[(i + d + n) % n]) out.push([W.wrapD(x - o[0]), z - o[1], o[2], o]);
-    const k = Math.round(x / W.P);
-    if (k !== 0) for (const o of fillObs) { const dx = x - (o[0] + k * W.P); if (Math.abs(dx) < 6) out.push([dx, z - o[1], o[2], o]); }
+    if (W) for (const o of W.obstaclesNear(x, z)) out.push([x - o[0], z - o[1], o[2], o]);
     return out;
   }
   const DRIVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift'];
@@ -1042,12 +1084,7 @@
     GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
     for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; goAdd(o[0], o[1], o[2]); }
     const W = Engine.world;
-    if (W && OB.b.length) {
-      const n = OB.b.length, b0 = Math.floor((W.base(x) - W.X0) / OB.bw);
-      for (let d = -1; d <= 1; d++) { const B = OB.b[(b0 + d + n) % n]; for (let i = 0; i < B.length; i++) goAdd(x - W.wrapD(x - B[i][0]), B[i][1], B[i][2]); }
-      const k = Math.round(x / W.P);
-      if (k !== 0) for (let i = 0; i < fillObs.length; i++) goAdd(fillObs[i][0] + k * W.P, fillObs[i][1], fillObs[i][2]);
-    }
+    if (W) { const L = W.obstaclesNear(x, z); for (let i = 0; i < L.length; i++) goAdd(L[i][0], L[i][1], L[i][2]); }
     for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
     if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
   }
@@ -1270,7 +1307,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1411,7 +1448,8 @@
        shader's sums precise) */
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, dens: st.dens, cam, shiftX, msaa: 0, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const fade = stepPitch();
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
@@ -1423,7 +1461,7 @@
     if (!anchors) anchors = Engine.anchors();
     /* pins: a glint on each object, hidden while something is open */
     Content.chapters.forEach(c => { const a = c.anchor === 'clipboard' ? (Engine.anchorNow('clipboard') || anchors.clipboard) : anchors[c.anchor];
-      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     placeTags(performance.now());
@@ -1872,7 +1910,7 @@
     const A = Engine.propAnchors();
     for (const x of extraSpots) {
       const p = Engine.project(A[x.key]), want = x.key === 'radio' ? seat.on : !seat.on && !st.chapter;
-      const vis = want && !rd.on && !car.on && !wk.on && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const vis = want && !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
     }
   }
@@ -1897,5 +1935,5 @@
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick });
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS });
 })();

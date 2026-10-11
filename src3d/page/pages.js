@@ -274,7 +274,7 @@ const Pages = (() => {
       row(178, 'PAGE', [['app.js', 'camera · input · chapters'], ['pages.js', 'typesetting'], ['content.js', 'the words']]);
       row(300, 'RUN', [['engine.js', 'render loop · post · shadows'], ['audio.js', 'Web Audio · 111 Hz']]);
       row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the endless coast'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
-      row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['pitch.js', 'pitching camp']], 78);
+      row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['shacks.js', 'shacks · huts · boats']], 78);
       row(626, 'LOOK', [['sky.js', 'sky colours'], ['glsl.js', 'every shader'], ['mats.js', 'materials'], ['paint.js', 'painted textures'], ['textures.js', 'noise · water · sand']], 78);
       row(738, 'FACTS', [['astro.js', 'sun & moon, after SunCalc'], ['layout.js', 'the cove in metres · the coast’s dice']], 84);
       for (const x of [480, 1054]) { d.arrow([[x, 262], [x, 300]], { soft: true }); d.arrow([[x, 384], [x, 422]], { soft: true }); }

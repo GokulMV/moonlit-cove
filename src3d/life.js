@@ -167,8 +167,9 @@ void main(){
     let count = 0, shellK = 1; const shellMeshes = [];
     /* how many shells and starfish lie out (they were scattered in random order, so the first k of each set are an even share) */
     function setShells(k) { k = Math.max(0, Math.min(1, k)); if (k === shellK) return; shellK = k; for (const im of shellMeshes) im.count = Math.round(im.userData.full * k); }
-    for (const [di, d] of (world ? world.chunks : []).entries()) {
-      const rs = rng(6061 + di * 101), camp = d.c === 0 && !d.alt, items = [], want = Math.round(420 * world.CW / 226 * (camp ? 1 : 0.7));
+    /* laid along each chunk of the coast as it is built (and let go with it) */
+    if (world) world.decorate(d => {
+      const di = d.c, rs = rng(6061 + di * 101), camp = d.camp, items = [], want = Math.round(420 * world.CW / 226 * (camp ? 1 : 0.7));
       for (let i = 0, n = 0; i < want * 5 && n < want; i++) {
         const x = d.x0 + rs() * world.CW, sz = Layout.shoreZ(x);
         /* most lie along the line the high water leaves, a few scattered up the beach */
@@ -182,9 +183,10 @@ void main(){
         const L = items.filter(it => it.k === k); if (!L.length) return;
         const im = new T.InstancedMesh(Pp.g, mat, L.length);
         L.forEach((it, i) => { e.set(it.tilt, it.ry, it.tilt * 0.6); q.setFromEuler(e); sc.setScalar(it.s); pos.set(it.x, 0.004, it.z); m4.compose(pos, q, sc); im.setMatrixAt(i, m4); col.setRGB(...it.c); im.setColorAt(i, col); });
-        im.receiveShadow = true; im.computeBoundingSphere(); im.userData.liveCount = true; im.userData.full = L.length; shellMeshes.push(im); d.tiny.add(im);
+        im.receiveShadow = true; im.computeBoundingSphere(); im.userData.full = L.length; im.count = Math.round(L.length * shellK); shellMeshes.push(im); d.tiny.add(im);
+        im.addEventListener('dispose', () => { const i = shellMeshes.indexOf(im); if (i >= 0) shellMeshes.splice(i, 1); count -= L.length; });
       });
-    }
+    }, 'tiny');
 
     /* ── leaping fish ── */
     const fg = fishGeo(), fishM = Mats.lit({ vertexColors: true, color: new T.Color('#b9c6cf'), metalness: 0.55, roughness: 0.28 });
@@ -200,7 +202,7 @@ void main(){
     sg.setAttribute('aFish', new T.InstancedBufferAttribute(af, 4)); sg.instanceCount = 3 * NF;
     const schools = [0, 1, 2, 3, 4].map(i => ({ x: (i - 2) * 16, s: 4 + (i % 3) * 1.5, h: 0, v: 0.7, turn: 0, k: 0 }));
     const uSchool = { value: schools.map(() => new T.Vector4()) };
-    const shoalM = new T.ShaderMaterial({ uniforms: { uWaveT: U.uWaveT, uWv: U.uWv, uUw: U.uUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uUw: U.uUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const shoal = new T.Mesh(sg, shoalM); shoal.frustumCulled = false; shoal.renderOrder = 4; root.add(shoal);
 
     /* advance: t in seconds of scene time, cx the camera's x; returns splashes to show and hear */
@@ -247,7 +249,7 @@ void main(){
       });
       return out;
     }
-    return { update, count, schools, jumps, setShells, lantern: (x, z, t) => sky.release(x, z, t), get lanterns() { return sky.count; } };
+    return { update, get count() { return count; }, schools, jumps, setShells, lantern: (x, z, t) => sky.release(x, z, t), get lanterns() { return sky.count; } };
   }
   return { build };
 })();

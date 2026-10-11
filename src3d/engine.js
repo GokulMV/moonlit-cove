@@ -330,6 +330,59 @@ const Engine = (() => {
     canDone = false;
     surge.dyn.forEach(d => { if (d.L0) { d.L.copy(d.L0); d.S.crossVectors(UP, d.L); d.axis.copy(d.S).normalize(); } });
   }
+  /* ── pitching camp somewhere new. moveCamp: while the screen is dark, the coast is moved under the camp (the camp
+     stays where it is in the world, the beach it stands on changes): the world is built again round it, the tide's
+     mess and the old tracks are gone. pitchStart: then everything goes up again, one thing at a time ── */
+  const pitch = { on: false, t0: 0, items: null, k: { string: 1, lantern: 1, fire: 1 } };
+  function pitchList() {
+    const L = [], add = (o, t, d, kind) => { if (o) L.push({ o, t, d, kind, p: o.position.clone(), s: o.scale.clone() }); };
+    add(camp.rugMesh, 1.1, 0.9, 'unroll');
+    add(camp.table, 1.8, 0.55, 'grow');
+    (camp.cushions || []).forEach((o, i) => add(o, 2.1 + i * 0.1, 0.35, 'grow'));
+    add(camp.basket, 2.5, 0.4, 'grow'); add(camp.bookLoose, 2.6, 0.3, 'grow');
+    (camp.chairs || []).forEach((o, i) => add(o, 2.8 + i * 0.3, 0.5, 'grow'));
+    (camp.poles || []).forEach((o, i) => add(o, 3.4 + i * 0.14, 0.55, 'rise'));
+    (camp.poleCaps || []).forEach((o, i) => add(o, 3.4 + i * 0.14, 0.55, 'lift'));
+    (camp.strands || []).forEach(o => add(o, 4.2, 0.05, 'show')); add(camp.bulbMesh, 4.2, 0.05, 'show');
+    (camp.lanternGroups || []).forEach((o, i) => add(o, 4.8 + i * 0.2, 0.4, 'grow'));
+    add(camp.fireGroup, 5.3, 0.6, 'grow'); add(camp.tripod, 5.9, 0.45, 'grow'); add(camp.mug, 6.3, 0.3, 'grow'); add(camp.kettle, 6.6, 0.35, 'grow');
+    add(camp.woodpile, 6.0, 0.45, 'grow'); add(camp.logRound, 6.2, 0.4, 'grow'); add(camp.driftwood, 6.4, 0.5, 'grow'); add(camp.bottle, 6.5, 0.4, 'grow');
+    if (camp.board) add(camp.board.group, 6.8, 0.6, 'grow');
+    return L;
+  }
+  const backOut = u => { const c = 1.5; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
+  function pitchPose(it, u) {
+    const o = it.o; u = Math.min(1, u);
+    o.visible = u > 0; if (u <= 0) return;
+    const e = u >= 1 ? 1 : Math.max(1e-3, backOut(u));
+    if (it.kind === 'grow') o.scale.copy(it.s).multiplyScalar(e);
+    else if (it.kind === 'rise') { o.scale.set(it.s.x, it.s.y * Math.min(1, e), it.s.z); o.position.y = it.p.y * Math.min(1, e); }
+    else if (it.kind === 'lift') o.position.y = it.p.y * Math.min(1, e);
+    else if (it.kind === 'unroll') { const w = u >= 1 ? 1 : Math.max(1e-3, 1 - Math.pow(1 - u, 2.2)); o.scale.set(it.s.x * w, it.s.y, it.s.z); o.position.x = it.p.x - (1 - w) * Layout.rug.w / 2; }
+  }
+  function pitchStart() {
+    pitch.items = pitch.items || pitchList();
+    for (const it of pitch.items) pitchPose(it, 0);
+    pitch.k.string = pitch.k.lantern = pitch.k.fire = 0; pitch.t0 = performance.now() / 1000; pitch.on = true; canDone = false;
+  }
+  function pitchStep() {
+    if (!pitch.on) return;
+    const tt = window.__covePitchT ?? performance.now() / 1000 - pitch.t0;      /* (the test bench can hold it at a moment) */
+    for (const it of pitch.items) pitchPose(it, (tt - it.t) / it.d);
+    pitch.k.string = sm01(4.3, 5.9, tt); pitch.k.lantern = sm01(4.8, 5.8, tt); pitch.k.fire = sm01(6.0, 7.2, tt);
+    canDone = false;
+    if (tt > 7.6) { pitch.on = false; for (const it of pitch.items) { it.o.visible = true; it.o.scale.copy(it.s); it.o.position.copy(it.p); } pitch.k.string = pitch.k.lantern = pitch.k.fire = 1; }
+  }
+  function moveCamp(ox, oz, camX) {
+    Layout.setOrigin(ox, oz);
+    rebuildCamp(); registerDyn(surge.dyn); surge.ripples.length = 0;
+    trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackDirty = true; trackInk = false;
+    coastFollow(camX ?? Layout.camp.x);
+    /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
+    if (world) world.update(camX ?? Layout.camp.x, 250);
+  }
+  Object.assign(api, { moveCamp, pitchStart });
+  Object.defineProperty(api, 'pitching', { get: () => pitch.on });
   /* upcoming breakers (tide + click swells) for the soundscape: arrival times on the wave clock */
   function waveSchedule(wt0, wt1) {
     const WT = 9.0, out = [];
@@ -341,7 +394,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let fauna = null, faunaT = null, roughNow = 0; const faunaIn = {};
+  let fauna = null, faunaT = null, roughNow = 0, shacks = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -362,16 +415,15 @@ const Engine = (() => {
   function rockHits(wt0, wt1, cx, cz, maxD = 32) {
     const out = []; if (!world) return out;
     const WT = 9.0;
-    world.wet.forEach((p0, i) => {
-      const p = { x: p0.x + world.P * Math.round((cx - p0.x) / world.P), z: p0.z, rad: p0.rad };   /* the copy of this rock nearest the listener */
-      const d = Math.hypot(p.x - cx, p.z - cz); if (d > maxD) return;
+    for (const p of world.wetNear(cx, cz, maxD)) {
+      const d = Math.hypot(p.x - cx, p.z - cz), i = p.id;
       const g = shoreDZ(p.x), s = Math.max(0, (Layout.shoreZ(p.x) - p.z) / Math.sqrt(1 + g * g));
       for (let k = Math.floor(wt0 / WT) - 1; k <= Math.ceil(wt1 / WT) + 1; k++) {
         const h = n => hash(k * n + 0.37), T0 = k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(p.x * 0.11 + h(2.71) * 6.283) + p.x * 0.03 * (h(0.93) - 0.5) - s / WCJ;
         if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'r' + k + '_' + i, wave: 'w' + k, x: T0, amp: 0.55 + 0.6 * h(3.33), d, rad: p.rad, px: p.x });
       }
       for (const w of surge.waves) { const T0 = w.x - s / CU; if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'ru' + w.t0.toFixed(2) + '_' + i, wave: 'u' + w.t0.toFixed(2), x: T0, amp: 1 + 0.6 * userAmpJS(w, p.x, T0), d, rad: p.rad, px: p.x }); }
-    });
+    }
     return out;
   }
   const surgeState = () => surge;
@@ -595,14 +647,29 @@ const Engine = (() => {
     const nearSea = new T.Mesh(ng, nearMat); nearSea.frustumCulled = false; scene.add(nearSea); nearMesh = nearSea;
 
     /* the coast beyond the camp, without end: headlands, surf rocks with foam, the forest on its hills;
-       and the small lives of the shore, its shells laid along every chunk of it */
+       and the small lives of the shore, its shells laid along every chunk of it as the chunk is built.
+       The chunk round the camp is built now, the rest a little at a time as the camera comes near */
+    coastFollow(Layout.cameras.wide.pos[0]);
     world = World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
+    /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
+    shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
+    world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
     post = makePost();
     return { casters: nCast };
   }
+
+  /* the shoreline the shaders draw: the headlands nearest the camera and the coast's waves, measured from a reference
+     near it (Layout.coastGL), refreshed as the camera moves along the coast */
+  let coastX = NaN, coastV = -1;
+  function coastFollow(x) {
+    if (Math.abs(x - coastX) < 24 && coastV === Layout.coastVer) return;
+    coastX = x; coastV = Layout.coastVer;
+    const U = Mats.coastU; Layout.coastGL(x, U.uHeadL.value, U.uCoast.value, U.uCoastP.value, U.uCoastQ.value);
+  }
+  Object.assign(api, { coastFollow });
 
   const lerp = (a, b, t) => a + (b - a) * t;
   function setCamera(c, aspect, shift = 0) {
@@ -627,11 +694,13 @@ const Engine = (() => {
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
-    /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, and the copies of the land */
+    /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
+       draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     { const cx = Math.round(camera.position.x / 4) * 4; if (nearMesh && cx !== nearX) { nearX = cx; nearMesh.position.x = cx; gU.uNearRect.value.set(cx - 48, -62, cx + 48, -2); } }
     skyMesh.position.copy(camera.position);
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
-    if (world) world.follow(camera.position.x);
+    coastFollow(camera.position.x);
+    if (world) world.update(camera.position.x, o.buildMs ?? 4);
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;
       const sc = o.shadowC || (away ? [Math.round(lk[0]), Math.round(lk[2])] : [Layout.camp.x, Layout.camp.z]);
@@ -669,6 +738,9 @@ const Engine = (() => {
     const fireK = surge.fireOut == null ? 1 : 1 - sm01(surge.fireOut, surge.fireOut + 0.8, wt);
     const L = Object.assign(Lw, o.lights), F = Object.assign(Fw, o.fire), vf = vanFlicker(t) * (surge.vanHit == null ? 1 : 0.35 + 0.65 * flickOut(surge.vanHit, wt, 2.0)), ff = fireFlicker(t);
     F.i *= fireK; F.smoke *= fireK; L.string *= flickOut(surge.lightsOut, wt);
+    /* a camp going up: its lights come on and its fire is lit as each is put in place */
+    pitchStep();
+    if (pitch.on) { const P = pitch.k; L.string *= P.string; L.fairy *= P.string; L.lantern *= P.lantern; F.i *= P.fire; F.smoke *= P.fire; F.steam *= P.fire; }
     if (camp.rugMat && surge.rugWet != null) { const e = sm01(surge.rugWet, surge.rugWet + 1.5, wt); camp.rugMat.color.setRGB(1 - 0.5 * e, 1 - 0.5 * e, 1 - 0.46 * e); }
     Mats.U.uLights.value.set(L.string, L.lantern, L.van * vf * (1 - vanS.k), L.fairy);
     trackWash(wt);
@@ -711,6 +783,7 @@ const Engine = (() => {
       fi.dens = o.dens; fi.pxScale = pxScale; fi.van = camp.vanGroup.position; fi.swash = swashFront; fi.calm = !!o.calm;
       for (const sp of fauna.update(fi)) { surge.ripples.push({ x: sp.x, z: sp.z, t0: wt, A: sp.k }); if (surge.ripples.length > 6) surge.ripples.shift(); }
     }
+    if (shacks) shacks.update(S, t);
     const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
     fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;
     fxP.smoke = F.smoke; fxP.steam = F.steam * fireK; fxP.pxScale = pxScale; fxP.douse = surge.fireOut == null ? 0 : Math.exp(-Math.max(0, wt - surge.fireOut) / 2.4) * (wt >= surge.fireOut ? 1 : 0);

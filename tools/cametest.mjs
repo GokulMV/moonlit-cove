@@ -138,7 +138,7 @@ if (!only || only === 'walk') {
 
   /* a rock in the way: put the walker a few metres from one, facing it, and walk into it */
   const rock = await page.evaluate(() => {
-    const c = window.__cove, cand = c.obstacles.filter(o => o[3] === 'rock' && o[2] > 0.5 && Math.abs(o[0]) < 300 && o[1] > Layout.shoreZ(o[0]) + 2 && o[1] < Layout.vegZ(o[0]) - 3 && Engine.world.massif(o[0], o[1] + 3) < 0.2);
+    const c = window.__cove, cand = Engine.world.chunks.flatMap(ch => ch.obs.flat()).filter(o => o[3] === 'rock' && o[2] > 0.5 && Math.abs(o[0]) < 300 && o[1] > Layout.shoreZ(o[0]) + 2 && o[1] < Layout.vegZ(o[0]) - 3 && Engine.world.massif(o[0], o[1] + 3) < 0.2);
     cand.sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]));
     const o = cand[0]; if (!o) return null;
     const w = c.wk; w.x = o[0]; w.z = o[1] + o[2] + 2.6; w.h = w.hT = 0; w.v = 0;

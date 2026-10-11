@@ -118,7 +118,7 @@ void main(){
   function picnic(root, refs) {
     const R = Layout.rug, g = grp(R.x, 0, R.z, R.rot); root.add(g);
     const rug = mesh(new T.PlaneGeometry(R.w, R.d), Mats.lit({ map: Mats.tex(Paint.rug()), roughness: 0.96 }), false, true); refs.rugMat = rug.material;
-    rug.rotation.x = -Math.PI / 2; rug.position.y = 0.012; g.add(rug);
+    rug.rotation.x = -Math.PI / 2; rug.position.y = 0.012; g.add(rug); refs.rugMesh = rug;
     /* low table */
     const wood = Mats.tex(Paint.wood(5));
     const tg = grp(0, 0, 0); g.add(tg); { const g = tg;
@@ -147,7 +147,7 @@ void main(){
     /* floor cushions & pouf */
     const cushion = (hex, sx, sy, sz, x, z, ry = 0) => {
       const o = mesh(new T.SphereGeometry(1, 22, 14), L(hex, { roughness: 0.95 })); o.scale.set(sx, sy, sz); o.position.set(x, sy * 0.92, z); o.rotation.y = ry; g.add(o);
-      refs.dyn.push({ o, kind: 'float', half: sx, tip: 0.3 });
+      refs.dyn.push({ o, kind: 'float', half: sx, tip: 0.3 }); (refs.cushions = refs.cushions || []).push(o);
     };
     cushion('#c4943a', 0.5, 0.14, 0.3, -0.22, -0.92, 0.06); cushion('#7d9277', 0.5, 0.14, 0.3, 0.26, 0.93, -0.08);
     cushion('#ddd0b4', 0.32, 0.21, 0.32, -1.32, 0.08); cushion('#a64d33', 0.3, 0.13, 0.3, 1.3, -0.15, 0.3);
@@ -163,7 +163,7 @@ void main(){
     refs.basket = bk;
     /* book */
     const bookM = L('#efe6d1', { roughness: 0.9 });
-    const bkL = mesh(new T.BoxGeometry(0.2, 0.02, 0.28), bookM); at(bkL, -1.45, 0.02, -0.9); bkL.rotation.set(0, 0.5, 0.06); g.add(bkL); refs.dyn.push({ o: bkL, kind: 'float', half: 0.14, tip: 0.4 });
+    const bkL = mesh(new T.BoxGeometry(0.2, 0.02, 0.28), bookM); at(bkL, -1.45, 0.02, -0.9); bkL.rotation.set(0, 0.5, 0.06); g.add(bkL); refs.dyn.push({ o: bkL, kind: 'float', half: 0.14, tip: 0.4 }); refs.bookLoose = bkL;
   }
 
   function lanterns(root, refs) {
@@ -177,15 +177,16 @@ void main(){
       g.add(at(mesh(new T.ConeGeometry(0.15 * s, 0.13 * s, 6), iron), 0, 0.395 * s, 0));
       const ring = mesh(new T.TorusGeometry(0.04 * s, 0.008 * s, 6, 14), iron); at(ring, 0, 0.49 * s, 0); g.add(ring);
       refs.lanterns.push({ mat: glassM, pos: new T.Vector3(x, 0.2 * s, z), s });
-      refs.dyn.push({ o: g, kind: 'tip', half: 0.12 * s, tip: 1.5, lantern: refs.lanterns.length - 1 });
+      refs.dyn.push({ o: g, kind: 'tip', half: 0.12 * s, tip: 1.5, lantern: refs.lanterns.length - 1 }); (refs.lanternGroups = refs.lanternGroups || []).push(g);
     }
   }
 
   function stringLights(root, refs, U) {
     const poleM = L('#6a4d33', { roughness: 0.9 }), wireM = new T.MeshStandardMaterial({ color: C('#151210'), roughness: 0.6 });
+    refs.poles = []; refs.poleCaps = []; refs.strands = [];
     for (const [x, z] of Layout.poles) {
-      root.add(at(mesh(new T.CylinderGeometry(0.032, 0.045, Layout.POLE_H, 8), poleM), x, Layout.POLE_H / 2, z));
-      root.add(at(mesh(new T.SphereGeometry(0.045, 8, 6), poleM), x, Layout.POLE_H, z));
+      const pole = at(mesh(new T.CylinderGeometry(0.032, 0.045, Layout.POLE_H, 8), poleM), x, Layout.POLE_H / 2, z), cap = at(mesh(new T.SphereGeometry(0.045, 8, 6), poleM), x, Layout.POLE_H, z);
+      root.add(pole); root.add(cap); refs.poles.push(pole); refs.poleCaps.push(cap);
     }
     const segs = Layout.strands.map(([i, j]) => { const a = Layout.poles[i], b = Layout.poles[j]; return { a, b, len: Math.hypot(b[0] - a[0], b[1] - a[1]) }; });
     const total = segs.reduce((s, q) => s + q.len, 0);
@@ -194,13 +195,13 @@ void main(){
       const top = Layout.POLE_H - 0.05, sag = 0.26 + s.len * 0.035;
       const P = t => new T.Vector3(s.a[0] + (s.b[0] - s.a[0]) * t, top - sag * 4 * t * (1 - t), s.a[1] + (s.b[1] - s.a[1]) * t);
       const pts = []; for (let i = 0; i <= 20; i++) pts.push(P(i / 20));
-      root.add(mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 30, 0.009, 4, false), wireM, false, false));
+      const wire = mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 30, 0.009, 4, false), wireM, false, false); root.add(wire); refs.strands.push(wire);
       const n = Math.max(3, Math.round(s.len / 0.45));
       for (let i = 1; i < n; i++) { const t = i / n, p = P(t); p.y -= 0.075; bulbs.push({ p, order: (acc + t * s.len) / total, strand: si, t }); }
       acc += s.len;
     }
     const inst = instancedLights(bulbs, 0.05, U.bulb);
-    root.add(inst);
+    root.add(inst); refs.bulbMesh = inst;
     refs.bulbs = bulbs;
   }
 
@@ -419,7 +420,7 @@ void main(){
   /* ── fire + coffee: a log teepee in a ring of river stones; an iron tripod holds the enamel
      coffee kettle on a chain just above the flame tips; a tin mug warms on a flat stone ── */
   function campfire(root, refs) {
-    const F = Layout.fire, g = grp(F.x, 0, F.z); root.add(g);
+    const F = Layout.fire, g = grp(F.x, 0, F.z); root.add(g); refs.fireGroup = g;
     const r = Textures.rng(91);
     const noFire = o => { o.userData.noFireShadow = true; return o; };
     const barkT = Mats.tex(Paint.logBark(7), { repeat: true });
@@ -479,7 +480,7 @@ void main(){
     const bail = mesh(new T.TorusGeometry(0.094, 0.0035, 5, 24, Math.PI), ironM); bail.rotation.y = Math.PI / 2; at(bail, 0, 0.19, 0); bail.scale.set(1, 1.05, 1); kettle.add(noFire(bail));
     for (const z of [-0.095, 0.095]) kettle.add(noFire(at(mesh(new T.SphereGeometry(0.009, 8, 6), rimM), 0, 0.19, z)));
     }
-    refs.dyn.push({ o: tri, kind: 'fall', half: 0.86, tip: 1.25 });
+    refs.dyn.push({ o: tri, kind: 'fall', half: 0.86, tip: 1.25 }); refs.tripod = tri;
     /* tin mug on the flat stone */
     const mug = grp(Math.cos(ma) * 0.74 - 0.03, 0.082, Math.sin(ma) * 0.74 + 0.02, 0.4); g.add(mug);
     const mugM = Mats.lit({ map: Mats.tex(Paint.enamel('#e9e2d2'), { repeat: true }), roughness: 0.35 });
@@ -487,7 +488,7 @@ void main(){
     const coffee = mesh(new T.CircleGeometry(0.04, 20), L('#2b170d', { roughness: 0.12 }), false); coffee.rotation.x = -Math.PI / 2; at(coffee, 0, 0.088, 0); mug.add(noFire(coffee));
     const rim = mesh(new T.TorusGeometry(0.044, 0.004, 4, 24), L('#24486f')); rim.rotation.x = Math.PI / 2; at(rim, 0, 0.095, 0); mug.add(noFire(rim));
     const mh = mesh(new T.TorusGeometry(0.028, 0.007, 6, 12), mugM); at(mh, 0.055, 0.05, 0); mug.add(noFire(mh));
-    refs.dyn.push({ o: mug, kind: 'tip', half: 0.045, tip: 1.57, float: true, mug: true });
+    refs.dyn.push({ o: mug, kind: 'tip', half: 0.045, tip: 1.57, float: true, mug: true }); refs.mug = mug;
     g.updateMatrixWorld(true);
     g.children.forEach(o => { if (o.userData.base) sootRock(o, o.userData.base, F, o.position.x * 13); });
     refs.mugTop = mug.localToWorld(new T.Vector3(0, 0.1, 0));
@@ -647,7 +648,7 @@ void main(){
     };
     [[-0.13, 0.05, 0, 0.085, 1.4, 0.1], [0.02, 0.05, 0.02, 0.08, 1.5, -0.2], [0.17, 0.05, -0.01, 0.09, 1.3, 0.3],
      [-0.06, 0.15, 0.01, 0.08, 1.4, 2.2], [0.1, 0.15, 0, 0.085, 1.5, 1.9], [0.02, 0.24, 0.02, 0.075, 1.6, -1.2]].forEach(a => piece(...a));
-    refs.dyn.push({ o: g, kind: 'slide', half: 0.25, tip: 0.5 });
+    refs.dyn.push({ o: g, kind: 'slide', half: 0.25, tip: 0.5 }); refs.woodpile = g;
   }
 
   function shoreBits(root, refs) {
@@ -659,7 +660,7 @@ void main(){
     const stub = mesh(Nature.taperTube(new T.CatmullRomCurve3([new T.Vector3(0.3, 0.12, 0), new T.Vector3(0.55, 0.28, -0.12), new T.Vector3(0.75, 0.36, -0.3)]), 8, 7, t => 0.05 - 0.03 * t, 0.5), dwM);
     const dwg = grp(D.x, 0, D.z, D.rot); root.add(dwg); dw.position.set(0, 0, 0); dw.rotation.y = 0; dwg.add(dw);
     stub.position.set(0, 0, 0); stub.rotation.y = 0; dwg.add(stub);
-    refs.dyn.push({ o: dwg, kind: 'slide', half: 1.2, tip: 0.0, heavy: true });
+    refs.dyn.push({ o: dwg, kind: 'slide', half: 1.2, tip: 0.0, heavy: true }); refs.driftwood = dwg;
     const B = Layout.bottle, bg = grp(B.x, 0.085, B.z, B.rot); bg.scale.setScalar(2.3); bg.rotation.z = 0.08; root.add(bg);
     const gl = new T.MeshStandardMaterial({ color: C('#3d7350'), roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.82 });
     const body = mesh(new T.CylinderGeometry(0.045, 0.045, 0.2, 14), gl); body.rotation.z = Math.PI / 2; bg.add(body);
