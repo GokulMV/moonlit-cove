@@ -493,7 +493,9 @@ void main(){
 
   /* ocean surface: four octaves of directional chop; what the pixel can't resolve becomes roughness */
   vec3 Nw = vec3(0.0, 1.0, 0.0);
-  float fp = max(length(gDx), length(gDy)), sig2 = 0.0016;
+  /* the pixel's footprint on the water: long along the view (fpL), narrow across it (fp). The textures are filtered
+     anisotropically, so an octave keeps its detail until it is too fine even across the view */
+  float fpL = max(length(gDx), length(gDy)), fp = min(min(length(gDx), length(gDy))*1.6, fpL), sig2 = 0.0016;
   if (s > -2.6){
     vec2 q = vec2(-p.y, p.x);
     float calm = mix(0.4, 1.0, smoothstep(-0.2, 3.5, s));
@@ -505,13 +507,14 @@ void main(){
     /* an octave a pixel can't resolve leaves the normal (it becomes roughness below): otherwise its
        leftovers beat against the pixel rows near the horizon and shimmer as the sea moves */
     vec4 rv = 1.0 - smoothstep(vec4(0.15), vec4(0.6), vec4(fp*24.0)/Tt);
-    /* wind slicks: long lanes where the breeze drops and the water goes smooth; from far off they read as paler streaks */
-    float slick = smoothstep(0.45, 0.7, tN(mat2(0.8, 0.6, -0.6, 0.8)*p*vec2(0.3, 1.0) + vec2(t*0.35, 0.0), 380.0).r)*smoothstep(4.0, 30.0, s);
-    float rough = mix(1.0, 0.4, slick);
-    /* and the long swell under the chop, still resolved far out, so the open sea keeps its banding to the horizon */
-    float rvS = 1.0 - smoothstep(0.15, 0.6, fp*24.0/130.0);
-    vec2 gS = (tW(vec2(q.y*0.35, -q.x - t*2.2) + vec2(3.7, 1.1), 130.0).rg*2.0 - 1.0)*0.13*rvS*smoothstep(6.0, 40.0, s);   /* long crests along the shore, rolling in */
-    vec2 gq = ((g0*Aa.x*rv.x + g1*Aa.y*rv.y + g2*Aa.z*rv.z + g3*Aa.w*rv.w)*rough + gS)*calm;
+    /* the long swell under the chop: three long trains rolling in toward the beach, as plain waves (slopes in x, z),
+       still resolved far out, so the open sea keeps its long lines all the way to the horizon */
+    vec2 gS = vec2(0.0);
+    { vec2 d1 = vec2(0.10, 0.995), d2 = vec2(-0.22, 0.975), d3 = vec2(0.31, 0.951);
+      float k1 = 0.0654, k2 = 0.0885, k3 = 0.0511;
+      float a1 = k1*dot(d1, p) - t*0.80, a2 = k2*dot(d2, p) - t*0.93 + 1.7, a3 = k3*dot(d3, p) - t*0.71 + 4.1;
+      gS = (d1*cos(a1)*0.022 + d2*cos(a2)*0.016 + d3*cos(a3)*0.014)*smoothstep(6.0, 40.0, s); }
+    vec2 gq = (g0*Aa.x*rv.x + g1*Aa.y*rv.y + g2*Aa.z*rv.z + g3*Aa.w*rv.w)*calm;
     /* a splash of foam where the water was clicked */
     float ripF = 0.0;
     for (int i = 0; i < 6; i++){
@@ -521,12 +524,12 @@ void main(){
       ripF = max(ripF, R4.w*exp(-rr2/(0.8 + age*4.5))*exp(-age/1.1)*(0.6 + 0.4*smoothstep(0.35, 0.65, tN(p*0.9 + R4.xy, 3.0).r)));
     }
     w.foam = max(w.foam, ripF);
-    sig2 += dot((1.0 - rv), Aa*Aa*0.07)*calm*calm*rough*rough;
+    sig2 += dot((1.0 - rv), Aa*Aa*0.07)*calm*calm;
     #ifdef NEAR
-      vec2 gr = vec2(gq.y, -gq.x) + sn*w.slope*0.12;
+      vec2 gr = vec2(gq.y, -gq.x) + gS*calm + sn*w.slope*0.12;
       Nw = normalize(vNg + vec3(-gr.x, 0.0, -gr.y));
     #else
-      vec2 gr = vec2(gq.y, -gq.x) + sn*w.slope*0.4;
+      vec2 gr = vec2(gq.y, -gq.x) + gS*calm + sn*w.slope*0.4;
       Nw = normalize(vec3(-gr.x, 1.0, -gr.y));
     #endif
   }
@@ -568,7 +571,7 @@ void main(){
     if (camp) art = artLight(wp, N);
     vec3 lit = a*(uAmb*(0.7 + 0.3*N.y)*ao + uKeyCol*max(dot(N, Lk), 0.0)*shK + art*mix(1.0, ao, 0.6));
     /* quartz glints in dry sand */
-    float qz = smoothstep(0.986, 1.0, grain)*(1.0 - wet)*smoothstep(0.08, 0.02, fp);
+    float qz = smoothstep(0.986, 1.0, grain)*(1.0 - wet)*smoothstep(0.08, 0.02, fpL);
     lit += uKeyCol*qz*pow(max(dot(N, normalize(Lk + V)), 0.0), 8.0)*1.6;
     if (wet > 0.01){
       vec3 Ns = normalize(mix(N, Nw, 0.3));
@@ -675,7 +678,7 @@ void main(){
 uniform sampler2D uScene, uDepth; uniform vec2 uTexel; uniform float uK, uZf, uNear, uFar, uMax;
 varying vec2 vUv;
 float linZ(float d){ return uNear*uFar/(uFar - d*(uFar - uNear)); }
-float coc(float z){ return min(uK*abs(1.0 - uZf/z), uMax); }
+float coc(float z){ float c = uK*abs(1.0 - uZf/z); if (z > uZf) c *= mix(1.0, 0.35, smoothstep(120.0, 700.0, z)); return min(c, uMax); }
 void main(){
   float zc = linZ(texture2D(uDepth, vUv).r), cc = coc(zc);
   vec3 acc = texture2D(uScene, vUv).rgb; float ws = 1.0, fg = 0.0;

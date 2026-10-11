@@ -357,6 +357,8 @@ const Engine = (() => {
     const n = Textures.noise(), w = Textures.water();
     const noiseTex = Mats.dataTex(n.data, n.size, n.size, { repeat: true });
     const waterTex = Mats.dataTex(w.data, w.size, w.size, { repeat: true });
+    /* the sea is seen at grazing angles: filter its textures along the view, or the distance smears */
+    { const an = Math.min(8, R.capabilities.getMaxAnisotropy()); waterTex.anisotropy = an; noiseTex.anisotropy = an; }
     const sd = Textures.sand(), sandTex = Mats.dataTex(sd.data, sd.size, sd.size, { repeat: true });
 
     keyLight = new T.DirectionalLight(0xffffff, 1);
