@@ -214,8 +214,22 @@ const World = (() => {
     }
     return out;
   }
-  /* surf rocks along the beach: clusters the waves break round (the camp's bay keeps the ones it always had) */
+  /* surf rocks along the beach: clusters the waves break round. The camp's bay keeps the ones it always had, where they
+     always were (the old repeating stretch's draws, replayed; only how each one is turned is drawn anew) */
   const BAY = [[-34, -2.6, 6], [24.5, -2.3, 4], [-52, -3.2, 5], [46, -2.2, 4], [-74, -2.4, 5], [74, -2.0, 6], [-98, -2.8, 4], [100, -2.4, 5]];
+  let bayRocks = null;
+  function bay() {
+    if (bayRocks) return bayRocks;
+    const r2 = rng(9092), r = rng(9094), old = [[-125, 16], [132, 17], [395, 13], [-385, 22]], wrapD = d => d - 1024 * Math.round(d / 1024);
+    for (let x = 118; x < 1024 - 118;) { if (!old.some(([hx, w]) => Math.abs(wrapD(x - hx)) < w * 2.6)) { r2(); r2(); } x += 18 + r2() * 30; }
+    bayRocks = [];
+    for (const [cx, dz, n] of BAY) for (let i = 0; i < n; i++) {
+      const x = cx + (r2() - 0.5) * (i ? 6 : 1), z = Co.shoreZ(x) + dz + (i ? (r2() - 0.5) * 2.6 : 0);
+      const s = i ? 0.4 + r2() * 0.8 : 1.25 + r2() * 0.5, p = (i ? [0, 2, 4] : [0, 2, 3])[Math.floor(r2() * 3)];
+      bayRocks.push({ x, y: i ? -0.16 * s : -0.2, z, s, kind: i ? 'small' : 'big', p, ry: r() * TAU, tx: (r() - 0.5) * 0.3, tz: (r() - 0.5) * 0.3, sy: 1 });
+    }
+    return bayRocks;
+  }
 
   /* foam round rocks in the surf, and spray thrown up when a wave hits them; both timed to the real waves */
   const SURF_T = `
@@ -555,8 +569,9 @@ void main(){
         const hp = yield* headPlan(h);
         for (const p of hp) if (p.x >= X0c && p.x < X1c) rocks.push(Object.assign({}, p));
       }
-      /* clusters standing in the surf along the beach */
-      const r2 = ch.rng(2), cl = BAY.filter(b => b[0] >= X0c && b[0] < X1c);
+      /* clusters standing in the surf along the beach (the camp's bay has its own) */
+      for (const p of bay()) if (p.x >= X0c && p.x < X1c) rocks.push(Object.assign({}, p));
+      const r2 = ch.rng(2), cl = [];
       for (let x = X0c + r2() * 30; x < X1c; x += 18 + r2() * 30) if (Math.abs(x) >= 118 && !nearHead(x, 2.6)) cl.push([x, -2.0 - r2() * 1.4, 3 + Math.floor(r2() * 4)]);
       for (const [cx, dz, n] of cl) {
         for (let i = 0; i < n; i++) {
@@ -743,7 +758,7 @@ void main(){
          'near' (with the trees, within about 490 m) into chunk.near (shown within 155 m) and chunk.far (155–430 m).
        A chunk gives x0, x1 (where it lies, world x), camp (it holds the camp), rng(k) for numbers of its own, and
        keep(geometry) for geometry to throw away with it (instanced meshes' buffers are freed anyway) */
-    const place = fn => { hooks.place.push(fn); };
+    const place = fn => { hooks.place.push(fn); if (live.length) reset(); };   /* (chunks already built are built again with it) */
     const decorate = (fn, lod = 'near') => {
       hooks[lod].push(fn);
       for (const ch of live) if (lod === 'tiny' ? ch.has.tiny : ch.has.trees) fn(ch);
