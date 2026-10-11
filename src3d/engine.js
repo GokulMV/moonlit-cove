@@ -340,6 +340,24 @@ const Engine = (() => {
     surge.waves.forEach(w => { const tb = w.x - Math.min(w.s0 * 0.5, 8) / CU; if (tb >= wt0 && tb <= wt1) out.push({ id: 'u' + w.t0.toFixed(2), x: tb + 1.1, amp: w.amp, user: true }); });
     return out;
   }
+  /* the coast's wildlife (fauna.js), and what it is told each frame */
+  let fauna = null, faunaT = null, roughNow = 0; const faunaIn = {};
+  /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
+     shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
+     that chase the water's edge and the crabs that keep out of it */
+  function swashFront(x, wt) {
+    const WT = 9.0, k0 = Math.floor(wt / WT); let r = 0;
+    for (let k = k0 - 3; k <= k0 + 2; k++) {
+      const h = n => hash(k * n + 0.37), amp = (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * roughNow), ph = h(2.71) * 6.283;
+      const tau = wt - (k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(x * 0.11 + ph) + x * 0.03 * (h(0.93) - 0.5)), T_ = tsOf(amp);
+      if (tau <= 0 || tau > T_ + 1) continue;
+      const [R, dl] = reach(x, amp, seedW({ z: ph })), u = (tau - dl) / T_;
+      if (u > 0 && u < 1) r = Math.max(r, swashEdge(R, u));
+    }
+    for (const w of surge.waves) { const amp = userAmpJS(w, x, wt); if (amp < 0.05) continue; const [R, dl] = reach(x, amp, seedU(w)), u = (wt - w.x - dl) / tsOf(amp); if (u > 0 && u < 1) r = Math.max(r, swashEdge(R, u)); }
+    return r;
+  }
+  Object.assign(api, { swashFront });
   /* when the waves will hit the rocks near a point: for the sound of water slapping rock */
   function rockHits(wt0, wt1, cx, cz, maxD = 32) {
     const out = []; if (!world) return out;
@@ -578,6 +596,8 @@ const Engine = (() => {
        and the small lives of the shore, its shells laid along every chunk of it */
     world = World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
+    /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
+    fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
     post = makePost();
     return { casters: nCast };
   }
@@ -680,6 +700,13 @@ const Engine = (() => {
         if (!canDone) { renderLocal(canS, Layout.rug.x, 2.45, Layout.rug.z); canDone = true; }
       } }
     const pxScale = h / (2 * Math.tan(camera.fov * Math.PI / 360));
+    /* the coast's wildlife, around the camera; a dolphin breaking the surface rings the water */
+    if (fauna) {
+      const fi = faunaIn; fi.dt = faunaT === null ? 0 : Math.max(0, Math.min(0.25, t - faunaT)); faunaT = t; roughNow = o.rough || 0;
+      fi.t = t; fi.waveT = wt; fi.cam = camera.position; fi.sAlt = S.sAlt; fi.night = S.night; fi.evening = Math.sin(S.sun.H) > 0; fi.rain = o.rain || 0; fi.wind = o.wind ?? 1;
+      fi.dens = o.dens; fi.pxScale = pxScale; fi.van = camp.vanGroup.position; fi.swash = swashFront; fi.calm = !!o.calm;
+      for (const sp of fauna.update(fi)) { surge.ripples.push({ x: sp.x, z: sp.z, t0: wt, A: sp.k }); if (surge.ripples.length > 6) surge.ripples.shift(); }
+    }
     const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
     fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;
     fxP.smoke = F.smoke; fxP.steam = F.steam * fireK; fxP.pxScale = pxScale; fxP.douse = surge.fireOut == null ? 0 : Math.exp(-Math.max(0, wt - surge.fireOut) / 2.4) * (wt >= surge.fireOut ? 1 : 0);

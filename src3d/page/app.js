@@ -336,9 +336,9 @@
   $('tFull').addEventListener('click', () => { st.full = !st.full; fullShift = null; store.set('full', st.full); syncTimeUI(); });
   $('lSoft').value = st.soft; $('lSoft').addEventListener('input', e => { st.soft = +e.target.value; store.set('soft', st.soft); });
   $('lMotion').value = st.motion; $('lMotion').addEventListener('input', e => { st.motion = +e.target.value; store.set('motion', st.motion); });
-  /* how much life there is: insects, fish, shells (0.5 is the cove as it always was; shells start all out) */
-  st.dens = Object.assign({ insects: 0.5, fish: 0.5, shells: 1 }, store.get('dens', {}));
-  for (const [k, id] of [['insects', 'dInsects'], ['fish', 'dFish'], ['shells', 'dShells']]) {
+  /* how much life there is: insects, fish, animals (birds, bats, crabs, dolphins), shells (0.5 is the cove as it always was; shells start all out) */
+  st.dens = Object.assign({ insects: 0.5, fish: 0.5, animals: 0.5, shells: 1 }, store.get('dens', {}));
+  for (const [k, id] of [['insects', 'dInsects'], ['fish', 'dFish'], ['animals', 'dAnimals'], ['shells', 'dShells']]) {
     $(id).value = st.dens[k]; $(id).addEventListener('input', e => { st.dens[k] = +e.target.value; store.set('dens', st.dens); });
   }
   /* where the lights are heading (not how bright they are mid-fade): the button flips that */
