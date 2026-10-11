@@ -4,7 +4,24 @@ import path from 'path'; import fs from 'fs';
 export const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 export const shots = path.join(root, 'shots'); fs.mkdirSync(shots, { recursive: true });
 
+/* several agents share this machine (2 CPUs, 7 GB): at most two test browsers run at once, machine-wide.
+   A slot is a lock directory under /tmp; a slot older than 15 minutes is taken to be abandoned. */
+const SLOTS = ['/tmp/cove-browser-slot-0', '/tmp/cove-browser-slot-1'];
+async function takeSlot() {
+  for (;;) {
+    for (const d of SLOTS) {
+      try { fs.mkdirSync(d); fs.writeFileSync(d + '/pid', String(process.pid)); return d; }
+      catch (e) { try { const st = fs.statSync(d); if (Date.now() - st.mtimeMs > 15 * 60e3) fs.rmSync(d, { recursive: true, force: true }); } catch (e2) { /* gone already */ } }
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+let held = null;
+const release = () => { if (held) { try { fs.rmSync(held, { recursive: true, force: true }); } catch (e) { /* already free */ } held = null; } };
+process.on('exit', release); for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { release(); process.exit(1); });
+
 export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'file://' + path.join(root, 'dist/page-local.html'), enter = true, hour = 23, query = '', mobile = false, init } = {}) {
+  held = await takeSlot();
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: mobile, isMobile: mobile });
   const page = await ctx.newPage();
@@ -25,6 +42,7 @@ export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'fi
     await page.addStyleTag({ content: '#hud .intro.gone{display:none!important}' });
     await page.waitForTimeout(1500);
   }
+  const close = browser.close.bind(browser); browser.close = async () => { try { await close(); } finally { release(); } };
   return { browser, page, logs };
 }
 export const shot = (page, name) => page.screenshot({ path: path.join(shots, name + '.png'), timeout: 180000 });
