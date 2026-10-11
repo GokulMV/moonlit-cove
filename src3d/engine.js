@@ -415,6 +415,8 @@ const Engine = (() => {
     trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackCx.drawImage(tmp, dpx, 0);
     R.x -= dpx * R.z / TRK.W; trackDirty = true;
   }
+  /* (a walker's footprints need the window where they are walking, not where the van is) */
+  Object.assign(api, { trackFollow });
   /* the sea smooths the tracks (and whatever else is pressed into that canvas) only where it really runs: each wave to
      its own reach, tongue for tongue, and most where the water stands deepest and longest, so they wear away by degrees
      and unevenly, and their worn ends follow the waves. It rubs out through a coarse mask, a quarter metre a cell. The

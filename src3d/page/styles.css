@@ -125,7 +125,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); out
 .walkbar { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; }
 .walkbar button { pointer-events: auto; border-radius: 999px; padding: 9px 16px; font: 500 13px/1 var(--body); color: var(--fg); cursor: pointer; white-space: nowrap; }
 .walkbar button:hover { background: rgba(255, 255, 255, 0.12); }
-body.driving #hud .walkbar, body.reading-book #hud .walkbar, body.reading #hud .walkbar { opacity: 0; pointer-events: none; }
+body.driving #hud .walkbar, body.walking #hud .walkbar, body.reading-book #hud .walkbar, body.reading #hud .walkbar { opacity: 0; pointer-events: none; }
 .hint { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 82px); transform: translateX(-50%); margin: 0; font: 400 12.5px/1.4 var(--mono); color: var(--dim); text-align: center; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7); pointer-events: none; transition: opacity .8s; width: max-content; max-width: calc(100% - 2 * var(--gut)); }
 .toast { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 22px); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; font-size: 14px; max-width: calc(100% - 2 * var(--gut)); animation: rise .35s ease-out; }
 .toast button { border: 0; padding: 8px 12px; border-radius: 9px; background: var(--amber); color: var(--night); font-weight: 600; white-space: nowrap; }
@@ -142,6 +142,22 @@ body.driving #hud .walkbar, body.reading-book #hud .walkbar, body.reading #hud .
 body.driving #hud .dock, body.driving #hud #spots, body.driving #hud .hint { opacity: 0; pointer-events: none; }
 @media (max-width: 720px) { .walkbar { bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); } }
 @media (max-width: 720px) { .dh-keys { display: none; } }
+
+/* walking: the same bar, with Auto (a lamp that lights when it is on) and the pace */
+.walkhud .dh-keys { white-space: nowrap; }
+@media (max-width: 1080px) { .walkhud .dh-keys { display: none; } }
+.walkhud .wh-auto { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); color: var(--dim); }
+.walkhud .wh-auto::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background .2s, box-shadow .2s; }
+.walkhud .wh-auto[aria-pressed="true"] { color: var(--amber); border-color: rgba(242, 183, 105, 0.55); background: rgba(242, 183, 105, 0.14); }
+.walkhud .wh-auto[aria-pressed="true"]::before { background: var(--amber); box-shadow: 0 0 8px rgba(242, 183, 105, 0.8); }
+.walkhud .seg button { padding: 6px 9px; border-radius: 7px; background: none; color: var(--dim); font: 500 12px/1 var(--mono); }
+.walkhud .seg button:hover { color: var(--fg); }
+.walkhud .seg button[aria-checked="true"] { background: var(--amber); color: var(--night); }
+body.walking #hud .dock, body.walking #hud #spots, body.walking #hud .hint { opacity: 0; pointer-events: none; }
+@media (max-width: 720px) {
+  .walkhud { bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); gap: 6px; padding-left: 8px; }
+  body.walking #hud .pad { bottom: calc(env(safe-area-inset-bottom, 0px) + 132px); }
+}
 
 /* controls + settings */
 .ctrl { position: absolute; right: max(var(--gut), 22px); bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); display: flex; gap: 2px; padding: 4px; }
@@ -269,7 +285,7 @@ body:not(.entered) #hud .brand, body:not(.entered) #hud .brand-show, body:not(.e
 @media (max-width: 720px) {
   .sky { padding: 6px 10px 6px 6px; }
   .sky-text span { display: none; }
-  /* phones: the chapters get the full width, the five controls sit on their own row beneath */
+  /* phones: the chapters get the full width, the six controls sit on their own row beneath */
   .dock { left: var(--gut); right: var(--gut); transform: none; max-width: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); }
   .ctrl { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); }
   .drawer { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 130px); left: var(--gut); right: var(--gut); width: auto; max-height: 52%; }
@@ -319,9 +335,9 @@ body:not(.entered) #hud .brand, body:not(.entered) #hud .brand-show, body:not(.e
   .m-dl { grid-template-columns: 1fr; gap: 2px; }
   .m-dl dd { margin-bottom: 8px; }
 }
-/* six chapters and five controls: on narrower desktops the dock sits left so it never runs under the controls */
+/* six chapters and six controls: on narrower desktops the dock sits left so it never runs under the controls */
 @media (min-width: 721px) and (max-width: 1180px) {
-  .dock { left: max(var(--gut), 22px); transform: none; max-width: calc(100% - 2 * var(--gut) - 230px); }
+  .dock { left: max(var(--gut), 22px); transform: none; max-width: calc(100% - 2 * var(--gut) - 272px); }
 }
 
 /* reading the menu on the table */

@@ -247,9 +247,18 @@ const Ambience = (() => {
       const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; const f = F('lowpass', 300, 0.8), g = G(0); chain(s, f, g, master);
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2 * k, t + 0.01); g.gain.setTargetAtTime(0, t + 0.03, 0.08); s.start(t); s.stop(t + 0.5);
     }
+    /* a footstep on sand: a soft, dull crunch, very quiet, a little different every time; in the shallows a brighter slosh */
+    function step(k, wet) {
+      const t = ctx.currentTime + 0.01, s = ctx.createBufferSource(); s.buffer = noise; s.loop = true;
+      const w = Math.min(1, wet || 0), f = F('bandpass', 520 + 300 * rnd() + 900 * w, 0.8 + 0.6 * w), lp = F('lowpass', 1900 + 1500 * w, 0.5), g = G(0);
+      chain(s, f, lp, g, P((rnd() - 0.5) * 0.3), master);
+      const pk = (0.016 + 0.008 * w) * k;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(pk, t + 0.012); g.gain.setTargetAtTime(pk * 0.35, t + 0.03, 0.03); g.gain.setTargetAtTime(0, t + 0.07, 0.05 + 0.08 * w);
+      s.start(t, rnd() * 1.5); s.stop(t + 0.5);
+    }
     return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, splash: (t, k) => splash(t ?? ctx.currentTime, k || 1), plop: (k, pan) => plop(ctx.currentTime + 0.02, k, pan), page, engine, horn, thud,
       setLevel: v => { opts.level = v; if (on) master.gain.setTargetAtTime(v, ctx.currentTime, 0.2); },
-      get enabled() { return enabled; }, get on() { return on; }, master, channels: ch };
+      get enabled() { return enabled; }, get on() { return on; }, master, channels: ch, step };
   }
 
   /* 16-bit PCM WAV from an AudioBuffer (for the film) */
