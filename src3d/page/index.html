@@ -36,13 +36,19 @@
     <div class="dbody" id="dBody"></div>
   </aside>
 
-  <p class="hint" id="hint">Click a glowing dot to open it. Click the sea to send a wave. Scroll to walk the beach.</p>
-  <div class="walkbar" id="walkBar"><button type="button" class="glass" id="bWalkCamp" hidden>← Back to camp</button><button type="button" class="glass" id="bWalkVan" hidden>Go to the van →</button></div>
+  <p class="hint" id="hint">Click a glowing dot to open it. Click the sea to send a wave. Drag to look around, right-drag to move, scroll to zoom.</p>
+  <div class="walkbar" id="walkBar"><button type="button" class="glass" id="bWalkCamp" hidden>Back to camp</button><button type="button" class="glass" id="bWalkVan" hidden>Go to the van</button></div>
   <div class="toast glass" id="toast" hidden><span id="toastText"></span><button type="button" id="toastBtn" hidden>Rebuild camp</button></div>
 
   <div class="drivehud glass" id="driveHud" hidden>
     <span class="dh-keys"><kbd>W A S D</kbd> or arrows to drive · <kbd>Shift</kbd> boost · <kbd>Space</kbd> brake · <kbd>H</kbd> horn · <kbd>R</kbd> unstick</span>
     <button type="button" id="bPark">Park here <kbd>E</kbd></button>
+  </div>
+  <div class="drivehud walkhud glass" id="walkHud" hidden>
+    <span class="dh-keys"><kbd>W A S D</kbd> or arrows to walk · drag to look · <kbd>Shift</kbd> jog</span>
+    <button type="button" class="wh-auto" id="bWalkAuto" aria-pressed="false" title="Walk on, looking about, on your own">Auto</button>
+    <div class="seg wh-pace" role="radiogroup" aria-label="Pace"><button type="button" role="radio" data-pace="stroll" aria-checked="false">Stroll</button><button type="button" role="radio" data-pace="walk" aria-checked="true">Walk</button><button type="button" role="radio" data-pace="jog" aria-checked="false">Jog</button></div>
+    <button type="button" id="bWalkExit">Exit <kbd>E</kbd></button>
   </div>
   <div class="pad" id="pad" hidden aria-hidden="true"><i id="padKnob"></i></div>
 
@@ -61,6 +67,9 @@
   <div class="ctrl glass" id="ctrl">
     <button class="icon" id="bDrive" type="button" aria-pressed="false" title="Drive the van">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 14.2v6.3M9.9 11.4 4.1 9.8M14.1 11.4l5.8-1.6"/></svg>
+    </button>
+    <button class="icon" id="bWalk" type="button" aria-pressed="false" title="Walk the beach" aria-label="Walk the beach">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.4" cy="4.3" r="1.9"/><path d="M12.9 7.9 11.3 13.2M11.3 13.2l-2.1 3.5-2.5 3.1M11.3 13.2l2.6 2.9.9 4.4M12.6 9.1l2.8 2.5 2.4.6M12.6 9.1 9.5 10.8 8.5 13.6"/></svg>
     </button>
     <button class="icon" id="bLantern" type="button" title="Let a sky lantern go" aria-label="Let a sky lantern go">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1.6 11.5a2 2 0 0 1-2 2.3H8.4a2 2 0 0 1-2-2.3L8 4z"/><path d="M10 21h4M12 17.8V21"/></svg>

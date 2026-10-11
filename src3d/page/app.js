@@ -20,7 +20,7 @@
     t: 4, last: 0, motion: store.get('motion', reduced ? 0.45 : 0.7), soft: store.get('soft', 0.55),
     timeMode: store.get('timeMode', 'live'), hour: store.get('hour', 23), full: store.get('full', true), flow: 1, offset: 0,
     lightsMode: store.get('lightsMode', 'auto'), L: { string: 0, lantern: 0, van: 0, fairy: 0 },
-    chapter: null, from: null, to: null, camT: 1, cur: null, par: [0, 0], parT: [0, 0],
+    chapter: null, from: null, to: null, camT: 1, cur: null,
     rs: 1, fms: [], S: null, entered: false, hintGone: false, wrecked: false, toastTimer: 0
   };
   const sound = { on: false, amb: null, ctx: null, ch: Object.assign({ ocean: true, forest: true, fire: true, insects: true, weather: true, tone: true }, store.get('ch', {})), vol: store.get('vol', 0.8), douse: null, thunder: [] };
@@ -73,7 +73,7 @@
   });
   function openChapter(id) {
     const c = Content.chapters.find(x => x.id === id);
-    if (c) walk.t = 0;
+    if (c && wk.on) stopWalk();
     if (rd.on && rd.id === id) return;
     if (rd.on) stopReading(!!c);
     st.chapter = c ? id : null;
@@ -99,7 +99,11 @@
 
     }
   });
-  function goView(name) { st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = V[name] || V.wide; st.camT = 0; st.camDur = camDur(st.from, st.to); }
+  function goView(name) {
+    /* (back to the explore camera when it is already on its way there: nothing to restart) */
+    if ((V[name] || V.wide) === V.wide && st.to === V.wide) return;
+    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = V[name] || V.wide; st.camT = 0; st.camDur = camDur(st.from, st.to);
+  }
 
   /* ── reading in the scene: every chapter is an object that opens where it lies ──
      book   the menu on the table, the journal by the fire: the camera comes down and the pages turn
@@ -479,7 +483,8 @@
       if (moved <= 10) readNav(e.clientX - view.x < view.w / 2 ? -1 : 1);
       return;
     }
-    if (moved > 8) return;
+    /* a tap, not the end of a drag (one that came back to where it started), a pinch or a right click */
+    if (moved > 8 || ex.dragged || ex.multi || e.button > 0) return;
     const r = cv.getBoundingClientRect(), info = Engine.clickSea((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, st.t);
     if (!info) return;
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
@@ -491,9 +496,8 @@
   const zoomable = () => rd.on && rd.cfg && rd.cfg.kind !== 'tags';
   cv.addEventListener('wheel', e => {
     if (zoomable()) { e.preventDefault(); rd.zoomT = Math.max(1, Math.min(2.4, rd.zoomT * Math.exp(-e.deltaY * 0.0016))); return; }
-    if (!canWalk()) return; e.preventDefault();
-    const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? view.h : 1;
-    walkBy((e.deltaY + e.deltaX) * k * 0.05);
+    if (!canExplore()) return; e.preventDefault();
+    orbWheel(e);
   }, { passive: false });
   const pinch = new Map(); let pinch0 = null;
   cv.addEventListener('pointerdown', e => { pinch.set(e.pointerId, [e.clientX, e.clientY]); if (pinch.size === 2) { const [a, b] = [...pinch.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: rd.zoomT }; } });
@@ -501,50 +505,284 @@
   const unpinch = e => { pinch.delete(e.pointerId); if (pinch.size < 2) pinch0 = null; };
   cv.addEventListener('pointerup', unpinch); cv.addEventListener('pointercancel', unpinch);
   addEventListener('pointermove', e => { if (zoomable() && !(rd.drag && rd.drag.live)) rd.panT = [Math.max(-1, Math.min(1, ((e.clientX - view.x) / view.w) * 2 - 1)) * 1.15, Math.max(-1, Math.min(1, ((e.clientY - view.y) / view.h) * 2 - 1)) * 1.15]; }, { passive: true });
-  addEventListener('pointermove', e => { st.parT = [(e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1]; if (car.on && down && e.buttons) car.yaw = Math.max(-2.6, Math.min(2.6, car.yaw - e.movementX * 0.006)); }, { passive: true });
+  addEventListener('pointermove', e => { if (car.on && down && e.buttons) car.yaw = Math.max(-2.6, Math.min(2.6, car.yaw - e.movementX * 0.006)); }, { passive: true });
   addEventListener('pointerup', () => { if (car.on) car.yaw *= 0.5; });
 
-  /* ── walking the beach: scroll, drag or the arrow keys slide the camera along the coast. Away from the camp it comes
-     down to a few metres above the sand and looks along the beach, the way you are going, so whatever lies ahead
-     (the van, parked wherever it was left) comes into view ── */
-  const walk = { x: 0, t: 0, dir: 1, dirS: 1, drag: null };
-  const canWalk = () => st.entered && !rd.on && !car.on && !st.chapter;
-  function walkBy(d) { walk.t += d; if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } }
-  function walkTo(x, dir) { walk.t = x; if (dir) walk.dir = dir; }
-  function walkCam(base, dt) {
-    const gap = walk.t - walk.x, step = Math.max(-350 * dt, Math.min(350 * dt, gap * (1 - Math.exp(-dt * 3.2))));
-    walk.x += step;
-    if (Math.abs(step) > 0.02 * dt * 60) walk.dir = Math.sign(step);
-    walk.dirS += (walk.dir - walk.dirS) * Math.min(1, dt * 1.6);
-    const p = walk.x; if (Math.abs(p) < 1e-3) return base;
-    const sh = Object.assign({}, base, { pos: [base.pos[0] + p, base.pos[1], base.pos[2]], look: [base.look[0] + p, base.look[1], base.look[2]] });
-    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }, w = sm(4, 26, Math.abs(p));
-    if (w <= 0) return sh;
-    const x = Layout.camp.x + p, d = walk.dirS, lx = x + d * 24, sz = Layout.shoreZ(x), up = Math.min(6, 0.55 * (Layout.vegZ(x) - sz));
-    const rail = { pos: [x, 7.5, sz + up], look: [lx, 0.8, Layout.shoreZ(lx) + 1.0], fov: 52, focus: 22 };
-    return lerpCam(sh, rail, w);
+  /* ── exploring: the camera turns round a point on the sand, the way a map turns under your hand. Drag to turn round
+     it (up and down tilts), right-drag or Shift-drag to move it along the beach, scroll or pinch to come closer; on a
+     phone one finger turns, two move, pinch and twist. One swipe is gentle; swipes that follow each other quickly build
+     speed, and everything glides to a stop when you let go. With the point on the camp and nothing touched, it is
+     exactly the composed home view ── */
+  const TAU = Math.PI * 2, wrapA = a => a - TAU * Math.round(a / TAU);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  /* the home view taken apart: where it stands and where it looks, from the camp on the sand */
+  const V0 = Layout.cameras.wide, P0 = [Layout.camp.x, 0, Layout.camp.z];
+  const OP = V0.pos.map((v, i) => v - P0[i]), OL = V0.look.map((v, i) => v - P0[i]), RYZ = Math.hypot(OP[1], OP[2]), EL0 = Math.atan2(OP[1], OP[2]);
+  const ORB = { elMin: 0.14, elMax: 1.05, zMin: Math.log(0.35), zMax: Math.log(1.7), glide: 0.26, boost: 4.5 };
+  /* the open sand at x: the waterline, the forest edge, and the foot of a headland's rock where one stands on the beach
+     (looked for a little beyond the trees, so that the edge of the sand moves smoothly as the rock comes and goes) */
+  function sandAt(x, C) {
+    if (C.x === x) return C;
+    const W = Engine.world, sz = Layout.shoreZ(x), vz = Layout.vegZ(x); let foot = Infinity;
+    if (W && W.massif(x, vz + 1.3) > 0.3) {
+      let a = sz, b = vz + 1.3;
+      if (W.massif(x, a) > 0.3) foot = a;
+      else { for (let i = 0; i < 10; i++) { const m = (a + b) / 2; if (W.massif(x, m) > 0.3) b = m; else a = m; } foot = a; }
+    }
+    C.x = x; C.sz = sz; C.vz = vz; C.foot = foot; return C;
   }
-  cv.addEventListener('pointerdown', e => { if (e.button === 0) walk.drag = { x: e.clientX, id: e.pointerId, moved: false }; });
-  cv.addEventListener('pointermove', e => {
-    const g = walk.drag; if (!g || g.id !== e.pointerId || pinch.size > 1 || !canWalk()) return;
-    const dx = e.clientX - g.x; if (!g.moved && Math.abs(dx) < 7) return;
-    g.moved = true; g.x = e.clientX; walkBy(-dx * 0.075 * 1280 / Math.max(640, view.w));
+  /* where the point may go: from the shallows to the trees, or to a little short of the rock */
+  const pvC = { x: NaN }, pvLo = C => C.sz - 0.5, pvHi = C => Math.max(C.sz + 1, Math.min(C.vz + 0.5, C.foot - 0.8));
+  /* five axes, each a value easing to a target with a critically damped spring: the turn, the tilt (the camera's
+     elevation seen from the point), the zoom (log of the distance), and the point itself, as x along the beach and
+     the fraction of the way across the sand, so that it follows the coast as it moves */
+  const Y = 0, E = 1, Z = 2, X = 3, U = 4, OMEGA = [13, 13, 9, 11, 11];
+  const C0 = sandAt(P0[0], { x: NaN }), HOME = [0, EL0, 0, P0[0], (P0[2] - pvLo(C0)) / (pvHi(C0) - pvLo(C0))];
+  const orb = { v: Float64Array.from(HOME), dv: new Float64Array(5), T: Float64Array.from(HOME), g: new Float64Array(5),
+                el: EL0, Fs: ORB.elMin, pz: P0[2], boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
+  const orbCam = { pos: V0.pos.slice(), look: V0.look.slice(), fov: V0.fov, focus: V0.focus };
+  V.wide = orbCam; st.from = st.to = orbCam;
+  function spring(i, dt) {
+    const w = OMEGA[i], T = orb.T[i], e = orb.v[i] - T, k = Math.exp(-w * dt), t1 = (orb.dv[i] + w * e) * dt;
+    orb.v[i] = T + (e + t1) * k; orb.dv[i] = (orb.dv[i] - w * t1) * k;
+    if (Math.abs(orb.v[i] - T) < 1e-7 && Math.abs(orb.dv[i]) < 1e-6) { orb.v[i] = T; orb.dv[i] = 0; }
+  }
+  /* the treetops, generously: palm crowns lean out over the sand a little before the forest edge and stand up to eleven
+     metres, the tall palms further in up to fifteen; scrub and palms on a headland's flatter top. None in the clearing the
+     camp sits in, where its own few trees are part of the view */
+  function canopy(x, z) {
+    const W = Engine.world, d = z - Layout.vegZ(x), open = (1 - sstep(15, 21, Math.abs(x))) * (1 - sstep(27, 33, z)), m = W ? W.massif(x, z) : 0;
+    return Math.max((11 * sstep(-2.5, 1, d) + 4 * sstep(5, 8, d)) * (1 - open), 11 * sstep(1.5, 3, m));
+  }
+  /* the lowest tilt at which the camera, and its line of sight down to the point, clear the sand, the rock and the trees
+     (worked out again only when the camera has moved) */
+  const flr = { y: NaN, z: NaN, x: NaN, pz: NaN, el: 0 };
+  function elFloor() {
+    const v = orb.v; if (v[Y] === flr.y && v[Z] === flr.z && v[X] === flr.x && orb.pz === flr.pz) return flr.el;
+    const k = Math.exp(v[Z]), sy = Math.sin(v[Y]), cy = Math.cos(v[Y]), W = Engine.world;
+    let el = ORB.elMin;
+    for (let it = 0; it < 2; it++) {
+      const R = k * RYZ * Math.cos(el); let need = ORB.elMin;
+      for (let i = 1; i <= 12; i++) {
+        const r = R * Math.pow(i / 12, 1.3), x = v[X] + sy * r, z = orb.pz + cy * r;
+        need = Math.max(need, Math.atan2(Math.max(0, W ? W.land(x, z) : 0) + canopy(x, z) + (i === 12 ? 1.6 : 0.4), r));
+      }
+      if (need <= el + 1e-4) break;
+      el = need;
+    }
+    flr.y = v[Y]; flr.z = v[Z]; flr.x = v[X]; flr.pz = orb.pz;
+    return (flr.el = Math.min(el, ORB.elMax + 0.25));
+  }
+  function stepOrbit(dt) {
+    const T = orb.T, v = orb.v, g = orb.g;
+    /* a glide home or to the van: the targets travel there, easing in and out, the camera rising a little on a long way */
+    if (orb.fly) {
+      const f = orb.fly; f.t += dt; const u = Math.min(1, f.t / f.dur), e = ease(u);
+      for (let i = 0; i < 5; i++) T[i] = u >= 1 ? f.to[i] : f.from[i] + (f.to[i] - f.from[i]) * e;
+      if (u < 1) T[Z] += f.hop * Math.sin(Math.PI * u); else orb.fly = null;
+    }
+    /* turning on the keys: the turn eases up to speed while they are held, and glides off when they are let go */
+    const kr = canExplore() ? (orb.keys.has('l') ? 1 : 0) - (orb.keys.has('r') ? 1 : 0) : 0;
+    if (kr) orb.fly = null;
+    for (let i = 0; i < 5; i++) {
+      if (i === Y && kr) { g[Y] += (kr * 0.9 - g[Y]) * (1 - Math.exp(-dt / 0.25)); T[Y] += g[Y] * dt; continue; }
+      if (g[i]) { const d = Math.exp(-dt / ORB.glide); T[i] += g[i] * ORB.glide * (1 - d); g[i] *= d; if (Math.abs(g[i]) < 1e-4) g[i] = 0; }
+    }
+    /* the limits (a long glide may rise past the farthest zoom for a moment) */
+    const zHi = orb.fly ? ORB.zMax + 0.6 : ORB.zMax;
+    if (T[E] < ORB.elMin || T[E] > ORB.elMax) { T[E] = clamp(T[E], ORB.elMin, ORB.elMax); g[E] = 0; }
+    if (T[Z] < ORB.zMin || T[Z] > zHi) { T[Z] = clamp(T[Z], ORB.zMin, zHi); g[Z] = 0; }
+    if (T[U] < 0 || T[U] > 1) { T[U] = clamp(T[U], 0, 1); g[U] = 0; }
+    for (let i = 0; i < 5; i++) spring(i, dt);
+    v[E] = clamp(v[E], ORB.elMin - 0.02, ORB.elMax + 0.02); v[Z] = clamp(v[Z], ORB.zMin - 0.02, ORB.zMax + 0.6); v[U] = clamp(v[U], 0, 1);
+    /* turns are kept within one revolution */
+    if (!orb.fly && Math.abs(T[Y]) > Math.PI) { const k = Math.round(T[Y] / TAU) * TAU; T[Y] -= k; v[Y] -= k; }
+    const C = sandAt(v[X], pvC), lo = pvLo(C);
+    orb.pz = v[X] === P0[0] && v[U] === HOME[U] ? P0[2] : lo + v[U] * (pvHi(C) - lo);
+    /* never into the sand, the rock or the trees: the camera rises over them at once, and settles back slowly */
+    const F = elFloor(); orb.Fs += (F - orb.Fs) * (1 - Math.exp(-dt / (F > orb.Fs ? 0.12 : 0.6)));
+    orb.el = Math.max(v[E], orb.Fs);
+    orbPose();
+    return orbCam;
+  }
+  function orbPose() {
+    const v = orb.v, k = Math.exp(v[Z]), a = orb.el - EL0, ca = Math.cos(a), sa = Math.sin(a), cy = Math.cos(v[Y]), sy = Math.sin(v[Y]);
+    /* tilted about the point and scaled: where the camera stands and looks, from the point */
+    const cx = OP[0] * k, ch = (OP[1] * ca + OP[2] * sa) * k, cz = (OP[2] * ca - OP[1] * sa) * k;
+    const lx = OL[0] * k; let ly = (OL[1] * ca + OL[2] * sa) * k, lz = (OL[2] * ca - OL[1] * sa) * k;
+    /* tipped up toward overhead, the view leans down too, to bring the point toward the middle, as a map does */
+    const dl = 0.21 * sstep(EL0 + 0.08, ORB.elMax, orb.el);
+    if (dl > 0) { const dy = ly - ch, dz = lz - cz, c = Math.cos(dl), s = Math.sin(dl); ly = ch + dy * c + dz * s; lz = cz + dz * c - dy * s; }
+    /* turned about the point and set on it; written as the home view plus the differences, so at home it is that view exactly */
+    const px = v[X] - P0[0], pz = orb.pz - P0[2], p = orbCam.pos, l = orbCam.look;
+    p[0] = V0.pos[0] + px + (cx * cy + cz * sy - OP[0]); p[1] = V0.pos[1] + (ch - OP[1]); p[2] = V0.pos[2] + pz + (cz * cy - cx * sy - OP[2]);
+    l[0] = V0.look[0] + px + (lx * cy + lz * sy - OL[0]); l[1] = V0.look[1] + (ly - OL[1]); l[2] = V0.look[2] + pz + (lz * cy - lx * sy - OL[2]);
+    orbCam.focus = V0.focus * k;
+    /* and if it is in the ground anyway (a sudden rock under a quick turn), it is lifted clear */
+    if (Engine.world) { const gd = Engine.world.land(p[0], p[2]) + 0.45; if (p[1] < gd) { l[1] += gd - p[1]; p[1] = gd; } }
+  }
+  /* a glide to somewhere: home, or to the van; longer ways take longer and rise a little on the way */
+  function orbFly(to) {
+    const T = orb.T, d = Math.abs(to[X] - T[X]) + Math.abs(to[U] - T[U]) * 8;
+    orb.fly = { t: 0, from: Array.from(T), to, dur: clamp(1.1 + 0.55 * Math.log2(1 + d / 10) + 0.25 * Math.abs(to[Y] - T[Y]), 1.1, 3.6), hop: Math.min(0.55, d / 250) };
+    orb.g.fill(0);
+  }
+  const orbHome = () => orbFly(HOME.slice());
+  function orbToVan() {
+    if (!ready) return;
+    const P = Engine.vanPose(), C = sandAt(P.x, pvC), lo = pvLo(C), hi = pvHi(C);
+    orbFly([orb.T[Y], orb.T[E], Math.min(orb.T[Z], Math.log(0.8)), P.x, clamp((P.z - lo) / (hi - lo), 0, 1)]);
+  }
+  /* the point set down at once (where you stopped walking, where the van was parked), facing the way you were */
+  function orbAt(x, z, yaw, zoom) {
+    const C = sandAt(x, pvC), lo = pvLo(C), hi = pvHi(C), s = [wrapA(yaw), EL0, zoom, x, clamp((z - lo) / (hi - lo), 0, 1)];
+    for (let i = 0; i < 5; i++) { orb.T[i] = orb.v[i] = s[i]; orb.dv[i] = orb.g[i] = 0; }
+    orb.fly = null; orb.keys.clear(); orb.pz = lo + s[U] * (hi - lo); orb.Fs = elFloor();
+  }
+  const orbNearCamp = () => Math.hypot(orb.v[X] - P0[0], orb.pz - P0[2]) < 40;
+
+  /* the hand on it: pointers, the wheel, the keys */
+  const ex = { ptrs: new Map(), kind: 'turn', dragged: false, multi: false, two: null, ax: 0, ay: 0, vt: 0, vel: new Float64Array(5), wheelT: -1e9 };
+  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter;
+  const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
+  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
+  /* a new swipe (or pinch, or burst of scrolling): straight after the last one it goes further, each time up to four
+     and a half times as far; after a pause it is gentle again */
+  function gestureStart() {
+    const now = performance.now() / 1000, gap = now - orb.lastEnd;
+    orb.boost = clamp(gap < 0.8 ? orb.boost * 1.6 : 1 + (orb.boost - 1) * Math.exp(-(gap - 0.8) / 0.5), 1, ORB.boost);
+    orb.fly = null; orb.g.fill(0); ex.vel.fill(0); ex.vt = performance.now(); ex.ax = ex.ay = 0;
+    hintOff();
+  }
+  /* let go: it glides on at the speed it was moving, and comes to rest */
+  const GCAP = [3.5, 1.6, 2.5, 80, 3];
+  function gestureEnd(fling) {
+    orb.lastEnd = performance.now() / 1000;
+    if (!fling || performance.now() - ex.vt > 90) return;
+    for (let i = 0; i < 5; i++) orb.g[i] = clamp(ex.vel[i], -GCAP[i], GCAP[i]);
+  }
+  /* a step of a gesture, in each axis's own units: onto the targets, and into the speed a glide would keep */
+  function orbNudge(dy, de, dz, dx, du) {
+    const T = orb.T, q = ex.vel, now = performance.now(), dt = Math.max(0.008, (now - ex.vt) / 1000), a = 1 - Math.exp(-dt / 0.05);
+    ex.vt = now;
+    /* tilting down stops at the ground (or the treetops), and tilting up answers at once */
+    if (de) { const lo = Math.max(ORB.elMin, orb.Fs - 0.004); T[E] = clamp(Math.max(T[E], lo) + de, lo, ORB.elMax); }
+    T[Y] += dy; T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); T[X] += dx; T[U] = clamp(T[U] + du, 0, 1);
+    q[Y] += (dy / dt - q[Y]) * a; q[E] += (de / dt - q[E]) * a; q[Z] += (dz / dt - q[Z]) * a; q[X] += (dx / dt - q[X]) * a; q[U] += (du / dt - q[U]) * a;
+  }
+  /* one finger (or the left button): across turns round the point, up and down tilts. Whatever is under the hand
+     follows it. A swipe mostly one way moves only that way, so turning doesn't wobble the tilt */
+  function orbTurn(dx, dy) {
+    ex.ax += Math.abs(dx); ex.ay += Math.abs(dy);
+    const s = ex.ax + ex.ay + 1e-6, b = orb.boost;
+    orbNudge(dx * 2.3 / Math.max(320, view.w) * b * sstep(0.2, 0.45, ex.ax / s), -dy * 1.05 / Math.max(320, view.h) * b * sstep(0.2, 0.45, ex.ay / s), 0, 0, 0);
+  }
+  /* moving the point: the sand under the hand stays under it, along the beach and a little across */
+  const PD = [0, 0];
+  function panDelta(dx, dy) {
+    const aspect = view.w / view.h, fov = V0.fov * (aspect < 1.2 ? Math.min(1.6, 1 + (1.2 - aspect) * 0.75) : 1);
+    const s = 2 * Math.exp(orb.v[Z]) * RYZ * Math.tan(fov * Math.PI / 360) / Math.max(320, view.h) * orb.boost, sz = s / Math.max(0.3, Math.sin(orb.el));
+    const cy = Math.cos(orb.v[Y]), sy = Math.sin(orb.v[Y]), C = sandAt(orb.v[X], pvC);
+    PD[0] = -dx * s * cy - dy * sz * sy; PD[1] = (dx * s * sy - dy * sz * cy) / (pvHi(C) - pvLo(C));
+    return PD;
+  }
+  function orbPanBy(dx, dy) { const d = panDelta(dx, dy); orbNudge(0, 0, 0, d[0], d[1]); }
+  /* the wheel zooms (a pinch on a trackpad comes as a wheel with Ctrl held: gently); a sideways swipe on a trackpad
+     moves along the beach. A burst of scrolling counts as one swipe, and brings its own momentum */
+  function orbWheel(e) {
+    const now = performance.now(), k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? view.h : 1;
+    if (now - ex.wheelT > 180) gestureStart();
+    ex.wheelT = now; orb.lastEnd = now / 1000;
+    let dx = clamp(e.deltaX * k, -150, 150), dy = clamp(e.deltaY * k, -150, 150);
+    if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+    const d = panDelta(-dx, 0);
+    orbNudge(0, 0, dy * (e.ctrlKey ? 0.006 : 0.0011) * orb.boost, dx ? d[0] : 0, dx ? d[1] : 0);
+    ex.vel.fill(0);
+  }
+  /* two fingers: they move the point, pinch to zoom, and twist to turn once the twist is clearly meant */
+  function twoState(o) {
+    let i = 0, ax = 0, ay = 0, bx = 0, by = 0;
+    for (const p of ex.ptrs.values()) { if (i === 0) { ax = p.x; ay = p.y; } else if (i === 1) { bx = p.x; by = p.y; } i++; }
+    o.mx = (ax + bx) / 2; o.my = (ay + by) / 2; o.d = Math.max(20, Math.hypot(bx - ax, by - ay)); o.a = Math.atan2(by - ay, bx - ax); return o;
+  }
+  const TW = { mx: 0, my: 0, d: 1, a: 0 };
+  /* (a second finger joining a drag already under way carries it on, rather than counting as a new swipe) */
+  function twoStart(going) { ex.two = twoState({ mx: 0, my: 0, d: 1, a: 0, tw: 0 }); if (going) { ex.vel.fill(0); ex.vt = performance.now(); } else gestureStart(); }
+  function twoMove() {
+    const t = ex.two, n = twoState(TW), da = wrapA(n.a - t.a), b = orb.boost;
+    t.tw += da;
+    const d = panDelta(n.mx - t.mx, n.my - t.my);
+    orbNudge(Math.abs(t.tw) > 0.14 ? da * 0.9 * b : 0, 0, -Math.log(n.d / t.d) * 0.7 * b, d[0], d[1]);
+    t.mx = n.mx; t.my = n.my; t.d = n.d; t.a = n.a;
+  }
+  cv.addEventListener('contextmenu', e => { if (st.entered && !rd.on) e.preventDefault(); });
+  cv.addEventListener('pointerdown', e => {
+    if (!st.entered || rd.on) return;
+    if (!ex.ptrs.size) { ex.dragged = ex.multi = false; ex.two = null; }
+    ex.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+    if (ex.ptrs.size === 1) ex.kind = e.pointerType === 'mouse' && (e.button > 0 || e.shiftKey || e.ctrlKey || e.metaKey) ? 'pan' : 'turn';
+    else { const going = ex.dragged; ex.multi = ex.dragged = true; if (ex.ptrs.size === 2 && canExplore()) twoStart(going); }
   });
-  const undrag = e => { if (walk.drag && walk.drag.id === e.pointerId) walk.drag = null; };
-  cv.addEventListener('pointerup', undrag); cv.addEventListener('pointercancel', undrag);
+  cv.addEventListener('pointermove', e => {
+    const p = ex.ptrs.get(e.pointerId); if (!p) return;
+    if (e.pointerType === 'mouse' && !e.buttons) { exUp(e); return; }
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (ex.ptrs.size > 1) { if (ex.two && canExplore()) twoMove(); return; }
+    if (!ex.dragged) {
+      if (Math.hypot(p.x - p.x0, p.y - p.y0) < (e.pointerType === 'mouse' ? 6 : 10)) return;
+      ex.dragged = true;
+      if (wk.on) hintOff(); else if (canExplore()) gestureStart();
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
+    }
+    if (wk.on) walkLook(dx, dy);
+    else if (canExplore()) { if (ex.kind === 'pan') orbPanBy(dx, dy); else orbTurn(dx, dy); }
+  });
+  function exUp(e) {
+    if (!ex.ptrs.delete(e.pointerId)) return;
+    const live = canExplore();
+    if (ex.ptrs.size === 1) {
+      /* two fingers became one: the one left carries on turning from where it is, without a glide from the pinch */
+      if (ex.two) { ex.two = null; if (live) gestureEnd(false); }
+      for (const p of ex.ptrs.values()) { p.x0 = p.x; p.y0 = p.y; }
+      ex.kind = 'turn'; ex.ax = ex.ay = 0; ex.vel.fill(0); ex.vt = performance.now();
+      return;
+    }
+    if (ex.ptrs.size) return;
+    if (wk.on) { if (ex.dragged) wk.mT = performance.now(); }
+    else if (live && (ex.dragged || ex.two)) gestureEnd(e.type !== 'pointercancel');
+    ex.two = null;
+  }
+  cv.addEventListener('pointerup', exUp); cv.addEventListener('pointercancel', exUp); addEventListener('pointerup', exUp);
   addEventListener('keydown', e => {
     if (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
-    if (!canWalk() || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
-    walkBy(e.key === 'ArrowLeft' ? -12 : 12); e.preventDefault();
+    if (!canExplore() || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase(), T = orb.T, nudge = (de, dz) => { orb.fly = null; T[E] = clamp(T[E] + de, Math.max(ORB.elMin, orb.Fs), ORB.elMax); T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); };
+    if (k === 'arrowleft' || k === 'q') orb.keys.add('l');
+    else if (k === 'arrowright' || k === 'e') orb.keys.add('r');
+    else if (k === '+' || k === '=') nudge(0, -0.22);
+    else if (k === '-' || k === '_') nudge(0, 0.22);
+    else if (k === 'pageup') nudge(-0.12, 0);
+    else if (k === 'pagedown') nudge(0.12, 0);
+    else if (k === 'home' || k === 'h') orbHome();
+    else return;
+    e.preventDefault(); hintOff();
   });
-  $('bWalkCamp').addEventListener('click', () => walkTo(0));
-  $('bWalkVan').addEventListener('click', () => { const v = Engine.vanPose(), d = Math.sign(v.x - Layout.camp.x) || 1; walkTo(v.x - Layout.camp.x - d * 16, d); });
-  function syncWalkUI() {
-    const v = ready ? Engine.vanPose() : { x: Layout.van.x }, focus = Layout.camp.x + walk.x + walk.dirS * 16;
-    const showCamp = canWalk() && Math.abs(walk.t) > 30, showVan = canWalk() && Math.abs(v.x - Layout.van.x) > 40 && Math.abs(v.x - focus) > 30;
-    $('bWalkCamp').hidden = !showCamp; $('bWalkVan').hidden = !showVan;
-    if (showCamp) $('bWalkCamp').textContent = walk.t > 0 ? '← Back to camp' : 'Back to camp →';
-    if (showVan) $('bWalkVan').textContent = v.x > focus ? 'Go to the van →' : '← Go to the van';
+  addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 'arrowleft' || k === 'q') orb.keys.delete('l'); if (k === 'arrowright' || k === 'e') orb.keys.delete('r'); });
+  addEventListener('blur', () => orb.keys.clear());
+  /* the way home, and the way to the van wherever it was left, once they are some way off; the arrow says which side of the screen */
+  $('bWalkCamp').addEventListener('click', () => { orbHome(); hintOff(); });
+  $('bWalkVan').addEventListener('click', () => { orbToVan(); hintOff(); });
+  const wbar = { camp: -2, van: -2, n: 0, vx: Layout.van.x, vz: Layout.van.z };
+  const sideOf = (x, z) => { const dx = x - orb.v[X], dz = z - orb.pz, r = (dx * Math.cos(orb.v[Y]) - dz * Math.sin(orb.v[Y])) / (Math.hypot(dx, dz) || 1); return r < -0.35 ? 0 : r > 0.35 ? 2 : 1; };
+  function syncWalkBar() {
+    if (ready && !(wbar.n++ % 15)) { const P = Engine.vanPose(); wbar.vx = P.x; wbar.vz = P.z; }
+    const on = canExplore() && st.camT >= 1 && !car.camK && !wk.camK && !orb.fly, px = orb.v[X], pz = orb.pz;
+    const away = Math.hypot(px - P0[0], pz - P0[2]) > 4 || Math.abs(orb.v[Y]) > 0.35 || Math.abs(orb.v[Z]) > 0.4 || Math.abs(orb.el - EL0) > 0.22;
+    const camp = on && away ? sideOf(P0[0], P0[2]) : -1, van = on && Math.hypot(wbar.vx - px, wbar.vz - pz) > 25 ? sideOf(wbar.vx, wbar.vz) : -1;
+    const label = (s, t) => s === 0 ? '← ' + t : s === 2 ? t + ' →' : t;
+    if (camp >= 0 || van >= 0) hintOff();
+    if (camp !== wbar.camp) { wbar.camp = camp; $('bWalkCamp').hidden = camp < 0; if (camp >= 0) $('bWalkCamp').textContent = label(camp, 'Back to camp'); }
+    if (van !== wbar.van) { wbar.van = van; $('bWalkVan').hidden = van < 0; if (van >= 0) $('bWalkVan').textContent = label(van, 'Go to the van'); }
   }
 
   /* ── driving the camper van ── */
@@ -583,7 +821,7 @@
     if (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
     const k = e.key.toLowerCase();
     if (DRIVE_KEYS.includes(k)) {
-      if (!car.on && st.entered && !rd.on && ['arrowup', 'w', 'arrowdown', 's'].includes(k)) startDrive();
+      if (!car.on && !wk.on && st.entered && !rd.on && ['arrowup', 'w', 'arrowdown', 's'].includes(k)) startDrive();
       if (car.on) { keys.add(k); e.preventDefault(); }
     }
     if (car.on && k === 'h' && sound.amb) sound.amb.horn();
@@ -594,6 +832,7 @@
   addEventListener('blur', () => keys.clear());
   function startDrive() {
     if (car.on || !ready) return;
+    if (wk.on) stopWalk();
     if (st.chapter) openChapter(null);
     toggleSettings(false);
     const p = Engine.vanPose(); Object.assign(car, { on: true, x: p.x, z: p.z, h: p.heading, v: 0 });
@@ -616,9 +855,10 @@
   }
   function stopDrive() {
     if (!car.on) return;
-    /* parked far from the camp: stay with the van, looking along the beach at it */
-    if (Math.abs(car.x - Layout.camp.x) > 40) { const d = Math.sign(car.x - Layout.camp.x); walk.dir = walk.dirS = d; walk.x = walk.t = car.x - Layout.camp.x - d * 16; }
-    else walk.t = 0;
+    /* parked away from the camp: the explore camera comes to rest over the van, looking the way the van was looking;
+       parked by the camp, it goes home */
+    if (Math.hypot(car.x - Layout.camp.x, car.z - Layout.camp.z) > 30) { const H = car.h + car.yaw; orbAt(car.x, car.z, Math.atan2(-Math.cos(H), Math.sin(H)), Math.log(0.45)); }
+    else orbHome();
     car.on = false; keys.clear(); touch.x = touch.y = 0;
     document.body.classList.remove('driving'); $('driveHud').hidden = true; $('pad').hidden = true; $('bDrive').setAttribute('aria-pressed', 'false');
   }
@@ -757,6 +997,248 @@
     if (Engine.world) { const g = Engine.world.land(car.camP[0], car.camP[2]) + 1.6; if (car.camP[1] < g) car.camP[1] = g; }
     return { pos: car.camP.slice(), look: car.camL.slice(), fov: 54 + Math.min(8, Math.abs(car.v) * 0.7), focus: 7.4 };
   }
+
+  /* ── walking the beach: a person on the sand, at eye height. W A S D or the arrows walk and turn, a drag looks round,
+     Shift jogs, and each step presses a footprint into the sand (the sea smooths them away). On Auto the walker
+     strolls the beach alone, round the rocks and along the sand at the foot of the headlands, turning back now and
+     then, the gaze drifting out to the moon over the sea, along the beach ahead, back to the lights of the camp ── */
+  const PACE = { stroll: 0.9, walk: 1.4, jog: 2.8 }, EYE = 1.65, WALK_R = 0.35;
+  const wk = { on: false, x: 0, z: 0, h: 0, hT: 0, turn: 0, v: 0, pitchT: -0.05, phase: 0, foot: 1, camK: 0, odo: 0, prints: 0,
+               auto: false, pace: PACE[store.get('walkPace', 'walk')] ? store.get('walkPace', 'walk') : 'walk',
+               hy: { v: 0, d: 0 }, hp: { v: -0.05, d: 0 },      /* the head: its turn from the body, and its tilt, easing */
+               my: 0, mp: 0, mT: -1e9,                         /* a look taken by hand while on Auto, and when it was let go */
+               van: [], cam: { pos: [0, EYE, 0], look: [0, EYE, -1], fov: 60, focus: 20 } };
+  /* a critically damped step toward a target: smooth, never past it, the same at any frame rate */
+  function damp(s, T, w, dt) { const e = s.v - T, k = Math.exp(-w * dt), t1 = (s.d + w * e) * dt; s.v = T + (e + t1) * k; s.d = (s.d - w * t1) * k; }
+  /* what is near the walker, gathered into flat arrays once a frame: the coast's rocks and trunks, the camp's things,
+     and, for a person if not for the van, the van itself, the table, the chairs, the basket and the lanterns */
+  const GO = { n: 0, x: new Float64Array(192), z: new Float64Array(192), r: new Float64Array(192) }, gq = [0, 0, 0];
+  const CAMP_EXTRA = [[Layout.table.x, Layout.table.z, 0.85], [Layout.table.x + 1.4, Layout.table.z - 1.05, 0.32]].concat(Layout.chairs.map(c => [c.x, c.z, 0.42]), Layout.lanterns.map(l => [l[0], l[1], 0.2]));
+  function goAdd(ox, oz, r) { if (GO.n < 192 && Math.abs(ox - gq[0]) < gq[2] + r && Math.abs(oz - gq[1]) < gq[2] + r) { GO.x[GO.n] = ox; GO.z[GO.n] = oz; GO.r[GO.n] = r; GO.n++; } }
+  function gather(x, z, R) {
+    GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
+    for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; goAdd(o[0], o[1], o[2]); }
+    const W = Engine.world;
+    if (W && OB.b.length) {
+      const n = OB.b.length, b0 = Math.floor((W.base(x) - W.X0) / OB.bw);
+      for (let d = -1; d <= 1; d++) { const B = OB.b[(b0 + d + n) % n]; for (let i = 0; i < B.length; i++) goAdd(x - W.wrapD(x - B[i][0]), B[i][1], B[i][2]); }
+      const k = Math.round(x / W.P);
+      if (k !== 0) for (let i = 0; i < fillObs.length; i++) goAdd(fillObs[i][0] + k * W.P, fillObs[i][1], fillObs[i][2]);
+    }
+    for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
+    if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
+  }
+  /* bumping into things: pushed out round them (so a walk slides along a rock instead of sticking), kept out of the
+     sea past the shallows and out of the forest, and off the headlands' rock, back down onto the sand */
+  function walkCollide() {
+    const W = Engine.world;
+    for (let it = 0; it < 3; it++) {
+      let moved = false;
+      for (let j = 0; j < GO.n; j++) {
+        const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
+        if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
+      }
+      const zMin = Layout.shoreZ(wk.x) - 1.2, zMax = Layout.vegZ(wk.x) + 2;
+      if (wk.z < zMin) { wk.z = zMin; moved = true; } else if (wk.z > zMax) { wk.z = zMax; moved = true; }
+      if (W) {
+        const m = W.massif(wk.x, wk.z);
+        if (m > 0.6) {
+          const e = 0.4, gx = W.massif(wk.x + e, wk.z) - W.massif(wk.x - e, wk.z), gz = W.massif(wk.x, wk.z + e) - W.massif(wk.x, wk.z - e), gl = Math.hypot(gx, gz) || 1;
+          const push = Math.min(0.6, (m - 0.6) / Math.max(0.2, gl / (2 * e)) + 0.005); wk.x -= gx / gl * push; wk.z -= gz / gl * push; moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+  }
+  /* the head's tilt and turn come from the hand, or (on Auto) from the gaze; a drag turns the whole body when
+     walking by hand, and only the head on Auto, which turns back to its own gaze a few seconds after letting go */
+  function walkLook(dx, dy) {
+    const gy = dx * 2.2 / Math.max(320, view.w), gp = dy * 1.4 / Math.max(320, view.h);
+    if (wk.auto) { wk.my += gy; wk.mp = clamp(wk.mp + gp, -1.0, 0.9); wk.mT = performance.now(); }
+    else { wk.hT += gy; wk.pitchT = clamp(wk.pitchT + gp, -1.0, 0.9); }
+  }
+  /* ── on Auto ── */
+  const ai = { dir: 1, ph1: 0, ph2: 0, nextTurn: 0, nextPause: 0, turnSign: 0, progX: 0, progT: 0, pause: 0, side: 0, gaze: 'ahead', gazeT: 0, gside: 1, gy: 0, gp: 0 };
+  const CAND = [0, 0.3, -0.3, 0.62, -0.62, 0.95, -0.95, 1.35, -1.35, 1.8, -1.8], wbC = { x: NaN };
+  /* the cost of heading hh: anything in the way over the next few metres, the sea, the trees, the rock */
+  function probe(hh) {
+    const fx = -Math.sin(hh), fz = -Math.cos(hh), W = Engine.world; let c = 0;
+    for (let i = 1; i <= 3; i++) {
+      const d = i * 0.9, px = wk.x + fx * d, pz = wk.z + fz * d, w = 1 / (1 + 0.4 * (i - 1));
+      for (let j = 0; j < GO.n; j++) { const ox = px - GO.x[j], oz = pz - GO.z[j], m = GO.r[j] + 0.6, q = ox * ox + oz * oz; if (q < m * m) c += (m - Math.sqrt(q)) * 3 * w; }
+      const sz = Layout.shoreZ(px), vz = Layout.vegZ(px);
+      if (pz < sz + 0.15) c += (sz + 0.15 - pz) * 2 * w;
+      if (pz > vz - 0.1) c += (pz - vz + 0.1) * 2 * w;
+      if (W) { const m = W.massif(px, pz); if (m > 0.25) c += (m - 0.25) * 3 * w; }
+    }
+    return c;
+  }
+  /* turning back goes round by the sea side, facing the water on the way */
+  function turnBack() { ai.dir = -ai.dir; ai.turnSign = ai.dir < 0 ? 1 : -1; ai.progT = 0; ai.progX = wk.x; }
+  /* the next thing to look at, for a while: the way ahead, the moon over the sea, along the beach, the camp's lights, the sky */
+  function pickGaze(kind) {
+    const r = Math.random(), S = st.S, camp = Math.abs(wk.x - Layout.camp.x) < 140 && st.L.string > 0.3;
+    ai.gaze = kind || (r < 0.34 ? 'ahead' : r < 0.64 ? 'sea' : r < 0.8 ? 'beach' : r < 0.92 && camp ? 'camp' : S && S.night > 0.5 ? 'sky' : 'sea');
+    ai.gazeT = 6 + Math.random() * 8; ai.gside = Math.random() < 0.5 ? -1 : 1;
+  }
+  /* where that is, as a turn in the world and a tilt */
+  function gazeAt(t) {
+    const S = st.S, k = ai.gaze;
+    if (k === 'sea' || k === 'sky') {
+      const d = S && S.mAlt > -1 ? S.moonDirV : S && S.sAlt > 0 ? S.sunDirV : null;
+      if (d) { ai.gy = Math.atan2(-d[0], -d[2]); ai.gp = Math.atan2(d[1], Math.hypot(d[0], d[2])) * 0.7 + 0.01; }
+      else { ai.gy = Math.atan2(-Layout.shoreDZ(wk.x), 1); ai.gp = 0.02; }
+      if (k === 'sky') { ai.gy += 0.45 * ai.gside; ai.gp = 0.36; }
+    } else if (k === 'beach') { ai.gy = (ai.dir > 0 ? -Math.PI / 2 : Math.PI / 2) + 0.38 * ai.gside; ai.gp = -0.03; }
+    else if (k === 'camp') { ai.gy = Math.atan2(-(Layout.camp.x - wk.x), -(Layout.camp.z - wk.z)); ai.gp = 0.02; }
+    else { ai.gy = wk.h; ai.gp = -0.06; }
+    /* and never quite still */
+    ai.gy += 0.05 * Math.sin(t * 0.21); ai.gp += 0.02 * Math.sin(t * 0.17 + 1.3);
+  }
+  function autoSteer(dt) {
+    const sp = PACE[wk.pace];
+    /* now and then: turn back (a long way from the camp, always toward it), or stop a while and look */
+    if (wk.odo > ai.nextTurn) {
+      ai.nextTurn = wk.odo + 150 + Math.random() * 260;
+      if (Math.abs(wk.x - Layout.camp.x) > 260 ? Math.sign(Layout.camp.x - wk.x) !== ai.dir : Math.random() < 0.5) turnBack();
+    }
+    if (wk.odo > ai.nextPause && !ai.turnSign) { ai.nextPause = wk.odo + 80 + Math.random() * 120; ai.pause = 6 + Math.random() * 5; pickGaze(Math.random() < 0.7 ? 'sea' : 'camp'); ai.gazeT = ai.pause + 1; }
+    /* stuck, somewhere the rocks leave no way round: turn back (not while stopped, or already turning) */
+    if (ai.pause > 0 || ai.turnSign) { if (ai.pause > 0) ai.pause -= dt; ai.progT = 0; ai.progX = wk.x; }
+    else if ((ai.progT += dt) > 4) { if ((wk.x - ai.progX) * ai.dir < 0.15 * sp * ai.progT) turnBack(); ai.progT = 0; ai.progX = wk.x; }
+    /* the way ahead: a point a few metres on, its line across the sand wandering slowly from the waterline to the trees */
+    const L = 3 + 1.6 * sp, xa = wk.x + ai.dir * L, C = sandAt(xa, wbC), lo = C.sz + 0.5, hi = Math.max(lo + 0.8, Math.min(C.vz - 0.4, C.foot - 1.2)), s = wk.odo + L;
+    const u = clamp(0.45 + 0.24 * Math.sin(s * 0.019 + ai.ph1) + 0.13 * Math.sin(s * 0.053 + ai.ph2) + 0.06 * Math.sin(s * 0.11), 0.06, 0.94);
+    let hd = Math.atan2(-(xa - wk.x), -(lo + u * (hi - lo) - wk.z));
+    if (ai.turnSign) { let er = wrapA(hd - wk.h); if (Math.abs(er) < 0.9) ai.turnSign = 0; else { if (Math.sign(er) !== ai.turnSign) er += ai.turnSign * TAU; hd = wk.h + ai.turnSign * Math.min(Math.abs(er), 1.1); } }
+    /* stopped to look: the body turns to face it */
+    if (ai.pause > 0) hd = ai.gy;
+    /* round whatever is in the way: headings either side are tried, and the cheapest taken (keeping to one side) */
+    let best = 0, bc = Infinity;
+    for (let i = 0; i < CAND.length; i++) { const o = CAND[i], c = Math.abs(o) * 0.8 + (ai.side && o && Math.sign(o) !== ai.side ? 0.3 : 0) + (ai.pause > 0 ? 0 : probe(hd + o)); if (c < bc) { bc = c; best = o; } }
+    ai.side = Math.sign(best);
+    /* the turn eases in and out, no quicker than a person turns while walking */
+    const err = wrapA(hd + best - wk.hT), R = 0.55 + 0.15 * sp;
+    wk.turn += (clamp(err * 1.4, -R, R) - wk.turn) * (1 - Math.exp(-dt / 0.35));
+    wk.hT += wk.turn * dt;
+    return ai.pause > 0 ? 0 : 0.55 + 0.45 * Math.max(0, Math.cos(wrapA(hd + best - wk.h)));
+  }
+  function setAuto(on) {
+    if (on === wk.auto) return;
+    wk.auto = on; $('bWalkAuto').setAttribute('aria-pressed', String(on));
+    if (on) {
+      Object.assign(ai, { dir: -Math.sin(wk.h) >= 0 ? 1 : -1, ph1: Math.random() * TAU, ph2: Math.random() * TAU, nextTurn: wk.odo + 150 + Math.random() * 250, nextPause: wk.odo + 40 + Math.random() * 60, turnSign: 0, progX: wk.x, progT: 0, pause: 0, side: 0, gazeT: 0 });
+      wk.turn = 0;
+    } else {
+      /* taking over by hand: the body turns to where the head was looking, so the view doesn't move */
+      wk.h = wk.hT = wk.h + wk.hy.v + wk.my; wk.hy.v = wk.hy.d = 0; wk.my = 0;
+      wk.hp.v = clamp(wk.hp.v + wk.mp, -1.0, 0.9); wk.pitchT = wk.hp.v; wk.mp = 0; wk.turn = 0;
+    }
+  }
+  function stepWalk(dt) {
+    const k = keys, t = st.t;
+    const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
+    const trn = (k.has('a') || k.has('arrowleft') ? 1 : 0) - (k.has('d') || k.has('arrowright') ? 1 : 0) + (touch.on ? -touch.x : 0);
+    /* a hand on the keys (or the pad) takes over from Auto */
+    if (wk.auto && (Math.abs(fwd) > 0.2 || Math.abs(trn) > 0.2)) setAuto(false);
+    const base = k.has('shift') ? PACE.jog : PACE[wk.pace];
+    gather(wk.x, wk.z, 6);
+    let want;
+    if (wk.auto) want = base * autoSteer(dt);
+    else {
+      want = base * clamp(fwd, -0.6, 1);
+      wk.turn += (clamp(trn, -1, 1) * 1.5 - wk.turn) * (1 - Math.exp(-dt / 0.16));
+      wk.hT += wk.turn * dt;
+    }
+    /* the pace eases up and down as a body's does; wading slows it */
+    const sz = Layout.shoreZ(wk.x), wade = sstep(sz + 0.2, sz - 1.0, wk.z);
+    want *= 1 - 0.45 * wade;
+    wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
+    wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
+    const ox = wk.x, oz = wk.z;
+    wk.x -= Math.sin(wk.h) * wk.v * dt; wk.z -= Math.cos(wk.h) * wk.v * dt;
+    walkCollide();
+    const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
+    wk.odo += dist;
+    /* a step every stride's half, left and right in turn */
+    wk.phase += Math.PI * dist / (0.55 + 0.21 * Math.abs(wk.v));
+    if (Math.floor(wk.phase / Math.PI) !== Math.floor(ph0 / Math.PI)) footstep(wade);
+    if (Engine.trackFollow) Engine.trackFollow(wk.x);
+    /* the head: on Auto it drifts from one view to the next, slowly; a look taken by hand is kept a few seconds, then let go */
+    if (wk.auto) {
+      if ((ai.gazeT -= dt) <= 0) pickGaze();
+      gazeAt(t);
+      if (performance.now() - wk.mT > 3500 && !(ex.dragged && ex.ptrs.size)) { const d = 1 - Math.exp(-dt / 1.1); wk.my -= wk.my * d; wk.mp -= wk.mp * d; }
+      damp(wk.hy, clamp(wrapA(ai.gy - wk.h), -1.6, 1.6), 1.5, dt); damp(wk.hp, ai.gp, 1.5, dt);
+    } else { damp(wk.hy, 0, 4, dt); damp(wk.hp, wk.pitchT, 16, dt); }
+    walkCamera();
+  }
+  /* the eye: at head height, bobbing a little with each step and swaying from foot to foot, more as the pace quickens
+     (and not at all for those who would rather things kept still) */
+  function walkCamera() {
+    const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
+    const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
+    const sway = 0.6 * bob * Math.sin(ph), g = Math.max(0, W ? W.land(wk.x, wk.z) : 0), p = wk.cam.pos, l = wk.cam.look;
+    p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)); p[2] = wk.z - Math.sin(wk.h) * sway;
+    l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
+    wk.cam.fov = 60 + 4 * sstep(1.6, 2.8, v);
+  }
+  /* a footprint, heel and ball, a little to the side of the line walked; fainter on wet sand, none in the water (a ripple
+     instead); and with sound on, a soft crunch */
+  function footstep(wade) {
+    wk.foot = -wk.foot;
+    const fx = -Math.sin(wk.h), fz = -Math.cos(wk.h), s = wk.foot * 0.1, x = wk.x + Math.cos(wk.h) * s + fx * 0.12, z = wk.z - Math.sin(wk.h) * s + fz * 0.12;
+    if (wade < 0.35) {
+      const a = 0.45 * (1 - wade * 2.2);
+      Engine.trackStamp([[x - fx * 0.075, z - fz * 0.075, x - fx * 0.07, z - fz * 0.07, 0.085, a], [x, z, x + fx * 0.075, z + fz * 0.075, 0.1, a]]);
+      wk.prints++;
+    } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
+    if (sound.on && sound.amb && sound.amb.step) sound.amb.step(Math.min(1.4, 0.55 + Math.abs(wk.v) * 0.3), wade);
+  }
+  function startWalk() {
+    if (wk.on || !ready) return;
+    const fromVan = car.on;
+    if (car.on) stopDrive();
+    if (st.chapter) openChapter(null);
+    toggleSettings(false);
+    /* the van, for a person to walk round */
+    const P = Engine.vanPose(), vc = Math.cos(P.heading), vs = Math.sin(P.heading); wk.van.length = 0;
+    for (const l of [-1.45, 0, 1.45]) wk.van.push(P.x + vc * l, P.z - vs * l, 0.95);
+    /* where to stand: out of the van, beside it, if it was being driven (or the view is on it); at the camp, just
+       behind the picnic, looking out to sea; otherwise on the point the view turns round, facing the way it faces */
+    let x = orb.v[X], z = orb.pz, h = orb.v[Y];
+    if (!fromVan && Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 5) { x = Layout.camp.x; z = Layout.camp.z + 3; h = 0; }
+    else if (fromVan || Math.hypot(x - P.x, z - P.z) < 4) {
+      const ok = sd => { const qx = P.x + vs * sd * 1.9, qz = P.z + vc * sd * 1.9; return qz > Layout.shoreZ(qx) - 0.5 && qz < Layout.vegZ(qx) + 1 && !(Engine.world && Engine.world.massif(qx, qz) > 0.4); };
+      const sd = ok(1) ? 1 : -1; x = P.x + vs * sd * 1.9; z = P.z + vc * sd * 1.9; h = Math.atan2(-vc, vs);
+    }
+    Object.assign(wk, { on: true, x, z, h, hT: h, turn: 0, v: 0, my: 0, mp: 0, pitchT: -0.05 });
+    wk.hy.v = wk.hy.d = wk.hp.d = 0; wk.hp.v = -0.05;
+    gather(x, z, 6); walkCollide(); walkCamera();
+    keys.clear(); orb.keys.clear(); touch.x = touch.y = 0;
+    if (wk.auto) { wk.auto = false; setAuto(true); }
+    document.body.classList.add('walking'); $('walkHud').hidden = false; $('pad').hidden = !isTouch; $('bWalk').setAttribute('aria-pressed', 'true');
+    hintOff();
+  }
+  function stopWalk() {
+    if (!wk.on) return;
+    wk.on = false; keys.clear(); touch.x = touch.y = 0;
+    /* the explore camera takes up where you stand, looking the way you were looking */
+    orbAt(wk.x, wk.z, wk.h + wk.hy.v + wk.my, Math.log(0.45));
+    document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
+  }
+  $('bWalk').addEventListener('click', () => wk.on ? stopWalk() : startWalk());
+  $('bWalkExit').addEventListener('click', stopWalk);
+  $('bWalkAuto').addEventListener('click', () => setAuto(!wk.auto));
+  document.querySelectorAll('[data-pace]').forEach(b => b.addEventListener('click', () => { wk.pace = b.dataset.pace; store.set('walkPace', wk.pace); seg('pace', wk.pace); }));
+  seg('pace', wk.pace);
+  const WALK_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', 'shift'];
+  addEventListener('keydown', e => {
+    if (!wk.on || (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]'))) return;
+    const k = e.key.toLowerCase();
+    if (k === 'e' || k === 'escape') { stopWalk(); e.preventDefault(); return; }
+    if (WALK_KEYS.includes(k)) { keys.add(k); e.preventDefault(); }
+  });
   /* ── finds: small things to discover, kept in this browser ── */
   const FINDS = [
     ['roadtrip_start', 'Keys in the ignition', 'took the van out'], ['roadtrip', 'Down the beach', 'drove 120 metres of sand'],
@@ -823,7 +1305,8 @@
     st.offset += dtR * 1000 * (st.flow - 1);
     const ms = nowMs();
 
-    /* camera: transition + gentle parallax */
+    /* camera: the explore camera, or a flight to (and back from) whatever is open */
+    const orbC = stepOrbit(dtR);
     st.camT = Math.min(1, st.camT + dtR / (st.camDur || 2.2));
     /* the camera has come to rest at what is being opened: now open it */
     if (rd.on && rd.pending && st.camT >= 0.92) { const f = rd.pending; rd.pending = null; f(); }
@@ -839,14 +1322,8 @@
       const b = tagBulbs[rd.tagIdx], tv = { pos: [b[0], b[1] - 0.25, b[2] + 1.7], look: [b[0], b[1] - 0.3, b[2] - 0.4], fov: 50, focus: 1.8 }, a = rd.cam ? 1 - Math.exp(-dtR * 3) : 1;
       rd.cam = rd.cam ? lerpCam(rd.cam, tv, a) : tv; st.to = rd.cam;
     }
-    let cam = st.to ? lerpCam(st.from, st.to, ease(st.camT)) : V.wide;
+    let cam = !st.to || (st.to === orbC && st.camT >= 1) ? orbC : lerpCam(st.from, st.to, ease(st.camT));
     st.cur = cam;
-    cam = walkCam(cam, dtR);
-    if (!reduced && !rd.on) {
-      st.par[0] += (st.parT[0] - st.par[0]) * Math.min(1, dtR * 2.2); st.par[1] += (st.parT[1] - st.par[1]) * Math.min(1, dtR * 2.2);
-      const k = st.chapter ? 0.08 : 0.35;
-      cam = Object.assign({}, cam, { pos: [cam.pos[0] + st.par[0] * k, cam.pos[1] - st.par[1] * k * 0.5, cam.pos[2]] });
-    }
     /* driving: physics, van pose, chase camera, sound */
     car.k = Math.max(0, Math.min(1, car.k + (car.on ? dtR / 1.6 : -dtR / 1.8)));
     car.camK = Math.max(0, Math.min(1, car.camK + (car.on ? dtR / 1.4 : -dtR / 2.0)));
@@ -857,6 +1334,10 @@
       const cc = chaseCam(dtR), e = ease(car.camK);
       cam = lerpCam(cam, cc, e);
     } else car.camP = null;
+    /* walking: the steps, and the eyes they carry */
+    wk.camK = clamp(wk.camK + (wk.on ? dtR / 1.4 : -dtR / 1.6), 0, 1);
+    if (wk.on) stepWalk(dtR);
+    if (wk.camK > 0) { const e = ease(wk.camK); cam = e >= 1 ? wk.cam : lerpCam(cam, wk.cam, e); }
     if (sound.amb) sound.amb.engine(car.on, Math.min(1, Math.abs(car.v) / 14), drv ? drv.thr : 0, Math.min(1, Math.abs(car.v) / 8));
     const aspect = view.w / view.h;
     if (aspect < 1.2 && !rd.on) cam = Object.assign({}, cam, { fov: Math.min(80, cam.fov * (1 + (1.2 - aspect) * 0.75)) });
@@ -895,11 +1376,11 @@
     if (!anchors) anchors = Engine.anchors();
     /* pins: a glint on each object, hidden while something is open */
     Content.chapters.forEach(c => { const a = c.anchor === 'clipboard' ? (Engine.anchorNow('clipboard') || anchors.clipboard) : anchors[c.anchor];
-      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && Math.abs(walk.x) < 30 && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     placeTags(performance.now());
-    syncWalkUI();
+    syncWalkBar();
     /* the sea's verdict */
     const si = Engine.surgeInfo();
     if (si.fireOut && !st.wrecked) { st.wrecked = true; setTimeout(() => toast('The tide took the camp.', true, 0), 2600); unlock('tide'); }
@@ -936,5 +1417,5 @@
     }
   }
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
-  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body };
+  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
 })();

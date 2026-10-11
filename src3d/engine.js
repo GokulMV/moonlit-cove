@@ -289,6 +289,8 @@ const Engine = (() => {
     trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackCx.drawImage(tmp, dpx, 0);
     R.x -= dpx * R.z / TRK.W; trackDirty = true;
   }
+  /* (a walker's footprints need the window where they are walking, not where the van is) */
+  Object.assign(api, { trackFollow });
   let washT = 0;
   function trackWash(wt) {
     const now = performance.now(); if (now - washT < 220) return; washT = now;
