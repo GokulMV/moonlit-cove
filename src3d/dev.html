@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+<script src="/*@THREE*/"></script></head>
+<body><canvas id="c"></canvas><script>/*@JS*/</script><script>
+const cv = document.getElementById('c');
+cv.width = Math.round(innerWidth * devicePixelRatio); cv.height = Math.round(innerHeight * devicePixelRatio);
+window.__init = o => { const t0 = performance.now(); let ok; try { ok = Engine.init(cv, o); } catch (e) { return { err: String(e.stack || e) }; } return { ok, ms: performance.now() - t0 }; };
+window.__frame = o => { const t0 = performance.now(); let s; try { s = Engine.render(o); Engine.finish(); } catch (e) { return { err: String(e.stack || e) }; }
+  return { ms: Math.round(performance.now() - t0), sAlt: +s.sAlt.toFixed(1), mAlt: +s.mAlt.toFixed(1), exp: +s.exposure.toFixed(2), frac: +s.illum.fraction.toFixed(2), prof: s.prof }; };
+</script></body></html>

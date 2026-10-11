@@ -1,0 +1,17 @@
+# dependencies and build output
+node_modules/
+dist/
+public/
+
+# local working files
+shots/
+frames/
+fonts/
+src/
+assets/snd/
+*.log
+.DS_Store
+
+# local test scripts (they assume this machine's paths); the build script is kept
+tools/*
+!tools/build3d.mjs

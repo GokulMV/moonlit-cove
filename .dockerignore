@@ -1,0 +1,9 @@
+node_modules
+dist
+public
+shots
+frames
+fonts
+src
+.git
+*.log

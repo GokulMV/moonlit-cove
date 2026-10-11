@@ -1,0 +1,23 @@
+{
+  "name": "moonlit-cove",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GokulMV's portfolio as a moonlit beach camp you can explore, drive and listen to.",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build3d.mjs web",
+    "build:single": "node tools/build3d.mjs page",
+    "start": "node server.js",
+    "dev": "npm run build && npm start"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@fontsource-variable/caveat": "^5.2.8",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "three": "0.160.0"
+  }
+}
