@@ -4,6 +4,9 @@
    ───────────────────────────────────────────────────────────── */
 const Engine = (() => {
   const T = THREE;
+  /* the public face of the engine. Features add to it right where they are written, with
+     Object.assign(api, { … }), rather than all through one long return line */
+  const api = {};
   let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas;
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
   let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = 0, skyMesh = null, groundMesh = null;
@@ -611,5 +614,7 @@ const Engine = (() => {
   function finish() { const px = new Uint8Array(4); const gl = R.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  return { init, render, project, paintMenu, book, books, get world() { return world; }, get life() { return life; }, get paper() { return paper; }, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock, get camera() { return camera; }, get renderer() { return R; } };
+  Object.assign(api, { init, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });
+  Object.defineProperties(api, { world: { get: () => world }, life: { get: () => life }, paper: { get: () => paper }, camera: { get: () => camera }, renderer: { get: () => R }, scene: { get: () => scene } });
+  return api;
 })();
