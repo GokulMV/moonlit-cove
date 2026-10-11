@@ -92,6 +92,9 @@ const Content = {
       { what: 'Ocean bed, crickets, birds, seagulls, owl, campfire, rain and thunder', who: 'The Moodist sound library by MAZE (remvze)', link: ['github.com/remvze/moodist', 'https://github.com/remvze/moodist'], licence: 'Each sound under the Pixabay Content License or CC0' },
       { what: 'The van’s engine and knocks', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
     ] },
+    { group: 'Radio', items: [
+      { what: 'World radio, on the picnic table', who: 'Stations from the Radio Browser community directory. Every stream belongs to its broadcaster and plays straight from them; nothing is recorded or re-hosted here', link: ['radio-browser.info', 'https://www.radio-browser.info'], licence: 'Your own songs play from your device and never leave it' }
+    ] },
     { group: 'Code and ideas', items: [
       { what: 'WebGL plumbing', who: 'three.js r160, © 2010–2023 three.js authors', link: ['github.com/mrdoob/three.js', 'https://github.com/mrdoob/three.js'], licence: 'MIT' },
       { what: 'Where the sun and moon are', who: 'Formulas from SunCalc by Vladimir Agafonkin', link: ['github.com/mourner/suncalc', 'https://github.com/mourner/suncalc'], licence: 'BSD-2-Clause' },

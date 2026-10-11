@@ -317,3 +317,71 @@ body.rd-hint-off .r-hint { opacity: 0; }
 .finds li.got { opacity: 1; color: var(--fg); }
 .finds li b { font-weight: 600; }
 .finds li.got b::before { content: "★ "; color: var(--amber); }
+
+/* a wish for the lantern: a glass card over a softly dimmed cove (centred with margins, so the rise never shifts it) */
+#hud .wish, #hud .wish-veil { pointer-events: auto; }
+.wish-veil { position: absolute; inset: 0; z-index: 6; background: radial-gradient(ellipse at 50% 45%, rgba(6, 9, 15, 0.2), rgba(6, 9, 15, 0.6)); }
+.wish { position: absolute; inset: 0; z-index: 7; margin: auto; width: min(460px, calc(100% - 2 * var(--gut))); height: max-content; max-height: calc(100% - 24px); overflow-y: auto; box-sizing: border-box; padding: 26px 26px 22px; background: var(--glass-hi); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); animation: rise .35s ease-out; }
+.wish h2 { margin: 8px 0 16px; font: 500 30px/1.08 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; }
+.wish textarea { display: block; width: 100%; box-sizing: border-box; min-height: 108px; resize: none; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(243, 233, 214, 0.06); color: var(--fg); font: 600 26px/1.18 Caveat, 'Segoe Print', cursive; }
+.wish textarea::placeholder, .wish input::placeholder { color: rgba(236, 230, 218, 0.4); }
+.wish textarea:focus, .wish input:focus { outline: none; border-color: rgba(242, 183, 105, 0.6); box-shadow: 0 0 0 3px rgba(242, 183, 105, 0.14); }
+.w-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.w-row input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--fg); font: 16px/1.3 var(--body); }
+.w-count { flex: none; font: 500 12px/1 var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.w-count.near { color: var(--amber); }
+.w-count.full { color: var(--ember); }
+.w-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dim); }
+.w-err { margin: 10px 0 0; padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(227, 122, 76, 0.45); background: rgba(227, 122, 76, 0.1); color: #f6c9ae; font-size: 13.5px; line-height: 1.45; }
+.w-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.w-actions button { padding: 11px 18px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06); font-weight: 600; font-size: 14.5px; }
+.w-actions button:hover { background: rgba(255, 255, 255, 0.1); }
+.w-actions .primary, .w-actions .primary:hover { background: var(--amber); color: var(--night); border-color: transparent; }
+.w-actions button:disabled { opacity: 0.55; cursor: progress; }
+
+/* the wishes, listed in the drawer: paper slips in handwriting, newest first, each with who left it and when */
+.drawer.wishes-mode .dbody { gap: 12px; }
+.wsum { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--dim); }
+.wmake { justify-self: start; border: 0; padding: 9px 14px; border-radius: 10px; background: var(--amber); color: var(--night); font-weight: 600; font-size: 13.5px; }
+.wlist { list-style: none; margin: 4px 0 0; padding: 0 4px; display: grid; gap: 12px; }
+.wlist li { padding: 12px 16px 11px; border-radius: 3px; background: #f3ead6; color: #2a2017; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35); transform: rotate(-0.5deg); }
+.wlist li:nth-child(even) { transform: rotate(0.6deg); background: #f7efc9; }
+.wlist li:nth-child(3n) { background: #e6eef1; }
+.wlist .wt { margin: 0; font: 600 23px/1.18 Caveat, 'Segoe Print', cursive; color: #22264a; overflow-wrap: anywhere; }
+.wlist .wm { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
+.wlist .wn { font: 600 19px/1.2 Caveat, 'Segoe Print', cursive; color: #3b2a1c; overflow-wrap: anywhere; }
+.wlist time { font: 400 11.5px/1.4 var(--mono); color: #6b5a47; }
+.wlist em { font: 500 9.5px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-style: normal; padding: 3px 6px; border-radius: 4px; color: #a8392b; border: 1px solid rgba(168, 57, 43, 0.4); }
+.wlist em.yours { color: #2f6d4f; border-color: rgba(47, 109, 79, 0.45); }
+
+/* sitting by the fire: the way back up, a hint, and the radio from the picnic table (centred with margins, as above) */
+.seathud { position: absolute; inset: 0; pointer-events: none; }
+#hud .seathud > * { pointer-events: auto; }
+#hud .seathud > .seat-hint { pointer-events: none; }
+.seat-hint { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 30px); transform: translateX(-50%); margin: 0; font: 400 12px/1.3 var(--mono); color: var(--dim); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8); white-space: nowrap; transition: opacity .8s; }
+body.seat-hint-off .seat-hint { opacity: 0; }
+.radio { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); margin: 0 auto; width: min(430px, calc(100% - 2 * var(--gut))); box-sizing: border-box; padding: 10px 12px; background: var(--glass-hi); display: grid; gap: 8px; animation: rise .4s ease-out; }
+.rd-top { display: flex; align-items: center; gap: 6px; }
+.rd-power { flex: none; display: grid; place-items: center; width: 42px; height: 42px; margin-right: 4px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--dim); transition: background .2s, color .2s, box-shadow .3s; }
+.rd-power:hover { color: var(--fg); }
+.rd-power[aria-pressed="true"] { color: var(--night); background: var(--amber); border-color: transparent; box-shadow: 0 0 18px rgba(242, 183, 105, 0.45); }
+.rd-power svg, .rd-skip svg, .rd-vol svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rd-now { flex: 1; min-width: 0; display: grid; }
+.rd-now b { font: italic 500 17px/1.25 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-now span { font: 400 11.5px/1.4 var(--mono); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-skip { flex: none; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--fg); }
+.rd-skip:hover { background: rgba(255, 255, 255, 0.07); }
+.rd-skip:disabled { opacity: 0.3; cursor: default; }
+.rd-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rd-vol { display: flex; align-items: center; gap: 6px; color: var(--dim); }
+.rd-vol input { width: 110px; }
+.rd-msg { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--dim); }
+.rd-msg:empty { display: none; }
+.rd-add { justify-self: start; border: 1px dashed rgba(242, 183, 105, 0.5); background: rgba(242, 183, 105, 0.06); color: var(--amber); padding: 8px 12px; border-radius: 10px; font: 500 13px/1 var(--body); }
+body.seated #hud .dock, body.seated #hud #spots .spot:not(.extra), body.seated #hud .hint, body.seated #hud .walkbar, body.seated #hud .brand, body.seated #hud .brand-show, body.seated #hud .sky { opacity: 0 !important; pointer-events: none !important; }
+body.seated #scene { cursor: grab; }
+body.seated.look-drag #scene { cursor: grabbing; }
+body.pick-hover #scene { cursor: pointer; }
+@media (max-width: 999px) { .radio { bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); } }
+@media (max-width: 720px) { .seat-hint { top: calc(env(safe-area-inset-top, 0px) + 74px); } .rd-vol input { width: 80px; } }
+@media (prefers-reduced-motion: reduce) { .wish, .radio { animation: none; } }

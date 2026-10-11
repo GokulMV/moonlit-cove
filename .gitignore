@@ -3,6 +3,9 @@ node_modules/
 dist/
 public/
 
+# the wish board's wishes, when the server runs locally
+data/
+
 # local working files
 shots/
 frames/

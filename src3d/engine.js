@@ -516,7 +516,7 @@ const Engine = (() => {
     if (o.lightK) Mats.U.uLightK.value.set(...o.lightK);
     uBulb.uProg.value = L.string; uFairy.uProg.value = L.fairy > 0 ? 1 : 0; uFairy.uI.value = 0.5 * L.fairy * vf;
     uBulb.uOff.value.set(S.amb[0] * 0.6 + 0.002, S.amb[1] * 0.55 + 0.002, S.amb[2] * 0.45 + 0.002); uFairy.uOff.value.copy(uBulb.uOff.value);
-    camp.lanterns.forEach((l, i) => { const lo = flickOut(surge.lantOut[i], wt, 0.6), k = 0.55 * L.lantern * candleFlicker(t, i) * lo; Mats.U.uLant.value[i].w = l.s * lo; l.mat.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.55 * k + S.amb[1] * 0.5, 0.22 * k + S.amb[2] * 0.5); });
+    camp.lanterns.forEach((l, i) => { const lo = flickOut(surge.lantOut[i], wt, 0.6), k = 0.42 * L.lantern * candleFlicker(t, i) * lo; Mats.U.uLant.value[i].w = l.s * lo; l.mat.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.55 * k + S.amb[1] * 0.5, 0.22 * k + S.amb[2] * 0.5); });
     camp.candles.forEach((m, i) => { const k = 0.5 * L.lantern * candleFlicker(t, i + 5) * flickOut(surge.candleOut, wt, 0.5); m.color.setRGB(1.0 * k + 0.01, 0.6 * k + 0.01, 0.28 * k + 0.01); });
     { const k = 0.085 * L.van * vf; camp.vanInside.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.6 * k + S.amb[1] * 0.5, 0.3 * k + S.amb[2] * 0.5); }
     (camp.vanGlow || []).forEach(v => { v.m.emissiveIntensity = v.k * L.van * vf; });
@@ -529,6 +529,8 @@ const Engine = (() => {
       /* the cork pops out of the bottle and lands on the sand; it goes back when the letter does */
       if (camp.cork && cork.p0) { const now = performance.now() / 1000, u = Math.min(1, Math.max(0, (now - cork.t0) / 0.7)), k = cork.to ? u : 1 - u;
         if (k !== cork.k) { cork.k = k; const c = camp.cork; c.position.set(cork.p0.x + 0.16 * k, cork.p0.y + 0.09 * Math.sin(Math.PI * Math.min(1, k * 1.3)) - 0.02 * k, cork.p0.z + 0.05 * k); c.rotation.set(cork.r0.x + 2.4 * k, cork.r0.y, cork.r0.z + 5.5 * k); } } }
+    /* the wish board: a lamp under its eave, and paper that reads after dark (brighter while you are at it) */
+    if (camp.board) camp.board.light((0.12 * L.lantern + 0.3 * boardLook) * (1 - 0.9 * S.day) / Math.max(0.05, S.exposure * (o.expMul || 1)), 0.42 * L.lantern * candleFlicker(t, 7), S.amb);
     /* the flame's light centre wanders a little, so the fire's shadows breathe */
     { const fb = camp.fireBase, jx = 0.03 * Math.sin(t * 7.3) + 0.015 * Math.sin(t * 17.9 + 1.1), jz = 0.03 * Math.sin(t * 6.1 + 2.0) + 0.015 * Math.sin(t * 15.3), jy = 0.07 * (ff - 0.55);
       Mats.U.uFirePos.value.set(fb.x + jx, jy, fb.z + jz);
@@ -612,6 +614,41 @@ const Engine = (() => {
     return [(v.x * 0.5 + 0.5), (-v.y * 0.5 + 0.5), v.z];
   }
   function finish() { const px = new Uint8Array(4); const gl = R.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+
+  /* ── the wish board, the two chairs you can sit in, the radio on the table ── */
+  let boardLook = 0;
+  const _ray = new T.Raycaster(), _ndc = new T.Vector2();
+  _ray.params.Line.threshold = 0.01;                  /* (the guitar's strings are lines: only a direct hit counts) */
+  /* repaint the board's face: fn draws on its canvas */
+  function paintBoard(fn) { if (camp && camp.board) camp.board.paint(fn); }
+  /* how much the board is being looked at, 0 to 1: its paper reads brighter while you are at it */
+  function setBoardLook(k) { boardLook = k; }
+  /* the board's centre, the way its face looks, and its size: for the camera that reads it */
+  function boardFrame() {
+    const b = camp.board, g = b.group;
+    return { c: g.localToWorld(new T.Vector3(0, b.Y, 0)).toArray(), n: new T.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new T.Quaternion())).toArray(), W: b.W, H: b.H };
+  }
+  /* where a seated visitor's eyes are in chair i (leaning back a little), and the fire in front of them */
+  function seatPose(i) {
+    const ch = camp.chairs && camp.chairs[i]; if (!ch) return null;
+    return { eye: ch.localToWorld(new T.Vector3(-0.27, 0.9, 0)).toArray(), fire: [Layout.fire.x, 0.35, Layout.fire.z] };
+  }
+  /* what a click at (nx, ny) across the canvas lands on: 'chair0', 'chair1', 'radio', 'board', or null */
+  function pick(nx, ny) {
+    if (!camp || !camp.pick) return null;
+    _ndc.set(nx * 2 - 1, 1 - ny * 2); _ray.setFromCamera(_ndc, camera);
+    let best = null, bd = 60;
+    for (const o of camp.pick) { const h = _ray.intersectObject(o, true)[0]; if (h && h.distance < bd) { bd = h.distance; best = o.userData.pick; } }
+    return best;
+  }
+  /* the radio's dial: how lit it is (0 is off) and where the needle sits along the scale, 0 to 1 */
+  function setRadio(glow, dial) { if (camp && camp.radio) camp.radio.set(glow, dial); }
+  /* points on these things for their hotspot dots (they move with a wave or a knock, like everything at the camp) */
+  function propAnchors() {
+    const at = (o, x, y, z) => o.localToWorld(new T.Vector3(x, y, z)).toArray(), b = camp.board;
+    return { board: at(b.group, 0, b.Y + b.H / 2 - 0.02, 0.06), chair0: at(camp.chairs[0], -0.5, 1.06, 0), chair1: at(camp.chairs[1], -0.5, 1.06, 0), radio: at(camp.radio.group, 0, 0.2, 0) };
+  }
+  Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
   Object.assign(api, { init, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });

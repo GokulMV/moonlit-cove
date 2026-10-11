@@ -508,7 +508,7 @@
      down to a few metres above the sand and looks along the beach, the way you are going, so whatever lies ahead
      (the van, parked wherever it was left) comes into view ── */
   const walk = { x: 0, t: 0, dir: 1, dirS: 1, drag: null };
-  const canWalk = () => st.entered && !rd.on && !car.on && !st.chapter;
+  const canWalk = () => st.entered && !rd.on && !car.on && !st.chapter && !seat.on;
   function walkBy(d) { walk.t += d; if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } }
   function walkTo(x, dir) { walk.t = x; if (dir) walk.dir = dir; }
   function walkCam(base, dt) {
@@ -623,11 +623,8 @@
     document.body.classList.remove('driving'); $('driveHud').hidden = true; $('pad').hidden = true; $('bDrive').setAttribute('aria-pressed', 'false');
   }
   $('bDrive').addEventListener('click', () => car.on ? stopDrive() : startDrive());
-  /* a sky lantern from the camp: it fills with warm air for a moment, then rises out over the sea */
-  $('bLantern').addEventListener('click', () => {
-    if (!ready) return; Engine.lantern(); unlock('lantern');
-    if (!st.lanternTold) { st.lanternTold = true; toast('A lantern rises from the camp and drifts out over the sea.', false, 3200); }
-  });
+  /* a sky lantern from the camp: first it asks what you wish for (see the wishes, below), then it fills with warm air and rises out over the sea */
+  $('bLantern').addEventListener('click', () => { if (ready) openWish(); });
   $('bPark').addEventListener('click', stopDrive);
   /* touch pad: up/down = throttle, left/right = steer */
   { const pad = $('pad'), knob = $('padKnob');
@@ -842,7 +839,7 @@
     let cam = st.to ? lerpCam(st.from, st.to, ease(st.camT)) : V.wide;
     st.cur = cam;
     cam = walkCam(cam, dtR);
-    if (!reduced && !rd.on) {
+    if (!reduced && !rd.on && !seat.on) {
       st.par[0] += (st.parT[0] - st.par[0]) * Math.min(1, dtR * 2.2); st.par[1] += (st.parT[1] - st.par[1]) * Math.min(1, dtR * 2.2);
       const k = st.chapter ? 0.08 : 0.35;
       cam = Object.assign({}, cam, { pos: [cam.pos[0] + st.par[0] * k, cam.pos[1] - st.par[1] * k * 0.5, cam.pos[2]] });
@@ -899,6 +896,7 @@
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     placeTags(performance.now());
+    extras(dtR);
     syncWalkUI();
     /* the sea's verdict */
     const si = Engine.surgeInfo();
@@ -935,6 +933,432 @@
       else if (avg < 16 && st.rs < 1) { st.rs = Math.min(1, st.rs * 1.06); st.fms = []; }
     }
   }
+  /* ── wishes: a sky lantern carries one up, and it is pinned to the board by the fire for everyone to read.
+     The server keeps them (server.js). Opened from a file, or anywhere without that server, they stay in this
+     browser instead, marked as kept only on this device ── */
+  const isWeb = location.protocol === 'http:' || location.protocol === 'https:', WISH_LEN = 160;
+  const wish = { mode: isWeb ? 'try' : 'local', list: [], total: 0, polled: 0, look: 0, started: false, sending: false, key: '', mine: new Set(store.get('wishMine', [])) };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const hashOf = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  /* the same tidying the server does: one kind of space, nothing invisible, nothing that flips the text's direction */
+  const tidy = (s, n) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').replace(/[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, '').replace(/ {2,}/g, ' ').trim().slice(0, n);
+  const isoOf = at => { const d = new Date(at); return isNaN(d) ? '' : d.toISOString(); };
+  /* when a wish was made, to the second: short on the board, with the weekday in the list */
+  const SHORT = { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }, LONG = Object.assign({ weekday: 'long' }, SHORT, { month: 'long' });
+  const whenOf = (at, long) => { const d = new Date(at); if (isNaN(d)) return ''; try { return d.toLocaleString(undefined, long ? LONG : SHORT); } catch (e) { return d.toISOString().replace('T', ' ').slice(0, 19); } };
+  const asWish = w => w && typeof w.text === 'string' && w.at && isoOf(w.at) ? { id: String(w.id || w.at), text: tidy(w.text, WISH_LEN), name: tidy(w.name, 32), at: w.at, local: !!w.local } : null;
+  const localWishes = () => { const a = store.get('wishes', []); return (Array.isArray(a) ? a : []).map(asWish).filter(Boolean); };
+
+  /* the newest wishes from the server; false where there is no board to ask */
+  async function fetchWishes(limit = 60) {
+    if (!isWeb) return false;
+    try {
+      const r = await fetch(`/api/wishes?limit=${limit}`, { cache: 'no-store', headers: { Accept: 'application/json' } });
+      const j = r.ok && /json/.test(r.headers.get('content-type') || '') ? await r.json() : null;
+      if (!j || !Array.isArray(j.wishes)) throw new Error('no wish board here');
+      wish.mode = 'server'; wish.list = j.wishes.map(asWish).filter(Boolean); wish.total = Math.max(+j.total || 0, wish.list.length); wish.polled = Date.now();
+      return true;
+    } catch (e) {
+      if (wish.mode !== 'server') { wish.mode = 'local'; wish.list = localWishes(); wish.total = wish.list.length; }
+      return false;
+    }
+  }
+  /* send a wish. A refusal comes back in the server's own kind words; with no server at all, it is kept here */
+  async function sendWish(text, name) {
+    if (isWeb) {
+      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 12000);
+      try {
+        const r = await fetch('/api/wishes', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ text, name }), cache: 'no-store', signal: ctl.signal });
+        const j = /json/.test(r.headers.get('content-type') || '') ? await r.json().catch(() => null) : null;
+        if (r.ok && j && j.wish && asWish(j.wish)) { wish.mode = 'server'; return { wish: asWish(j.wish), total: j.total }; }
+        if (j && j.error) return { error: String(j.error) };
+        if (wish.mode === 'server') return { error: 'The board couldn’t take your wish just now. Try again in a moment.' };
+      } catch (e) {
+        if (wish.mode === 'server') return { error: 'Couldn’t reach the board just now. Check your connection and try again.' };
+      } finally { clearTimeout(to); }
+    }
+    const w = { id: 'local-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), text, name, at: new Date().toISOString(), local: true };
+    store.set('wishes', [w, ...localWishes()].slice(0, 300));
+    if (wish.mode !== 'local') { wish.mode = 'local'; wish.list = localWishes().filter(x => x.id !== w.id); }
+    return { wish: w, local: true };
+  }
+  /* paint the board's newest nine (only when something on it changed: it is a big canvas) */
+  function paintBoard() {
+    if (!ready) return;
+    const local = wish.mode === 'local', shown = wish.list.slice(0, 9), key = (local ? 'l' : 's') + wish.total + '|' + shown.map(w => w.id).join(',');
+    if (key === wish.key) return; wish.key = key;
+    const notes = shown.map(w => ({ id: w.id, text: w.text, name: w.name || 'a stranger', when: whenOf(w.at), local: local || w.local }));
+    Engine.paintBoard(c => Paint.wishBoard(c, notes, { total: wish.total, local }));
+  }
+  /* every wish in the drawer, newest first, with its full date and time */
+  function renderWishList() {
+    const d = $('drawer'), local = wish.mode === 'local', n = local ? wish.list.length : Math.max(wish.total, wish.list.length), top = d.scrollTop;
+    const head = `<p class="wsum">${n ? `${n} ${n === 1 ? 'wish' : 'wishes'}, the newest first.` : 'No wishes yet.'} ${local ? 'They are kept only on this device: opened like this, the cove has no board to share them on.' : 'Everyone who visits the cove can read them.'}</p><button type="button" class="wmake" data-wish-make>Make a wish</button>`;
+    const items = wish.list.map(w => { const mine = wish.mine.has(w.id);
+      return `<li><p class="wt">${esc(w.text)}</p><p class="wm"><span class="wn">— ${esc(w.name || 'a stranger')}</span>${mine ? '<em class="yours">yours</em>' : ''}${local || w.local ? '<em>only on this device</em>' : ''}<time datetime="${esc(isoOf(w.at))}">${esc(whenOf(w.at, true))}</time></p></li>`; }).join('');
+    $('dBody').innerHTML = head + (items ? `<ol class="wlist">${items}</ol>` : '') + (wish.list.length < n ? `<p class="wsum">The newest ${wish.list.length} are shown here.</p>` : '');
+    d.scrollTop = top;
+  }
+  $('dBody').addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-wish-make]')) openWish(); });
+  /* the camera in front of the board: square on, the board centred in the room the drawer leaves (beside it on a wide
+     screen, where the frame is already shifted for it; above it on a phone) and far enough back to fit there */
+  Object.defineProperty(V, 'board', { enumerable: true, get() {
+    if (!ready) return V.wide;
+    const f = Engine.boardFrame(), c = f.c, n = f.n, r = [n[2], 0, -n[0]], aspect = view.w / view.h, fov = 38, W = f.W + 0.3;   /* (the frame and the posts too) */
+    const tf = Math.tan((aspect < 1.2 ? Math.min(80, fov * (1 + (1.2 - aspect) * 0.75)) : fov) * Math.PI / 360);
+    let d, side = 0, up = 0;
+    if (view.w > 900) {
+      const free = Math.max(240, view.w - 472);                   /* the drawer: 440 px wide, 22 px in from the right */
+      d = Math.max(f.H * 1.3 / (2 * tf), W * view.w / (2 * free * 0.92 * tf * aspect));
+      side = -((free / 2) / view.w - 0.33) * 2 * tf * aspect * d;  /* (the frame's 0.17 shift puts the view's middle a third of the way across) */
+    } else { d = Math.max(f.H / (0.8 * tf), W / (1.8 * tf * aspect)); up = 0.5 * tf * d; }
+    const o = i => c[i] + r[i] * side;
+    return { pos: [o(0) + n[0] * d, c[1] + 0.08, o(2) + n[2] * d], look: [o(0), c[1] - 0.02 - up, o(2)], fov, focus: d };
+  } });
+  /* the wishes open like a chapter: the camera goes to the board and the drawer lists them all */
+  function openWishes() {
+    if (!ready || !st.entered) return;
+    if (seat.on) leaveSeat();
+    if (rd.on) stopReading(true);
+    if (car.on) stopDrive();
+    toggleSettings(false);
+    st.chapter = 'wishes'; walk.t = 0;
+    dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false'));
+    Content.chapters.forEach(x => { x.spot.classList.remove('on'); x.spot.classList.add('dim'); });
+    document.body.classList.add('reading');
+    const d = $('drawer'); d.classList.remove('menu-mode'); d.classList.add('wishes-mode');
+    $('dEyebrow').textContent = 'By the fire'; $('dTitle').textContent = 'Wishes'; renderWishList(); d.hidden = false; d.scrollTop = 0;
+    goView('board');
+    if (wish.mode !== 'local') fetchWishes(2000).then(ok => { if (!ok) return; paintBoard(); if (st.chapter === 'wishes') renderWishList(); });
+  }
+  function startWishes() {
+    wish.started = true;
+    if (wish.mode === 'local') { wish.list = localWishes(); wish.total = wish.list.length; }
+    paintBoard();
+    fetchWishes(60).then(() => { paintBoard(); if (st.chapter === 'wishes') renderWishList(); });
+    /* the notes are written in Caveat and JetBrains Mono: once those are in, paint the board again */
+    if (document.fonts && document.fonts.load) Promise.all(['600 40px Caveat', '700 40px Caveat', '500 30px Caveat', '400 17px "JetBrains Mono"'].map(f => document.fonts.load(f))).then(() => { wish.key = ''; paintBoard(); }, () => {});
+    /* new wishes from other visitors: look every minute and a half while the page is open */
+    setInterval(pollWishes, 90e3);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - wish.polled > 90e3) pollWishes(); });
+  }
+  function pollWishes() {
+    if (wish.mode !== 'server' || document.hidden) return;
+    fetchWishes(st.chapter === 'wishes' ? 2000 : 60).then(ok => { if (!ok) return; paintBoard(); if (st.chapter === 'wishes') renderWishList(); });
+  }
+
+  /* the dialog: what do you wish for? Then the lantern goes up with it */
+  let wishFrom = null;
+  $('wName').value = store.get('wishName', '');
+  function openWish() {
+    if (!ready || !$('wish').hidden) return;
+    toggleSettings(false);
+    wishFrom = document.activeElement;
+    $('wErr').hidden = true; $('wGo').disabled = false; $('wGo').textContent = 'Let it go'; syncCount();
+    $('wishVeil').hidden = false; $('wish').hidden = false;
+    setTimeout(() => $('wText').focus(), 30);
+  }
+  function closeWish() {
+    $('wish').hidden = true; $('wishVeil').hidden = true;
+    if (wishFrom && wishFrom.focus) { try { wishFrom.focus(); } catch (e) { /* it may be gone */ } }
+    wishFrom = null;
+  }
+  function syncCount() { const n = $('wText').value.length, c = $('wCount'); c.textContent = `${n} / ${WISH_LEN}`; c.classList.toggle('near', n >= WISH_LEN - 20 && n < WISH_LEN); c.classList.toggle('full', n >= WISH_LEN); }
+  $('wText').addEventListener('input', () => { syncCount(); $('wErr').hidden = true; });
+  $('wText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); letGo(); } });
+  $('wCancel').addEventListener('click', closeWish);
+  $('wishVeil').addEventListener('click', closeWish);
+  $('wForm').addEventListener('submit', e => { e.preventDefault(); letGo(); });
+  /* keys typed in the dialog are the dialog's (not the reader's, the van's or the beach's), and Tab stays inside it */
+  $('wish').addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key !== 'Tab') return;
+    const f = [...$('wish').querySelectorAll('textarea, input, button')].filter(x => !x.disabled), i = f.indexOf(document.activeElement);
+    if (e.shiftKey && i <= 0) { f[f.length - 1].focus(); e.preventDefault(); } else if (!e.shiftKey && i === f.length - 1) { f[0].focus(); e.preventDefault(); }
+  });
+  const release = () => { Engine.lantern(); unlock('lantern'); };
+  async function letGo() {
+    if (wish.sending) return;
+    const text = tidy($('wText').value, WISH_LEN), name = tidy($('wName').value, 32), err = $('wErr');
+    store.set('wishName', name);
+    /* no words: the lantern still goes, carrying a wish nobody else needs to read */
+    if (!text) { closeWish(); release(); toast('The lantern rises, carrying a wish only you know.', false, 3600); return; }
+    wish.sending = true; $('wGo').disabled = true; $('wGo').textContent = 'Letting go…'; err.hidden = true;
+    let res; try { res = await sendWish(text, name); } catch (e) { res = { error: 'Something went wrong. Try again in a moment.' }; }
+    wish.sending = false; $('wGo').disabled = false; $('wGo').textContent = 'Let it go';
+    if (!res.wish) { err.textContent = res.error || 'Something went wrong. Try again in a moment.'; err.hidden = false; return; }
+    const w = res.wish;
+    wish.list = [w, ...wish.list.filter(x => x.id !== w.id)];
+    wish.total = res.local ? wish.list.length : Math.max(+res.total || 0, wish.total + 1);
+    wish.mine.add(w.id); store.set('wishMine', [...wish.mine].slice(-200));
+    $('wText').value = ''; syncCount(); closeWish(); release(); paintBoard();
+    if (st.chapter === 'wishes') renderWishList();
+    toast(res.local ? 'Your lantern rises, and your wish is pinned to the board by the fire (kept only on this device).' : 'Your lantern rises, and your wish is pinned to the board by the fire.', false, 4200);
+  }
+
+  /* ── sitting by the fire: either chair (its dot, or a click on it) puts you in it, eyes at a seated height,
+     facing the fire and the sea. Drag to look around a little; Esc or Stand up gets you up again ── */
+  const seat = { on: false, i: 0, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null, hintT: 0 };
+  function seatCam() {
+    const P = Engine.seatPose(seat.i); if (!P) return V.wide;
+    const e = P.eye, yaw = Math.atan2(P.fire[0] - e[0], e[2] - P.fire[2]) + seat.yaw, pitch = -0.24 + seat.pitch, cp = Math.cos(pitch) * 8;
+    return { pos: e.slice(), look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: 56, focus: 2.8 };
+  }
+  function sit(i) {
+    if (!ready || !st.entered || car.on || (seat.on && seat.i === i)) return;
+    if (rd.on || st.chapter) openChapter(null);
+    toggleSettings(false);
+    const moving = seat.on;
+    Object.assign(seat, { on: true, i, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null }); walk.t = 0;
+    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = seatCam(); st.camT = 0; st.camDur = moving ? 1.4 : camDur(st.from, st.to);
+    document.body.classList.add('seated'); document.body.classList.remove('seat-hint-off'); $('seatHud').hidden = false;
+    clearTimeout(seat.hintT); seat.hintT = setTimeout(() => document.body.classList.add('seat-hint-off'), 6500);
+    if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
+    syncRadioUI();
+  }
+  /* getting up switches the radio off: it is the seat's */
+  function leaveSeat() { if (!seat.on) return; seat.on = false; seat.drag = null; document.body.classList.remove('seated', 'look-drag'); $('seatHud').hidden = true; radioOff(); }
+  function standUp() { if (!seat.on) return; leaveSeat(); goView('wide'); }
+  $('bStand').addEventListener('click', standUp);
+  /* looking around: a gentle drag, only so far either way */
+  cv.addEventListener('pointerdown', e => { if (seat.on && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) seat.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: seat.yawT, pitch: seat.pitchT }; });
+  addEventListener('pointermove', e => {
+    const g = seat.drag; if (!g || g.id !== e.pointerId || !seat.on) return;
+    const k = 2.4 / Math.max(500, view.h);
+    if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 4) document.body.classList.add('look-drag');
+    seat.yawT = clamp(g.yaw - (e.clientX - g.x) * k, -1, 1); seat.pitchT = clamp(g.pitch + (e.clientY - g.y) * k, -0.3, 0.3);
+  }, { passive: true });
+  const unlook = e => { if (seat.drag && seat.drag.id === e.pointerId) { seat.drag = null; document.body.classList.remove('look-drag'); } };
+  addEventListener('pointerup', unlook); addEventListener('pointercancel', unlook);
+  /* Esc closes the wish, then gets you up from the chair; the arrow keys look around while seated (and don't start the van) */
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (!$('wish').hidden) { closeWish(); e.stopPropagation(); e.preventDefault(); return; }
+      if (seat.on && $('credits').hidden && $('settings').hidden) { standUp(); e.stopPropagation(); return; }
+    }
+    if (seat.on && /^Arrow/.test(e.key) && !(e.target && e.target.closest && e.target.closest('input, textarea, select'))) {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') seat.yawT = clamp(seat.yawT + (e.key === 'ArrowLeft' ? -0.2 : 0.2), -1, 1);
+      else seat.pitchT = clamp(seat.pitchT + (e.key === 'ArrowUp' ? 0.1 : -0.1), -0.3, 0.3);
+      e.stopPropagation(); e.preventDefault();
+    }
+  }, true);
+
+  /* ── the radio on the picnic table: stations from the Radio Browser community directory, or the visitor's own
+     songs, played from their device and never uploaded. It is an <audio> of its own, so it plays whether or not
+     the cove's sound is on; the bed of waves and crickets steps back a little while it does ── */
+  const RB = ['de1.api.radio-browser.info', 'nl1.api.radio-browser.info', 'at1.api.radio-browser.info', 'fi1.api.radio-browser.info'];
+  const MIME = { MP3: 'audio/mpeg', AAC: 'audio/aac', 'AAC+': 'audio/aac', OGG: 'audio/ogg', OPUS: 'audio/ogg; codecs=opus' };
+  /* Safari lets an <audio> start later (once the station list is in) only if it first played inside the tap */
+  const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const radio = { on: false, src: store.get('radioSrc', 'world') === 'songs' ? 'songs' : 'world', vol: clamp(+store.get('radioVol', 0.7) || 0, 0, 1), state: 'off', msg: '',
+    stations: null, host: '', si: 0, dir: 1, fails: 0, songs: [], qi: 0, el: null, ctx: null, noise: null, hiss: null, timer: 0, dial: 0.5, dialT: 0.5, glow: 0, duckFor: null, duckK: 1 };
+  const own = el => el.getAttribute('src') && el.getAttribute('src') !== SILENCE;
+  function radioEl() {
+    if (radio.el) return radio.el;
+    const el = radio.el = new Audio(); el.preload = 'none';
+    el.addEventListener('playing', () => { if (!radio.on || !own(el)) return; clearTimeout(radio.timer); radio.state = 'playing'; radio.fails = 0; if (radio.src === 'world') radio.msg = ''; hiss(false); syncRadioUI(); });
+    el.addEventListener('waiting', () => { if (!radio.on || !own(el) || radio.state !== 'playing') return; radio.state = 'tuning'; syncRadioUI(); clearTimeout(radio.timer); radio.timer = setTimeout(() => { if (radio.on && radio.state === 'tuning') failed(); }, 15000); });
+    el.addEventListener('error', () => { if (radio.on && own(el)) failed(); });
+    el.addEventListener('ended', () => { if (!radio.on || !own(el)) return; if (radio.src === 'songs') playSong(radio.qi + 1, true); else failed(); });
+    return el;
+  }
+  function radioCtx() {
+    if (!radio.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; try { radio.ctx = new AC(); } catch (e) { return null; } }
+    if (radio.ctx.state === 'suspended' && radio.ctx.resume) radio.ctx.resume().catch(() => {});
+    return radio.ctx;
+  }
+  /* the hiss between stations: a sweep of filtered noise and a falling whistle as the dial turns, then a low rush until it comes in */
+  function hiss(on) {
+    const h = radio.hiss;
+    if (h) { radio.hiss = null; const t = h.ctx.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(0, t, 0.05); try { h.s.stop(t + 0.35); } catch (e) { /* already stopping */ } }
+    if (!on) return;
+    const ctx = radioCtx(); if (!ctx) return;
+    if (!radio.noise) { const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; radio.noise = b; }
+    const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), o = ctx.createOscillator(), og = ctx.createGain(), v = 0.14 * radio.vol;
+    s.buffer = radio.noise; s.loop = true; f.type = 'bandpass'; f.Q.value = 0.8;
+    f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(2800, t + 0.3); f.frequency.exponentialRampToValueAtTime(1300, t + 0.6);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.04); g.gain.setTargetAtTime(v * 0.32, t + 0.55, 0.3);
+    o.type = 'sine'; o.frequency.setValueAtTime(2200, t); o.frequency.exponentialRampToValueAtTime(320, t + 0.55);
+    og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.01 * radio.vol, t + 0.2); og.gain.linearRampToValueAtTime(0, t + 0.6);
+    s.connect(f); f.connect(g); g.connect(ctx.destination); o.connect(og); og.connect(ctx.destination);
+    s.start(t); o.start(t); o.stop(t + 0.7);
+    radio.hiss = { ctx, s, g };
+  }
+  const fetchT = (url, ms) => { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); return fetch(url, { signal: c.signal, cache: 'no-store' }).finally(() => clearTimeout(t)); };
+  /* the directory's mirrors: asked for by name (only its own hosts), else the ones it has long had */
+  async function rbHosts() {
+    let hosts = RB.slice();
+    try { const j = await (await fetchT('https://all.api.radio-browser.info/json/servers', 4000)).json(); const names = [...new Set((Array.isArray(j) ? j : []).map(s => s && s.name).filter(n => /^[a-z0-9-]+\.api\.radio-browser\.info$/.test(n || '')))]; if (names.length) hosts = names; } catch (e) { /* the known mirrors will do */ }
+    return hosts.sort(() => Math.random() - 0.5);
+  }
+  /* sixty of the most listened-to stations that stream over HTTPS in something this browser plays (kept for a day) */
+  async function stationList() {
+    if (radio.stations) return radio.stations;
+    const kept = store.get('radioList', null);
+    if (kept && Date.now() - kept.t < 864e5 && Array.isArray(kept.list) && kept.list.length) { radio.host = kept.host || ''; return (radio.stations = kept.list); }
+    const el = radioEl();
+    for (const h of await rbHosts()) {
+      try {
+        const r = await fetchT(`https://${h}/json/stations/search?order=clickcount&reverse=true&limit=60&hidebroken=true&is_https=true`, 8000); if (!r.ok) continue;
+        const j = await r.json(), list = (Array.isArray(j) ? j : []).filter(s => s && /^https:\/\//.test(s.url_resolved || '') && !s.hls && MIME[String(s.codec || '').toUpperCase()] && el.canPlayType(MIME[String(s.codec).toUpperCase()]))
+          .map(s => ({ id: String(s.stationuuid || s.url_resolved), name: tidy(s.name, 60) || 'A station', where: tidy(s.country || s.countrycode, 40), codec: String(s.codec).toUpperCase(), url: s.url_resolved }));
+        if (!list.length) continue;
+        radio.host = h; store.set('radioList', { t: Date.now(), host: h, list });
+        return (radio.stations = list);
+      } catch (e) { /* the next mirror */ }
+    }
+    throw new Error('the radio directory is out of reach');
+  }
+  /* tune to station i: static while it comes in, the needle swinging along the dial; one that won't play is skipped */
+  function tune(i, dir = 1, auto = false) {
+    const L = radio.stations; if (!L || !L.length || !radio.on) return;
+    if (!auto) radio.fails = 0;
+    radio.si = ((i % L.length) + L.length) % L.length; radio.dir = dir;
+    const s = L[radio.si]; store.set('radioStation', s.id);
+    radio.state = 'tuning'; radio.msg = ''; radio.dialT = 0.06 + 0.88 * (hashOf(s.id) % 1000) / 1000;
+    hiss(true);
+    const el = radioEl(); el.src = s.url; el.volume = radio.vol;
+    clearTimeout(radio.timer); radio.timer = setTimeout(() => { if (radio.on && radio.state === 'tuning') failed(); }, 9000);
+    const p = el.play(); if (p && p.catch) p.catch(err => { if (!radio.on || el.getAttribute('src') !== s.url || (err && err.name === 'AbortError')) return; if (err && err.name === 'NotAllowedError') { radioOff(true); radio.msg = 'Press the power button to listen.'; syncRadioUI(); } else failed(); });
+    /* the directory counts a listen when a station is played, and asks players to tell it */
+    if (radio.host) fetchT(`https://${radio.host}/json/url/${encodeURIComponent(s.id)}`, 5000).catch(() => {});
+    mediaInfo(s.name, s.where || 'World radio'); syncRadioUI();
+  }
+  function failed() {
+    if (radio.src === 'songs') {
+      const s = radio.songs[radio.qi]; radio.msg = s ? `Couldn’t play “${s.name}” here, so it was skipped.` : '';
+      if (++radio.fails >= radio.songs.length) { radioOff(true); radio.msg = 'Couldn’t play those files here. MP3 and M4A files play almost everywhere.'; syncRadioUI(); } else playSong(radio.qi + 1, true);
+      return;
+    }
+    if (++radio.fails >= 6) { radioOff(true); radio.state = 'error'; radio.msg = 'Couldn’t reach the radio just now. Your own songs still play: switch to Your songs.'; syncRadioUI(); return; }
+    tune(radio.si + radio.dir, radio.dir, true);
+  }
+  function playSong(i, auto = false) {
+    const Q = radio.songs; if (!Q.length || !radio.on) return;
+    if (!auto) { radio.fails = 0; radio.msg = ''; }
+    radio.qi = ((i % Q.length) + Q.length) % Q.length; radio.state = 'tuning'; radio.dialT = 0.06 + 0.88 * (radio.qi + 0.5) / Q.length; hiss(false);
+    const s = Q[radio.qi], el = radioEl(); el.src = s.url; el.volume = radio.vol;
+    const p = el.play(); if (p && p.catch) p.catch(err => { if (radio.on && el.getAttribute('src') === s.url && !(err && err.name === 'AbortError')) failed(); });
+    mediaInfo(s.name, 'Your songs'); syncRadioUI();
+  }
+  function radioOn() {
+    radio.on = true; radio.fails = 0; radio.msg = ''; radioCtx();
+    const el = radioEl(); if (!el.dataset.woken) { el.dataset.woken = '1'; if (!el.getAttribute('src')) { el.src = SILENCE; const p = el.play(); if (p && p.catch) p.catch(() => {}); } }
+    if (radio.src === 'songs') {
+      if (radio.songs.length) playSong(radio.qi);
+      else { radio.on = false; radio.msg = 'Pick some songs from your device: they play here and never leave it.'; syncRadioUI(); $('rdFile').click(); }
+      return;
+    }
+    radio.state = 'tuning'; radio.dialT = Math.random(); hiss(true); syncRadioUI();
+    stationList().then(L => { if (!radio.on || radio.src !== 'world') return; const k = L.findIndex(s => s.id === store.get('radioStation', '')); tune(k >= 0 ? k : Math.floor(Math.random() * Math.min(20, L.length))); },
+      () => { if (!radio.on || radio.src !== 'world') return; radioOff(true); radio.state = 'error'; radio.msg = 'Couldn’t reach the radio just now. Your own songs still play: switch to Your songs.'; syncRadioUI(); });
+  }
+  function radioOff(keepMsg) {
+    radio.on = false; radio.state = 'off'; clearTimeout(radio.timer); hiss(false);
+    const el = radio.el; if (el && el.getAttribute('src')) { el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) { /* nothing to let go of */ } }
+    if (!keepMsg) radio.msg = '';
+    mediaInfo(null); syncRadioUI();
+  }
+  const radioToggle = () => radio.on ? radioOff() : radioOn();
+  /* the radio itself, clicked in the scene: from anywhere, it sits you down by the fire with it on */
+  function radioClick() { if (!seat.on) { sit(1); if (!radio.on) radioOn(); } else radioToggle(); }
+  function step(d) { if (!radio.on) return; radio.msg = ''; if (radio.src === 'songs') playSong(radio.qi + d); else if (radio.stations) tune(radio.si + d, d); }
+  function setSource(s, start = true) {
+    if (s === radio.src) { if (start && s === 'songs' && !radio.songs.length) $('rdFile').click(); return; }
+    const was = radio.on; if (was) radioOff();
+    radio.src = s; store.set('radioSrc', s); radio.msg = '';
+    if (start && s === 'songs' && !radio.songs.length) { syncRadioUI(); $('rdFile').click(); return; }
+    if (was && start) radioOn(); else syncRadioUI();
+  }
+  /* your songs: picked from this device, played from object URLs in this tab, never sent anywhere */
+  $('rdFile').addEventListener('change', e => {
+    const fs = [...(e.target.files || [])].filter(f => /^audio\//.test(f.type) || /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|webm)$/i.test(f.name)); e.target.value = '';
+    if (!fs.length) return;
+    const first = radio.songs.length;
+    for (const f of fs) radio.songs.push({ name: tidy(f.name.replace(/\.[^.]+$/, ''), 80) || 'A song', url: URL.createObjectURL(f) });
+    setSource('songs', false); radio.on = true; radioCtx(); playSong(first);
+  });
+  $('rdPower').addEventListener('click', radioToggle);
+  $('rdPrev').addEventListener('click', () => step(-1)); $('rdNext').addEventListener('click', () => step(1));
+  $('rdAdd').addEventListener('click', () => $('rdFile').click());
+  document.querySelectorAll('[data-rsrc]').forEach(b => b.addEventListener('click', () => setSource(b.dataset.rsrc)));
+  $('rdVol').value = radio.vol;
+  $('rdVol').addEventListener('input', e => { radio.vol = clamp(+e.target.value, 0, 1); store.set('radioVol', radio.vol); if (radio.el) radio.el.volume = radio.vol; });
+  $('radio').addEventListener('keydown', e => e.stopPropagation());
+  function syncRadioUI() {
+    const on = radio.on, songs = radio.src === 'songs', s = songs ? radio.songs[radio.qi] : radio.stations && radio.stations[radio.si], n = radio.songs.length;
+    let name = 'The radio', sub = songs ? (n ? `${n} ${n === 1 ? 'song' : 'songs'} from this device · off` : 'Songs from your device') : 'World radio · off';
+    if (on && !s) { name = 'Tuning in…'; sub = 'World radio'; }
+    else if (on) { name = s.name; sub = songs ? `Your songs · ${radio.qi + 1} of ${n}` : [s.where, s.codec].filter(Boolean).join(' · ') || 'World radio'; if (radio.state === 'tuning') sub = (songs ? 'Starting · ' : 'Tuning · ') + sub; }
+    $('rdPower').setAttribute('aria-pressed', String(on));
+    document.querySelectorAll('[data-rsrc]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.rsrc === radio.src)));
+    $('rdName').textContent = name; $('rdSub').textContent = sub; $('rdMsg').textContent = radio.msg;
+    $('rdPrev').disabled = $('rdNext').disabled = !on || (songs ? n < 2 : !radio.stations);
+    $('rdAdd').hidden = !songs; $('rdAdd').textContent = n ? 'Add more songs' : 'Add songs from this device';
+  }
+  /* the system's media keys and notification follow the radio */
+  function mediaInfo(title, artist) {
+    const m = navigator.mediaSession; if (!m) return;
+    try { m.metadata = title && window.MediaMetadata ? new MediaMetadata({ title, artist, album: 'Moonlit Cove' }) : null; m.playbackState = title ? 'playing' : 'none'; } catch (e) { /* not everywhere */ }
+  }
+  if (navigator.mediaSession) for (const [a, fn] of [['play', () => { if (seat.on) radioOn(); }], ['pause', () => radioOff()], ['stop', () => radioOff()], ['nexttrack', () => step(1)], ['previoustrack', () => step(-1)]]) { try { navigator.mediaSession.setActionHandler(a, fn); } catch (e) { /* not everywhere */ } }
+  syncRadioUI();
+
+  /* ── clicks on things in the scene: a chair sits you in it, the radio sits you down and plays, the board opens the
+     wishes. Heard before the canvas's own handlers: a click that lands on one of them is theirs, not the sea's ── */
+  let pdown = null, hoverT = 0;
+  const pickAt = e => { const r = cv.getBoundingClientRect(); return Engine.pick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); };
+  cv.addEventListener('pointerdown', e => { pdown = e.isPrimary ? { x: e.clientX, y: e.clientY } : null; });
+  addEventListener('pointerup', e => {
+    const d = pdown; pdown = null;
+    if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+    const hit = pickAt(e); if (!hit) return;
+    down = null;                    /* (the sea's click handler, next in line, now has nothing to do) */
+    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else sit(+hit.slice(5));
+  }, true);
+  cv.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' || e.buttons) return;
+    const now = performance.now(); if (now - hoverT < 80) return; hoverT = now;
+    const hit = ready && st.entered && !rd.on && !car.on ? pickAt(e) : null;
+    document.body.classList.toggle('pick-hover', !!hit && hit !== 'chair' + (seat.on ? seat.i : -1));
+  });
+  /* the van drives round the board, as it does round everything else at the camp */
+  campObs.push([Layout.board.x, Layout.board.z, 0.9, 'board']);
+
+  /* dots on the board and the chairs (and the radio, while you sit) */
+  const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(0)], ['chair1', 'Sit', 'Sit in this chair', () => sit(1)], ['radio', 'Radio', 'Switch the radio on or off', radioToggle]].map(([key, label, aria, fn]) => {
+    const s = document.createElement('button'); s.type = 'button'; s.className = 'spot extra'; s.setAttribute('aria-label', aria);
+    s.innerHTML = `<span class="lbl">${esc(label)}</span><i></i>`; s.addEventListener('click', e => { e.stopPropagation(); fn(); }); spots.appendChild(s);
+    return { key, el: s };
+  });
+  function placeExtraSpots() {
+    const A = Engine.propAnchors();
+    for (const x of extraSpots) {
+      const p = Engine.project(A[x.key]), want = x.key === 'radio' ? seat.on : !seat.on && !st.chapter;
+      const vis = want && !rd.on && !car.on && Math.abs(walk.x) < 30 && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
+    }
+  }
+
+  /* every frame, after the scene is drawn: the seated view, the board's light, the radio's dial, the dots */
+  function extras(dt) {
+    if (!wish.started) startWishes();
+    /* opening something else, or taking the van, gets you up out of the chair */
+    if (seat.on && (rd.on || car.on || st.chapter)) { leaveSeat(); if (!rd.on && !st.chapter) goView('wide'); }
+    if (seat.on) { const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a; st.to = seatCam(); }
+    if (st.chapter !== 'wishes' && $('drawer').classList.contains('wishes-mode')) $('drawer').classList.remove('wishes-mode');
+    wish.look += ((st.chapter === 'wishes' ? 1 : 0) - wish.look) * Math.min(1, dt * 1.5); Engine.setBoardLook(wish.look);
+    /* the dial lights while it plays (and flickers while it tunes); the needle swings to the station */
+    radio.dial += (radio.dialT - radio.dial) * Math.min(1, dt * 3);
+    const glow = radio.on ? (radio.state === 'playing' ? 1 : 0.55 + 0.25 * Math.sin(performance.now() / 70)) : 0;
+    radio.glow += (glow - radio.glow) * Math.min(1, dt * 6);
+    Engine.setRadio(radio.glow * 0.8 / Math.max(0.05, (st.S && st.S.exposure) || 1), radio.dial);     /* (a warm glow, not a glare: night exposure is high) */
+    const duck = radio.on && radio.state === 'playing' ? 0.55 : 1;
+    if (sound.amb && sound.amb.duck && (radio.duckFor !== sound.amb || radio.duckK !== duck)) { radio.duckFor = sound.amb; radio.duckK = duck; sound.amb.duck(duck); }
+    placeExtraSpots();
+  }
+
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body };
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick });
 })();

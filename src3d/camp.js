@@ -1,6 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    camp.js — rug, table, cushions, lanterns, string lights,
-   camper van, campfire with coffee, chairs, driftwood, bottle.
+   camper van, campfire with coffee, chairs, driftwood, bottle,
+   the wish board and the radio on the table.
    ───────────────────────────────────────────────────────────── */
 const Camp = (() => {
   const T = THREE, TAU = Math.PI * 2;
@@ -140,6 +141,7 @@ void main(){
     refs.candles.push(jar.material);
     /* the menu: the whole résumé, bound in linen, lying closed by the reader's seat */
     { const bg = grp(0, 0.4283, 0.1, 0); g.add(bg); refs.book = Book.build(bg, { W: 0.2, H: 0.28, cloth: '#22392f', ribbon: '#b0832f', T: 0.011 }); refs.bookGroup = bg; }
+    refs.table = tg;
     }
     refs.dyn.push({ o: tg, kind: 'slide', half: 0.42, tip: 0.22, candle: true });
     /* floor cushions & pouf */
@@ -570,7 +572,9 @@ void main(){
       const m = Mats.lit({ map: paintT[idx], roughness: 0.72 });
       const g = adirondack(m); g.position.set(ch.x, 0, ch.z); g.rotation.y = ry; root.add(g); chs.push(g);
       refs.dyn.push({ o: g, kind: 'tip', half: 0.45, tip: 1.3 });
+      g.userData.pick = 'chair' + idx;                              /* a click on either chair sits you in it */
     });
+    refs.chairs = chs;
     /* a plaid throw over the first chair, a striped cushion and a guitar at the second */
     throwOver(chs[0], Mats.tex(Paint.plaid(), { repeat: true }));
     /* a log round beside the first chair, with the journal on it */
@@ -628,6 +632,82 @@ void main(){
     refs.dyn.push({ o: bg, kind: 'float', half: 0.1, tip: 0.0, seaward: true });
   }
 
+  /* ── the wish board: a corkboard between two driftwood posts under a little plank roof, to the right of the fire.
+     Its face is a canvas the page paints with the visitors' wishes, pinned up as paper notes; a small lamp hangs
+     under the eave so they can still be read after dark ── */
+  function wishBoard(root, refs) {
+    const B = Layout.board, g = grp(B.x, 0, B.z, B.rot); root.add(g); g.userData.pick = 'board';
+    const W = 1.5, H = 0.94, Y = 1.24, PX = W / 2 + 0.085, RY = 2.055, SL = 0.36, RUN = 0.42;   /* cork size and centre; posts; ridge, pitch and reach of the roof */
+    const dw = Mats.lit({ map: Mats.tex(Paint.driftwood(), { repeat: true }), roughness: 0.95 });
+    for (const x of [-PX, PX]) g.add(at(mesh(new T.BoxGeometry(0.09, 2.04, 0.09), dw), x, 1.02, 0));
+    g.add(at(mesh(new T.BoxGeometry(2 * PX + 0.16, 0.07, 0.08), dw), 0, 1.99, 0));                 /* the lintel the roof rests on */
+    /* the cork: its face is the painted canvas, its edges and back plain cork, in a dark wooden frame */
+    const cv = document.createElement('canvas'); cv.width = 1600; cv.height = Math.round(1600 * H / W);
+    const tex = Mats.tex(cv, { aniso: 8 }), face = Mats.lit({ map: tex, emissive: new T.Color(1, 1, 1), emissiveMap: tex, emissiveIntensity: 0, roughness: 0.92 });
+    const cork = L('#9c7148', { roughness: 0.95 }), frameM = L('#5e4430', { roughness: 0.8 });
+    g.add(at(mesh(new T.BoxGeometry(W, H, 0.03), [cork, cork, cork, cork, face, cork]), 0, Y, 0));
+    for (const s of [-1, 1]) {
+      g.add(at(mesh(new T.BoxGeometry(W + 0.12, 0.06, 0.045), frameM), 0, Y + s * (H / 2 + 0.03), 0.004));
+      g.add(at(mesh(new T.BoxGeometry(0.06, H, 0.045), frameM), s * (W / 2 + 0.03), Y, 0.004));
+    }
+    /* the roof: two plank slopes meeting over the lintel, reaching out front and back to keep the rain off */
+    const roofM = Mats.lit({ map: Mats.tex(Paint.wood(83, ['#5a4535', '#4e3b2c', '#634c39', '#553f30'], 6), { repeat: true }), roughness: 0.9 });
+    for (const s of [-1, 1]) { const r = mesh(new T.BoxGeometry(2 * PX + 0.36, 0.028, RUN / Math.cos(SL) + 0.03), roofM); r.rotation.x = s * SL; at(r, 0, RY - RUN / 2 * Math.tan(SL), s * RUN / 2); g.add(r); }
+    { const ridge = mesh(new T.CylinderGeometry(0.022, 0.022, 2 * PX + 0.38, 8), roofM); ridge.rotation.z = Math.PI / 2; at(ridge, 0, RY + 0.012, 0); g.add(ridge); }
+    /* a small lamp on a wire under the front eave */
+    const iron = L('#26201c', { roughness: 0.55, metalness: 0.4 }), lamp = glow(1.0, 0.55, 0.22), ly = 1.8, lz = 0.27;
+    g.add(at(mesh(new T.CylinderGeometry(0.003, 0.003, 0.1, 4), iron, false), 0, ly + 0.11, lz));
+    g.add(at(mesh(new T.ConeGeometry(0.05, 0.04, 6), iron), 0, ly + 0.065, lz));
+    g.add(at(mesh(new T.CylinderGeometry(0.032, 0.036, 0.085, 6), lamp, false), 0, ly, lz));
+    g.add(at(mesh(new T.CylinderGeometry(0.042, 0.042, 0.012, 6), iron), 0, ly - 0.048, lz));
+    /* a ledge under the notes: a pad of blank ones, a pencil, a tin of pins */
+    const ty = Y - H / 2 - 0.06;
+    g.add(at(mesh(new T.BoxGeometry(W + 0.06, 0.022, 0.1), frameM), 0, ty - 0.011, 0.05));
+    { const pad = mesh(new T.BoxGeometry(0.11, 0.014, 0.075), L('#f1e6c4', { roughness: 0.9 })); pad.rotation.y = 0.08; at(pad, -0.52, ty + 0.007, 0.058); g.add(pad);
+      const pen = mesh(new T.CylinderGeometry(0.0055, 0.0055, 0.16, 6), L('#d9a630', { roughness: 0.6 })); pen.rotation.set(0, 0.25, Math.PI / 2); at(pen, 0.42, ty + 0.0055, 0.066); g.add(pen);
+      g.add(at(mesh(new T.CylinderGeometry(0.028, 0.028, 0.02, 14), new T.MeshStandardMaterial({ color: C('#9aa3ab'), roughness: 0.3, metalness: 0.85 })), -0.3, ty + 0.01, 0.055)); }
+    refs.board = { group: g, W, H, Y,
+      paint(fn) { fn(cv); tex.needsUpdate = true; },
+      /* k: how brightly the paper reads (it carries a little light of its own, like the books); the lamp's glow */
+      light(k, lampK, amb) { face.emissiveIntensity = k; lamp.color.setRGB(1.0 * lampK + amb[0] * 0.5, 0.55 * lampK + amb[1] * 0.5, 0.22 * lampK + amb[2] * 0.5); } };
+    refs.board.paint(c => Paint.wishBoard(c, [], {}));
+    refs.dyn.push({ o: g, kind: 'tip', half: 0.3, tip: 1.3 });
+  }
+
+  /* ── a little valve radio on the picnic table, two-tone like the van: a speaker grille, a dial that glows amber
+     while it plays (its needle moves as it tunes), two knobs and a chrome handle ── */
+  function radio(refs) {
+    const g = grp(-0.47, 0.425, 0.25, 0.5); refs.table.add(g); g.userData.pick = 'radio';
+    const RW = 0.24, RH = 0.14, RD = 0.085, bv = 0.008, cy = RH / 2 + bv, fz = RD / 2 + bv + 0.0006;
+    const caseM = Mats.litP({ color: C('#2f6158'), roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.18 });
+    g.add(at(mesh(extrude(rshape(-RW / 2, -RH / 2, RW / 2, RH / 2, [0.028, 0.028, 0.028, 0.028]), RD, bv), caseM), 0, cy, 0));
+    const cream = L('#e9dcc0', { roughness: 0.5 }), chrome = new T.MeshStandardMaterial({ color: C('#d6d9dc'), roughness: 0.2, metalness: 0.95 });
+    g.add(at(mesh(new T.ShapeGeometry(rshape(-0.105, -0.052, 0.105, 0.052, [0.016, 0.016, 0.016, 0.016])), cream, false), 0, cy, fz));
+    /* the speaker: dark cloth behind chrome bars */
+    g.add(at(mesh(new T.PlaneGeometry(0.1, 0.078), L('#3a2f26', { roughness: 0.95 }), false), -0.047, cy + 0.003, fz + 0.0004));
+    for (let i = 0; i < 6; i++) g.add(at(mesh(new T.BoxGeometry(0.098, 0.004, 0.004), chrome, false), -0.047, cy - 0.031 + i * 0.0136, fz + 0.002));
+    /* the dial: a printed scale that lights up, a red needle */
+    const dc = document.createElement('canvas'); dc.width = 256; dc.height = 160;
+    { const a = dc.getContext('2d'); a.fillStyle = '#e8c88a'; a.fillRect(0, 0, 256, 160);
+      a.fillStyle = 'rgba(120,70,20,0.18)'; a.fillRect(0, 0, 256, 18); a.fillRect(0, 142, 256, 18);
+      a.fillStyle = '#4a2a12'; for (let i = 0; i <= 40; i++) a.fillRect(18 + i * 5.5, 38, 1.6, i % 5 ? 12 : 24);
+      a.font = `600 19px Fraunces, Georgia, serif`; a.textAlign = 'center';
+      ['55', '60', '70', '80', '100', '120', '140', '160', '170'].forEach((t, i) => a.fillText(t, 18 + i * 27.5, 90));
+      a.font = `500 15px 'JetBrains Mono', monospace`; a.fillText('MEDIUM WAVE · SHORT WAVE', 128, 124); }
+    const dt = Mats.tex(dc), dialM = Mats.lit({ map: dt, emissive: new T.Color(1, 0.7, 0.38), emissiveMap: dt, emissiveIntensity: 0, roughness: 0.35 });
+    g.add(at(mesh(new T.PlaneGeometry(0.078, 0.049), dialM, false), 0.05, cy + 0.012, fz + 0.0005));
+    for (const [w, h, x, y] of [[0.084, 0.003, 0.05, cy + 0.038], [0.084, 0.003, 0.05, cy - 0.014], [0.003, 0.055, 0.008, cy + 0.012], [0.003, 0.055, 0.092, cy + 0.012]]) g.add(at(mesh(new T.BoxGeometry(w, h, 0.003), chrome, false), x, y, fz + 0.0015));
+    const needleM = L('#b8261c', { roughness: 0.4, emissive: C('#ff3a20'), emissiveIntensity: 0 }), needle = mesh(new T.BoxGeometry(0.0016, 0.042, 0.001), needleM, false);
+    at(needle, 0.05, cy + 0.012, fz + 0.0012); g.add(needle);
+    for (const x of [0.026, 0.074]) { const k = mesh(new T.CylinderGeometry(0.011, 0.012, 0.012, 16), cream); k.rotation.x = Math.PI / 2; at(k, x, cy - 0.031, fz + 0.006); g.add(k); }
+    /* the carrying handle */
+    { const h = mesh(new T.TorusGeometry(0.075, 0.0045, 6, 20, Math.PI), chrome); h.scale.y = 0.55; at(h, 0, RH + 2 * bv, 0); g.add(h);
+      for (const x of [-0.075, 0.075]) g.add(at(mesh(new T.CylinderGeometry(0.008, 0.009, 0.008, 10), chrome), x, RH + 2 * bv + 0.002, 0)); }
+    refs.radio = { group: g,
+      /* glow: how lit the dial is (0 off); dial: where the needle sits along the scale, 0 to 1 */
+      set(glow, dial) { dialM.emissiveIntensity = glow; needleM.emissiveIntensity = glow * 0.5; needle.position.x = 0.014 + 0.072 * dial; } };
+  }
+
   /* string-light pools, top-down, sqrt-encoded (R channel) */
   function poolMap(bulbs) {
     const rect = { x: -7.5, z: -8.5, w: 17, d: 10.5 }, res = 14;
@@ -646,6 +726,9 @@ void main(){
   function build(root, U) {
     const refs = { candles: [], lanterns: [], dyn: [], vanHead: [], vanTail: [], vanWheels: [] };
     picnic(root, refs); lanterns(root, refs); stringLights(root, refs, U); van(root, refs, U); campfire(root, refs); chairs(root, refs); woodpile(root, refs); shoreBits(root, refs);
+    wishBoard(root, refs); radio(refs);
+    /* what a click in the scene can land on: the two chairs, the radio, the wish board */
+    refs.pick = [...refs.chairs, refs.radio.group, refs.board.group];
     refs.pool = poolMap(refs.bulbs);
     return refs;
   }

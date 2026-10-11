@@ -384,5 +384,82 @@ const Paint = (() => {
     a.fillStyle = 'rgba(25,12,5,0.85)'; a.fillRect(W - 92, 0, 26, H); a.fillStyle = 'rgba(255,220,170,0.08)'; a.fillRect(W - 92, 0, 3, H);
     return c;
   }
-  return { menuCover, journalCover, rug, wood, stripes, wicker, bark, frond, leafCard, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
+  /* ── the wish board's face: cork with paper notes pinned to it, newest first, each in handwriting with who left
+     it and when, to the second. notes = [{ id, text, name, when, local }]; info = { total, local } ── */
+  const PAPERS = ['#f6efd9', '#fbe7a1', '#dfeaf2', '#f5dde0', '#e4efd6', '#f3e3c8'], PINS = ['#c8443a', '#2f6db0', '#d9a62e', '#3c8a5a', '#8a4fa0', '#e6e1d6'], INKS = ['#22264a', '#2c1d14', '#1f3a5a'];
+  const hashStr = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const hand = (wt, px) => `${wt} ${px}px Caveat, 'Segoe Print', 'Bradley Hand', cursive`;
+  let corkC = null;
+  /* cork: warm granules, a few old pin holes, darker toward the frame (painted once, it never changes) */
+  function cork(w, h) {
+    const c = cv(w, h), a = c.getContext('2d'), r = rng(717);
+    a.fillStyle = '#c79b5c'; a.fillRect(0, 0, w, h);
+    for (let i = 0; i < w * h / 24; i++) { const s = 1 + r() * 2.6; a.fillStyle = r() < 0.5 ? `rgba(112,80,38,${0.12 + r() * 0.3})` : `rgba(238,206,150,${0.1 + r() * 0.28})`; a.fillRect(r() * w, r() * h, s, s * (0.6 + r() * 0.8)); }
+    for (let i = 0; i < 260; i++) { a.fillStyle = `rgba(86,60,26,${0.2 + r() * 0.3})`; a.beginPath(); a.ellipse(r() * w, r() * h, 1.5 + r() * 3, 1 + r() * 2.5, r() * TAU, 0, TAU); a.fill(); }
+    for (let i = 0; i < 70; i++) { a.fillStyle = 'rgba(36,24,8,0.55)'; a.beginPath(); a.arc(r() * w, r() * h, 1.6, 0, TAU); a.fill(); }
+    a.fillStyle = rad(a, w / 2, h / 2, Math.hypot(w, h) * 0.6, [[0.55, 'rgba(52,34,10,0)'], [1, 'rgba(52,34,10,0.4)']]); a.fillRect(0, 0, w, h);
+    return c;
+  }
+  /* words to lines no wider than w; a word wider than a line (or a script written without spaces) breaks by letters */
+  function wrapText(a, text, w) {
+    const out = []; let line = '';
+    for (const word of text.split(' ')) {
+      const t = line ? line + ' ' + word : word;
+      if (a.measureText(t).width <= w) { line = t; continue; }
+      if (line) out.push(line);
+      if (a.measureText(word).width <= w) { line = word; continue; }
+      let part = ''; for (const ch of word) { if (part && a.measureText(part + ch).width > w) { out.push(part); part = ch; } else part += ch; }
+      line = part;
+    }
+    if (line) out.push(line);
+    return out;
+  }
+  function pin(a, x, y, col) {
+    a.fillStyle = 'rgba(20,10,4,0.35)'; a.beginPath(); a.ellipse(x + 5, y + 7, 10, 6, 0.4, 0, TAU); a.fill();
+    a.fillStyle = rad(a, x, y, 12, [[0, 'rgba(255,255,255,0.95)'], [0.32, col], [1, col]], -4, -4); a.beginPath(); a.arc(x, y, 11, 0, TAU); a.fill();
+    a.strokeStyle = 'rgba(0,0,0,0.3)'; a.lineWidth = 1.2; a.stroke();
+  }
+  function note(a, cx, cy, w, h, n) {
+    const r = rng(hashStr(String(n.id || n.text)) % 99991 + 1), rot = (r() - 0.5) * 0.09;
+    a.save(); a.translate(cx + (r() - 0.5) * 22, cy + (r() - 0.5) * 16); a.rotate(rot);
+    const ink = INKS[Math.floor(r() * INKS.length)];
+    a.shadowColor = 'rgba(28,16,6,0.5)'; a.shadowBlur = 16; a.shadowOffsetX = 4; a.shadowOffsetY = 8;
+    a.fillStyle = PAPERS[Math.floor(r() * PAPERS.length)]; a.fillRect(-w / 2, -h / 2, w, h); a.shadowColor = 'transparent';
+    a.fillStyle = lin(a, 0, -h / 2, 0, h / 2, [[0, 'rgba(255,255,255,0.25)'], [0.7, 'rgba(255,255,255,0)'], [1, 'rgba(90,60,30,0.12)']]); a.fillRect(-w / 2, -h / 2, w, h);
+    if (r() < 0.35) { a.strokeStyle = 'rgba(70,110,160,0.2)'; a.lineWidth = 1.5; for (let y = -h / 2 + 50; y < h / 2 - 70; y += 30) { a.beginPath(); a.moveTo(-w / 2 + 10, y); a.lineTo(w / 2 - 10, y); a.stroke(); } }
+    /* the wish, as large as it fits */
+    const tw = w - 48, th = h - 112; let sz = 46, lines = [];
+    for (; sz >= 22; sz -= 2) { a.font = hand(600, sz); lines = wrapText(a, n.text, tw); if (lines.length * sz * 1.02 <= th) break; }
+    sz = Math.max(sz, 22); a.font = hand(600, sz);
+    const fit = Math.max(1, Math.floor(th / (sz * 1.02)));
+    if (lines.length > fit) { lines = lines.slice(0, fit); lines[fit - 1] = lines[fit - 1].replace(/\s*\S*$/, '') + '…'; }
+    a.fillStyle = ink; a.textAlign = 'left'; a.textBaseline = 'alphabetic';
+    lines.forEach((l, i) => a.fillText(l, -w / 2 + 24, -h / 2 + 34 + sz * 0.85 + i * sz * 1.02));
+    /* who, and when (to the second); a stamp on the ones kept only in this browser */
+    const room = tw - (n.local ? 170 : 0); let ns = 30; a.font = hand(600, ns);
+    while (ns > 18 && a.measureText('— ' + n.name).width > room) a.font = hand(600, ns -= 2);
+    a.fillText('— ' + n.name, -w / 2 + 24, h / 2 - 44);
+    a.font = `400 19px 'JetBrains Mono', Menlo, monospace`; a.fillStyle = 'rgba(64,50,36,0.9)'; a.fillText(n.when || '', -w / 2 + 26, h / 2 - 16);
+    if (n.local) { a.save(); a.translate(w / 2 - 100, h / 2 - 36); a.rotate(-0.08); a.strokeStyle = a.fillStyle = 'rgba(176,52,40,0.62)'; a.lineWidth = 2; a.strokeRect(-80, -16, 160, 28); a.font = `500 13px 'JetBrains Mono', Menlo, monospace`; a.textAlign = 'center'; a.fillText('ONLY ON THIS DEVICE', 0, 3); a.restore(); }
+    pin(a, 0, -h / 2 + 15, PINS[Math.floor(r() * PINS.length)]);
+    a.restore();
+  }
+  function wishBoard(c, notes = [], info = {}) {
+    const W = c.width, H = c.height, a = c.getContext('2d');
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    if (!corkC || corkC.width !== W || corkC.height !== H) corkC = cork(W, H);
+    a.drawImage(corkC, 0, 0);
+    const cols = 3, rows = 3, top = 168, gx = 40, cw = (W - 2 * gx) / cols, ch = (H - top - 24) / rows, shown = notes.slice(0, cols * rows), total = Math.max(info.total || 0, notes.length);
+    /* the heading, on a card of its own */
+    a.save(); a.translate(W / 2, 84); a.rotate(-0.012);
+    a.shadowColor = 'rgba(28,16,6,0.45)'; a.shadowBlur = 14; a.shadowOffsetY = 6; a.fillStyle = '#e9d7b2'; a.fillRect(-300, -58, 600, 116); a.shadowColor = 'transparent';
+    a.textAlign = 'center'; a.fillStyle = '#3b2a1c'; a.font = hand(700, 74); a.fillText('Wishes', 0, 10);
+    a.fillStyle = '#6b4f36'; a.font = hand(500, 30);
+    a.fillText(info.local ? 'kept only on this device' : total > shown.length ? `${total} so far · the newest are pinned here` : 'from everyone who let a lantern go', 0, 46);
+    pin(a, -274, -38, '#c8443a'); pin(a, 274, -38, '#2f6db0'); a.restore();
+    shown.forEach((n, i) => note(a, gx + (i % cols + 0.5) * cw, top + (Math.floor(i / cols) + 0.5) * ch, cw - 52, ch - 30, n));
+    if (!shown.length) note(a, W / 2, top + (H - top) / 2 - 12, 560, 250, { id: 'empty', text: 'No wishes yet. Let a lantern go, and pin the first one here.', name: 'the cove', when: '' });
+    return c;
+  }
+  return { menuCover, journalCover, wishBoard, rug, wood, stripes, wicker, bark, frond, leafCard, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
 })();

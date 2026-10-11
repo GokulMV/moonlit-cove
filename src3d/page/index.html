@@ -134,6 +134,46 @@
     <div id="cBody"></div>
   </section>
 
+  <!-- a sky lantern carries a wish: asked here, then pinned to the board by the fire -->
+  <div class="wish-veil" id="wishVeil" hidden></div>
+  <section class="wish glass" id="wish" hidden role="dialog" aria-modal="true" aria-labelledby="wTitle" aria-describedby="wNote">
+    <p class="eyebrow">A sky lantern</p>
+    <h2 id="wTitle">What do you wish for?</h2>
+    <form id="wForm" novalidate>
+      <label class="sr-only" for="wText">Your wish</label>
+      <textarea id="wText" maxlength="160" rows="3" placeholder="I wish…" autocomplete="off"></textarea>
+      <div class="w-row">
+        <label class="sr-only" for="wName">Your name, if you like</label>
+        <input id="wName" type="text" maxlength="32" placeholder="Your name (optional)" autocomplete="nickname">
+        <span class="w-count" id="wCount">0 / 160</span>
+      </div>
+      <p class="w-note" id="wNote">Wishes are pinned to the board by the fire, where everyone who visits can read them. Keep yours kind and plain: no links or contact details.</p>
+      <p class="w-err" id="wErr" role="alert" hidden></p>
+      <div class="w-actions"><button type="button" id="wCancel">Cancel</button><button type="submit" class="primary" id="wGo">Let it go</button></div>
+    </form>
+  </section>
+
+  <!-- sitting by the fire: stand up again, and the radio on the picnic table -->
+  <div class="seathud" id="seatHud" hidden>
+    <button class="r-close glass" id="bStand" type="button">Stand up <kbd>Esc</kbd></button>
+    <p class="seat-hint" id="seatHint">Drag to look around · the radio on the table is yours</p>
+    <section class="radio glass" id="radio" aria-label="The radio on the picnic table">
+      <div class="rd-top">
+        <button class="rd-power" id="rdPower" type="button" aria-pressed="false" title="Radio on or off" aria-label="Radio on or off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg></button>
+        <div class="rd-now" aria-live="polite"><b id="rdName">The radio</b><span id="rdSub">Off</span></div>
+        <button class="rd-skip" id="rdPrev" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14M18 6l-8 6 8 6V6z"/></svg></button>
+        <button class="rd-skip" id="rdNext" type="button" aria-label="Next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5v14M6 6l8 6-8 6V6z"/></svg></button>
+      </div>
+      <div class="rd-bottom">
+        <div class="seg" role="radiogroup" aria-label="What the radio plays"><button type="button" role="radio" data-rsrc="world" aria-checked="true">World radio</button><button type="button" role="radio" data-rsrc="songs" aria-checked="false">Your songs</button></div>
+        <label class="rd-vol" for="rdVol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg><input id="rdVol" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="Radio volume"></label>
+      </div>
+      <p class="rd-msg" id="rdMsg" aria-live="polite"></p>
+      <button class="rd-add" id="rdAdd" type="button" hidden>Add songs from this device</button>
+      <input id="rdFile" type="file" accept="audio/*" multiple hidden>
+    </section>
+  </div>
+
   <div class="intro" id="intro">
     <div class="intro-card">
       <p class="eyebrow">Moonlit Cove · a portfolio</p>
