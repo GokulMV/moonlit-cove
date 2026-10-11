@@ -35,6 +35,8 @@ const Layout = (() => {
   const grate = { x: 6.94, z: -4.55, rot: 0.2 };     /* grill straddling the fire ring */
   const chairs = [{ x: 5.7, z: -3.1, face: [6.9, -4.5] }, { x: 8.4, z: -3.5, face: [6.9, -4.5] }];
   const driftwood = { x: 7.0, z: -6.05, len: 2.6, rot: 0.15 };
+  /* the wish board: a corkboard on two posts to the right of the fire, its face turned to the chairs and the camp */
+  const board = { x: 10.5, z: -3.7, rot: -1.07 };
 
   const van = { x: -7.6, z: -3.5, rot: Math.PI + 0.3 };
   const lanterns = [[-1.0, -1.65, 1.0], [2.35, -3.85, 0.9], [-6.1, -0.85, 0.8]];
@@ -73,5 +75,5 @@ const Layout = (() => {
   };
 
   return { shoreZ, shoreDZ, vegZ, SH, VG, head, wrap, P, camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood,
-           van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots };
+           van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots, board };
 })();

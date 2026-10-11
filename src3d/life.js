@@ -118,9 +118,10 @@ varying float vY; varying float vPh; varying float vK; varying vec3 vN; varying 
 void main(){
   float fl = 0.82 + 0.1*sin(uTime*13.0 + vPh*20.0) + 0.08*sin(uTime*29.0 + vPh*7.0);
   float rib = 0.85 + 0.15*smoothstep(0.0, 0.08, abs(fract(atan(vN.z, vN.x)*1.9) - 0.5));
-  vec3 c = vec3(1.0, 0.5, 0.18)*(1.6 + 5.5*pow(1.0 - vY, 2.0))*fl*rib;
+  /* a warm paper glow, brightest low down by the flame; kept gentle, so a sky full of them never glares */
+  vec3 c = vec3(1.0, 0.5, 0.18)*(0.5 + 1.9*pow(1.0 - vY, 2.0))*fl*rib;
   float d = distance(vW, cameraPosition);
-  c *= 1.0/(1.0 + d*0.004);
+  c *= 1.0/(1.0 + d*0.006);
   gl_FragColor = vec4(c*vK, 1.0);
 }`;
   function lanterns(root) {

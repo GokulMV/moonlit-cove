@@ -32,7 +32,9 @@ const Ambience = (() => {
     /* the whole mix is centred on 111 Hz: a gentle lift there, and the very top softened */
     const warm = F('peaking', 111, 0.9); warm.gain.value = 3.5;
     const soft = F('highshelf', 6500, 0.7); soft.gain.value = -3;
-    master.connect(warm); warm.connect(soft); soft.connect(lim); lim.connect(trim); trim.connect(clip); clip.connect(ctx.destination);
+    /* the bed steps back a little while the radio plays: a gain of its own, so it never fights the fades or the volume */
+    const duckG = G(1), duck = k => duckG.gain.setTargetAtTime(k, ctx.currentTime, 0.5);
+    master.connect(duckG); duckG.connect(warm); warm.connect(soft); soft.connect(lim); lim.connect(trim); trim.connect(clip); clip.connect(ctx.destination);
     const ch = { ocean: G(1), forest: G(1), fire: G(1), insects: G(1), weather: G(1), tone: G(1) };
     Object.values(ch).forEach(g => g.connect(master));
     let enabled = { ocean: true, forest: true, fire: true, insects: true, weather: true, tone: true }, on = false;
@@ -245,7 +247,7 @@ const Ambience = (() => {
       const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; const f = F('lowpass', 300, 0.8), g = G(0); chain(s, f, g, master);
       g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2 * k, t + 0.01); g.gain.setTargetAtTime(0, t + 0.03, 0.08); s.start(t); s.stop(t + 0.5);
     }
-    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, splash: (t, k) => splash(t ?? ctx.currentTime, k || 1), plop: (k, pan) => plop(ctx.currentTime + 0.02, k, pan), page, engine, horn, thud,
+    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, splash: (t, k) => splash(t ?? ctx.currentTime, k || 1), plop: (k, pan) => plop(ctx.currentTime + 0.02, k, pan), page, engine, horn, thud,
       setLevel: v => { opts.level = v; if (on) master.gain.setTargetAtTime(v, ctx.currentTime, 0.2); },
       get enabled() { return enabled; }, get on() { return on; }, master, channels: ch };
   }
