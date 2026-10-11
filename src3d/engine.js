@@ -11,11 +11,20 @@ const Engine = (() => {
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
   let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = 0, skyMesh = null, groundMesh = null;
   const cork = { k: 0, to: 0, t0: 0, p0: null, r0: null };
-  let envSkyMat, envScene, pmrem, envRT = null, envKey = '', n3Tex, noiseT, trackCv, trackCx, trackTex, trackDirty = false;
+  let envSkyMat, envScene, pmrem, n3Tex, noiseT, trackCv, trackCx, trackTex, trackDirty = false;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const hash = x => { const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
-  const v3 = (a) => new T.Vector3(a[0], a[1], a[2]);
+  /* the environment light (see envStep): a small cube of the sky, prefiltered, rebuilt one face a frame at most every
+     ENV_EVERY seconds and only when the sky has changed enough to see, then blended in over ENV_FADE seconds */
+  const ENV_SIZE = 128, ENV_EVERY = 1.6, ENV_FADE = 1.4;
+  const env = { cube: null, cam: null, out: null, from: null, to: null, mat: null, qs: null, qc: null, face: -1, at: -1e9, k: 1, want: new Float64Array(8), built: new Float64Array(8).fill(NaN) };
+  /* scratch for render(): a frame makes no garbage of its own */
+  const R3 = { key: new T.Vector3(), top: new T.Vector3(), side: new T.Vector3(), right: new T.Vector3(), fc: new T.Vector3() }, haze4 = new T.Vector4();
+  const Lw = { string: 0, lantern: 0, van: 0, fairy: 0 }, Fw = { i: 0, smoke: 0, steam: 0 };
+  const fxP = { smokeLo: new T.Vector3(), smokeHi: new T.Vector3(), steamLo: new T.Vector3(), steamHi: new T.Vector3(), bfly: [0, 0, 0] };
+  const ppFire = { dbg: 0, I: 0, flick: 0, t: 0, fc: R3.fc, n3: null }, pp = {};
+  const setV = (u, a) => u.value.set(a[0], a[1], a[2]);
 
   function vanFlicker(t) {
     const k = Math.floor(t * 8), f = t * 8 - k, dip = x => { const h = hash(x); return h > 0.88 ? (h - 0.88) * 5.5 : 0; };
@@ -94,7 +103,9 @@ const Engine = (() => {
       R.setRenderTarget(null); R.render(qs, qc);
       sync();
     }
-    return { resize, render };
+    /* for warming up: every pass's material, and a way to compile one */
+    const compile = m => { quad.material = m; R.compile(qs, qc); };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire], compile };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -126,6 +137,83 @@ const Engine = (() => {
     scene.overrideMaterial = depthOnly;
     R.setRenderTarget(s.rt); R.clear(true, true, false); R.render(scene, s.cam);
     scene.overrideMaterial = null; R.shadowMap.autoUpdate = au; R.setRenderTarget(null);
+  }
+
+  /* ── the environment light. Every glossy thing in the cove (the van's paint and windows, the kettle, the bottle)
+     reflects the sky through a prefiltered cube map of it. Making that map is the dearest thing a frame can do, and
+     at a thousand times the speed of life the sky changes every few frames, so:
+       · it is remade only when the sun, the moon, the phase or the clouds have changed enough to see, and at most
+         every ENV_EVERY seconds;
+       · one face of the cube is drawn per frame, and the prefiltering takes a seventh frame;
+       · every target is made once, and the map the materials sample is never swapped for another one (a new
+         texture has three look over every material again);
+       · the new map is blended in over ENV_FADE seconds, so the light on things never pops ── */
+  function envInit() {
+    env.cube = new T.WebGLCubeRenderTarget(ENV_SIZE, { type: T.HalfFloatType });
+    env.cam = new T.CubeCamera(0.1, 1000, env.cube); env.cam.updateMatrixWorld(true);
+    /* three prefiltered maps of one size: the one the materials sample, and the two it is blended between */
+    env.out = pmrem.fromCubemap(env.cube.texture); env.from = pmrem.fromCubemap(env.cube.texture); env.to = pmrem.fromCubemap(env.cube.texture);
+    env.mat = new T.ShaderMaterial({ uniforms: { uA: { value: null }, uB: { value: null }, uK: { value: 0 } }, vertexShader: GLSL.QUAD_VS,
+      fragmentShader: 'uniform sampler2D uA, uB; uniform float uK; void main(){ ivec2 p = ivec2(gl_FragCoord.xy); gl_FragColor = mix(texelFetch(uA, p, 0), texelFetch(uB, p, 0), uK); }',
+      depthTest: false, depthWrite: false, blending: T.NoBlending });
+    env.qs = new T.Scene(); env.qc = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    { const q = new T.Mesh(new T.PlaneGeometry(2, 2), env.mat); q.frustumCulled = false; env.qs.add(q); }
+    scene.environment = env.out.texture;
+  }
+  const envFace = i => { R.setRenderTarget(env.cube, i); R.render(envScene, env.cam.children[i]); };
+  function envPass(a, b, k, dst) { const u = env.mat.uniforms; u.uA.value = a.texture; u.uB.value = b.texture; u.uK.value = k; R.setRenderTarget(dst); R.render(env.qs, env.qc); }
+  function envStep(S, now, on) {
+    scene.environment = on ? env.out.texture : null;
+    if (!on) return;
+    /* what the map shows, coarsely: the sun and the moon to half a degree, the phase, each kind of cloud to a tenth */
+    const su = skyMat.uniforms, w = env.want, first = Number.isNaN(env.built[0]);
+    w[0] = Math.round(S.sAlt * 2); w[1] = Math.round(S.mAlt * 2); w[2] = Math.round(S.illum.fraction * 50);
+    w[3] = Math.round(su.uCirrus.value * 10); w[4] = Math.round(su.uAlto.value * 10); w[5] = Math.round(su.uCumulus.value * 10); w[6] = Math.round(su.uStratus.value * 10); w[7] = Math.round(su.uStorm.value * 10);
+    let changed = false; for (let i = 0; i < 8; i++) if (w[i] !== env.built[i]) { changed = true; break; }
+    if (env.face < 0 && changed && (first || now - env.at >= ENV_EVERY)) { env.built.set(w); env.face = 0; }
+    if (first && env.face === 0) {
+      /* the first map goes in whole, at once: there is nothing to blend from */
+      for (let i = 0; i < 6; i++) envFace(i);
+      pmrem.fromCubemap(env.cube.texture, env.out); env.face = -1; env.at = now; env.k = 1;
+    } else if (env.face >= 0 && env.face < 6) envFace(env.face++);
+    else if (env.face === 6) {
+      /* whatever shows now, even halfway through a blend, is where the next blend starts */
+      envPass(env.out, env.out, 0, env.from);
+      pmrem.fromCubemap(env.cube.texture, env.to);
+      env.face = -1; env.at = now; env.k = 0;
+    }
+    if (env.k < 1) { const k = Math.min(1, (now - env.at) / ENV_FADE); envPass(env.from, env.to, k * k * (3 - 2 * k), env.out); env.k = k; }
+    R.setRenderTarget(null);
+  }
+
+  /* ── compile every material the cove can draw before its first frame, so the first frames only draw, and nothing
+     stops to compile later on, when the butterflies come out at sunrise or a lantern goes up. Where the browser
+     compiles in parallel, everything is handed over (a slice at a time) and then only polled; elsewhere it goes a
+     couple of programs at a time, each batch finished before the next, with a frame between, so the page and its
+     loader keep breathing. Resolves once all of it is ready; anything missed simply compiles when first drawn ── */
+  function warm() {
+    const jobs = [], seen = new Set();
+    /* one job per distinct program: the material, and what about its mesh changes the program */
+    const variant = o => { const g = o.geometry || {}, a = g.attributes || {}, m = o.material;
+      return [Array.isArray(m) ? m.map(x => x.id).join(',') : m.id, o.isInstancedMesh ? (o.instanceColor ? 2 : 1) : 0, o.isSkinnedMesh ? 1 : 0, o.receiveShadow ? 1 : 0, a.color ? a.color.itemSize : 0, a.tangent ? 1 : 0, a.uv1 ? 1 : 0, g.morphAttributes ? Object.keys(g.morphAttributes).length : 0].join('|'); };
+    scene.traverse(o => { if (!o.material) return; const k = variant(o); if (!seen.has(k)) { seen.add(k); jobs.push(() => R.compile(o, camera, scene)); } });
+    post.materials.forEach(m => jobs.push(() => post.compile(m)));
+    jobs.push(() => R.compile(envScene, env.cam.children[0]), () => R.compile(env.qs, env.qc));
+    const parallel = R.extensions.has('KHR_parallel_shader_compile'), P = R.info.programs, issued = [];
+    const later = fn => requestAnimationFrame(() => setTimeout(fn, 0));
+    return new Promise(done => {
+      let i = 0;
+      const step = () => { try {
+        const n0 = P.length, t0 = performance.now();
+        while (i < jobs.length && (parallel || P.length - n0 < 2) && performance.now() - t0 < 24) { try { jobs[i](); } catch (e) { /* it compiles when first drawn instead */ } i++; }
+        const fresh = P.slice(n0); issued.push(...fresh);
+        if (!parallel) fresh.forEach(p => { try { p.getUniforms(); } catch (e) { /* reported when drawn */ } });   /* waits for this batch to finish */
+        if (i < jobs.length) return later(step);
+        const ready = () => { try { if (parallel && !issued.every(p => p.isReady())) return setTimeout(ready, 16); } catch (e) { /* draw anyway */ } done(); };
+        ready();
+      } catch (e) { done(); } };
+      step();
+    });
   }
 
   /* ── interactive sea: a click on the water raises a ripple ring and sends a swell to the beach;
@@ -373,6 +461,10 @@ const Engine = (() => {
     keyLight.target.position.set(Layout.camp.x, 0, Layout.camp.z);
     scene.add(keyLight, keyLight.target);
     hemi = new T.HemisphereLight(0xffffff, 0x000000, Math.PI); scene.add(hemi);
+    /* the lights are on the local shadow cameras' layers too (2, 3; see localShadow): those depth passes then find the
+       same lights as the main pass, instead of none, and three no longer looks every material's program over again
+       twice a frame whenever the fire is lit */
+    for (const l of [keyLight, hemi]) { l.layers.enable(2); l.layers.enable(3); }
 
     const V3 = () => new T.Vector3();
     skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() } };
@@ -386,6 +478,7 @@ const Engine = (() => {
     envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
     envScene = new T.Scene(); { const m = new T.Mesh(new T.SphereGeometry(400, 64, 32), envSkyMat); m.frustumCulled = false; envScene.add(m); }
     pmrem = new T.PMREMGenerator(R);
+    envInit();
     { const n3 = Textures.noise3(); n3Tex = new T.Data3DTexture(n3.data, n3.size, n3.size, n3.size); n3Tex.format = T.RedFormat; n3Tex.type = T.UnsignedByteType;
       n3Tex.minFilter = n3Tex.magFilter = T.LinearFilter; n3Tex.wrapS = n3Tex.wrapT = n3Tex.wrapR = T.RepeatWrapping; n3Tex.unpackAlignment = 1; n3Tex.needsUpdate = true; }
     noiseT = noiseTex;
@@ -482,11 +575,11 @@ const Engine = (() => {
       splashes = life.update(t, dt, camera.position.x, { day: S.day, twilight, calm: o.calm, realT: performance.now() / 1000, fish: o.dens ? o.dens.fish : 0.5 });
       for (const sp of splashes) { surge.ripples.push({ x: sp.x, z: sp.z, t0: o.waveT ?? t, A: 0.35 * sp.k / 0.4 }); if (surge.ripples.length > 6) surge.ripples.shift(); }
     }
-    const V = (u, a) => u.value.set(a[0], a[1], a[2]);
+    const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
     const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
-    if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(...k.bolt); else su.uBolt.value.w = 0; }
+    if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }
     V(gU.uAmb, S.amb); V(gU.uKeyDir, S.keyDir); V(gU.uKeyCol, S.keyCol); V(gU.uMoonGlit, S.moonGlit); V(gU.uSunGlit, S.sunGlit);
     gU.uDay.value = S.day; gU.uShadowK.value = S.shadowK; gU.uWaveT.value = o.waveT ?? t; Mats.U.uTime.value = t;
     gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0;
@@ -498,15 +591,13 @@ const Engine = (() => {
       for (let j = 0; j < 6; j++) { const r = surge.ripples[j]; if (r) gU.uRip.value[j].set(r.x, r.z, r.t0, r.A); else gU.uRip.value[j].set(0, 0, -1e4, 0); } }
     updateSurge(wt);
     keyLight.color.setRGB(S.keyCol[0], S.keyCol[1], S.keyCol[2]); keyLight.intensity = Math.PI;
-    keyLight.position.copy(keyLight.target.position).addScaledVector(v3(S.keyDir), 70);
-    { const su2 = skyMat.uniforms, key = [Math.round(S.sAlt * 2), Math.round(S.mAlt * 2), Math.round(S.illum.fraction * 50), ...['uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm'].map(n => su2[n].value.toFixed(1))].join('|');
-      if (o.env !== false && (key !== envKey || !envRT)) { envKey = key; skyMat.uniforms.uTime.value = t; const old = envRT; envRT = pmrem.fromScene(envScene, 0, 0.1, 1000); scene.environment = envRT.texture; if (old) old.dispose(); }
-      if (o.env === false) scene.environment = null; }
+    keyLight.position.copy(keyLight.target.position).addScaledVector(R3.key.set(S.keyDir[0], S.keyDir[1], S.keyDir[2]), 70);
+    envStep(S, performance.now() / 1000, o.env !== false);
     hemi.intensity = scene.environment ? 0 : Math.PI;
     hemi.color.setRGB(S.amb[0], S.amb[1], S.amb[2]); Mats.U.uKeyDirT.value.set(S.keyDir[0], S.keyDir[1], S.keyDir[2]).normalize(); Mats.U.uKeyColT.value.set(S.keyCol[0], S.keyCol[1], S.keyCol[2]); Mats.U.uAmbF.value.set(S.amb[0], S.amb[1], S.amb[2]); hemi.groundColor.setRGB(S.groundAmb[0], S.groundAmb[1], S.groundAmb[2]);
 
     const fireK = surge.fireOut == null ? 1 : 1 - sm01(surge.fireOut, surge.fireOut + 0.8, wt);
-    const L = Object.assign({}, o.lights), F = Object.assign({}, o.fire), vf = vanFlicker(t) * (surge.vanHit == null ? 1 : 0.35 + 0.65 * flickOut(surge.vanHit, wt, 2.0)), ff = fireFlicker(t);
+    const L = Object.assign(Lw, o.lights), F = Object.assign(Fw, o.fire), vf = vanFlicker(t) * (surge.vanHit == null ? 1 : 0.35 + 0.65 * flickOut(surge.vanHit, wt, 2.0)), ff = fireFlicker(t);
     F.i *= fireK; F.smoke *= fireK; L.string *= flickOut(surge.lightsOut, wt);
     if (camp.rugMat && surge.rugWet != null) { const e = sm01(surge.rugWet, surge.rugWet + 1.5, wt); camp.rugMat.color.setRGB(1 - 0.5 * e, 1 - 0.5 * e, 1 - 0.46 * e); }
     Mats.U.uLights.value.set(L.string, L.lantern, L.van * vf * (1 - vanS.k), L.fairy);
@@ -541,16 +632,16 @@ const Engine = (() => {
         if (!canDone) { renderLocal(canS, Layout.rug.x, 2.45, Layout.rug.z); canDone = true; }
       } }
     const pxScale = h / (2 * Math.tan(camera.fov * Math.PI / 360));
-    const fireLit = 0.05 * F.i;
-    FX.update(fx, {
-      t, fireI: F.i, fireFlick: ff, flies: (o.flies ?? 1) * S.night, moths: Math.max(L.lantern, L.string) * S.night, insects: o.dens ? o.dens.insects : 0.5,
-      smoke: F.smoke, steam: F.steam * fireK, pxScale, douse: surge.fireOut == null ? 0 : Math.exp(-Math.max(0, wt - surge.fireOut) / 2.4) * (wt >= surge.fireOut ? 1 : 0),
-      smokeLo: new T.Vector3(S.amb[0] * 0.9 + fireLit, S.amb[1] * 0.9 + fireLit * 0.45, S.amb[2] * 0.9 + fireLit * 0.15),
-      smokeHi: new T.Vector3(S.amb[0] * 0.8 + S.keyCol[0] * 0.25, S.amb[1] * 0.8 + S.keyCol[1] * 0.25, S.amb[2] * 0.8 + S.keyCol[2] * 0.25),
-      steamLo: new T.Vector3(S.amb[0] * 1.6 + fireLit * 2.2, S.amb[1] * 1.6 + fireLit * 1.4, S.amb[2] * 1.6 + fireLit * 0.8),
-      steamHi: new T.Vector3(S.amb[0] * 1.5 + S.keyCol[0] * 0.5, S.amb[1] * 1.5 + S.keyCol[1] * 0.5, S.amb[2] * 1.5 + S.keyCol[2] * 0.5),
-      butterflies: S.sAlt > -1 ? Math.min(1, (S.sAlt + 1) / 2) : 0, bfly: [S.amb[0] + S.keyCol[0] * 0.4, S.amb[1] + S.keyCol[1] * 0.4, S.amb[2] + S.keyCol[2] * 0.4]
-    }, camera);
+    const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
+    fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;
+    fxP.smoke = F.smoke; fxP.steam = F.steam * fireK; fxP.pxScale = pxScale; fxP.douse = surge.fireOut == null ? 0 : Math.exp(-Math.max(0, wt - surge.fireOut) / 2.4) * (wt >= surge.fireOut ? 1 : 0);
+    fxP.butterflies = S.sAlt > -1 ? Math.min(1, (S.sAlt + 1) / 2) : 0;
+    fxP.smokeLo.set(A[0] * 0.9 + fireLit, A[1] * 0.9 + fireLit * 0.45, A[2] * 0.9 + fireLit * 0.15);
+    fxP.smokeHi.set(A[0] * 0.8 + K[0] * 0.25, A[1] * 0.8 + K[1] * 0.25, A[2] * 0.8 + K[2] * 0.25);
+    fxP.steamLo.set(A[0] * 1.6 + fireLit * 2.2, A[1] * 1.6 + fireLit * 1.4, A[2] * 1.6 + fireLit * 0.8);
+    fxP.steamHi.set(A[0] * 1.5 + K[0] * 0.5, A[1] * 1.5 + K[1] * 0.5, A[2] * 1.5 + K[2] * 0.5);
+    fxP.bfly[0] = A[0] + K[0] * 0.4; fxP.bfly[1] = A[1] + K[1] * 0.4; fxP.bfly[2] = A[2] + K[2] * 0.4;
+    FX.update(fx, fxP, camera);
 
     if (!shadowReady && keyLight.shadow.map) {
       gU.uShadowMap.value = keyLight.shadow.map.texture; gU.uShadowMatrix.value = keyLight.shadow.matrix; gU.uShadowOn.value = 1; shadowReady = true;
@@ -558,15 +649,15 @@ const Engine = (() => {
     const soft = o.soft ?? 0.55, cam = o.cam || Layout.cameras.wide;
     const volFire = o.volFire !== false;
     fx.flames.forEach(f => { f.visible = !volFire; });
-    const fb = camp.fireBase, fireTop = new T.Vector3(fb.x, 1.05, fb.z).project(camera), fireSide = new T.Vector3(fb.x, 1.05, fb.z).addScaledVector(new T.Vector3().setFromMatrixColumn(camera.matrixWorld, 0), 0.35).project(camera);
+    const fb = camp.fireBase, fireTop = R3.top.set(fb.x, 1.05, fb.z).project(camera), fireSide = R3.side.set(fb.x, 1.05, fb.z).addScaledVector(R3.right.setFromMatrixColumn(camera.matrixWorld, 0), 0.35).project(camera);
     const hazeR = Math.abs(fireSide.x - fireTop.x) * 0.5 * (canvas.width / canvas.height);
-    const haze = new T.Vector4(fireTop.x * 0.5 + 0.5, fireTop.y * 0.5 + 0.5, hazeR, fireTop.z < 1 ? F.i * (o.haze ?? 1) : 0);
+    const haze = haze4.set(fireTop.x * 0.5 + 0.5, fireTop.y * 0.5 + 0.5, hazeR, fireTop.z < 1 ? F.i * (o.haze ?? 1) : 0);
     gU.uMist.value = 1 + 1.6 * soft;
     Mats.U.uFog.value.set(S.hor[0], S.hor[1], S.hor[2], gU.uMist.value);
-    const pp = { exp: S.exposure * (o.expMul || 1), thresh: 0.85 - 0.3 * soft, bloomK: (o.bloomK ?? 0.5) + 0.25 * soft, fade: o.fade ?? 1, t, night: S.night, prof: o.prof ? [] : null,
-                 dofK: o.dof === false ? 0 : 7.5 * soft, focus: cam.focus || 25, grain: 0.008 + 0.026 * soft, veil: 0.07 * soft,
-                 ao: o.ao === false ? 0 : 0.85, haze, noiseT, rain: o.rain || 0, rainSlant: o.rainSlant,
-                 fire: volFire ? { dbg: o.fireDbg || 0, I: F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2), flick: ff, t: t, fc: new T.Vector3(fb.x, 0.02, fb.z), n3: n3Tex } : null };
+    if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
+    pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;
+    pp.dofK = o.dof === false ? 0 : 7.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.008 + 0.026 * soft; pp.veil = 0.07 * soft;
+    pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);
     if (o.prof) { const a = pp.prof; S.prof = { cpu: Math.round(a[0] - tc), scene: Math.round(a[1] - a[0]), bloom: Math.round(a[2] - a[1]), final: Math.round(a[3] - a[2]) }; }
@@ -651,7 +742,7 @@ const Engine = (() => {
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  Object.assign(api, { init, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });
+  Object.assign(api, { init, warm, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });
   Object.defineProperties(api, { world: { get: () => world }, life: { get: () => life }, paper: { get: () => paper }, camera: { get: () => camera }, renderer: { get: () => R }, scene: { get: () => scene } });
   return api;
 })();

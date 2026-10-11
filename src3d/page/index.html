@@ -175,19 +175,24 @@
   </div>
 
   <div class="intro" id="intro">
-    <div class="intro-card">
-      <p class="eyebrow">Moonlit Cove · a portfolio</p>
+    <div class="loader" aria-hidden="true"><div class="ld-stage" id="ldStage"></div></div>
+    <p class="intro-note" id="introNote" role="status">Setting up the cove…</p>
+    <section class="intro-card" aria-labelledby="iName">
+      <p class="eyebrow">Moonlit Cove</p>
       <h2 id="iName">GokulMV</h2>
-      <p class="intro-role" id="iRole">Senior Software Engineer</p>
+      <p class="intro-role" id="iRole">Senior Consultant at Thoughtworks</p>
+      <div class="intro-sky"><canvas id="iMoon" width="64" height="64" aria-hidden="true"></canvas><span><b id="iSky">The sky</b><span id="iSkyTime">--:--</span></span></div>
       <div class="intro-actions">
-        <button type="button" class="primary" id="enterSound" disabled>Enter with sound</button>
+        <button type="button" class="primary" id="enterSound" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>Enter with sound</button>
         <button type="button" id="enterQuiet" disabled>Enter quietly</button>
       </div>
-      <p class="intro-note" id="introNote">Setting up the cove…</p>
-    </div>
+      <p class="intro-hint">Best with headphones.</p>
+      <p class="intro-fail">This browser could not start WebGL 2, which the cove is drawn with. A recent Chrome, Edge, Firefox or Safari, with hardware acceleration turned on, will show it.</p>
+    </section>
   </div>
 </div>
 
+<script>/*@LOADER*/</script>
 <script src="/*@THREE*/"></script>
 <script>/*@ENGINE*/</script>
 <script>/*@APP*/</script>

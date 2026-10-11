@@ -42,7 +42,7 @@ function sounds(outDir) {
 }
 function page(three, snd, head = '') {
   return src('page/index.html').replace('<meta charset="utf-8">', () => '<meta charset="utf-8">' + head)
-    .replace('/*@FONTS*/', () => fonts()).replace('/*@CSS*/', () => src('page/styles.css'))
+    .replace('/*@FONTS*/', () => fonts()).replace('/*@CSS*/', () => src('page/styles.css')).replace('/*@LOADER*/', () => src('page/loader.js'))
     .replace('/*@ENGINE*/', () => ENGINE.map(src).join('\n;\n'))
     .replace('/*@APP*/', () => snd + '\n;\n' + src('page/content.js') + '\n;\n' + src('page/pages.js') + '\n;\n' + src('page/app.js'))
     .replace('/*@THREE*/', three);

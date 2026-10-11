@@ -259,9 +259,9 @@
   $('rNext').addEventListener('click', () => readNav(1));
   $('rClose').addEventListener('click', () => openChapter(null));
 
-  /* ── sky chip ── */
-  const mi = $('moonIcon'), mx = mi.getContext('2d');
-  function drawMoon(phase, frac) {
+  /* ── sky chip (and the one on the card at the door) ── */
+  const mx = $('moonIcon').getContext('2d'), imx = $('iMoon').getContext('2d');
+  function drawMoon(mx, phase, frac) {
     const r = 26, c = 32; mx.clearRect(0, 0, 64, 64);
     mx.fillStyle = 'rgba(184,203,239,0.16)'; mx.beginPath(); mx.arc(c, c, r, 0, Math.PI * 2); mx.fill();
     mx.save(); mx.beginPath(); mx.arc(c, c, r, 0, Math.PI * 2); mx.clip();
@@ -275,23 +275,29 @@
   let skyTick = 0;
   function updateSky(ms, S) {
     if (performance.now() - skyTick < 500) return; skyTick = performance.now();
-    const d = new Date(ms), il = S.illum;
-    $('skyPhase').textContent = `${Astro.phaseName(il.phase)} · ${Math.round(il.fraction * 100)}%`;
+    const d = new Date(ms), il = S.illum, hm = `${two(d.getHours())}:${two(d.getMinutes())}`, phase = Astro.phaseName(il.phase);
+    $('skyPhase').textContent = `${phase} · ${Math.round(il.fraction * 100)}%`;
     const alt = S.mAlt > 0 ? `moon ${Math.round(S.mAlt)}° up` : (S.sAlt > 0 ? `sun ${Math.round(S.sAlt)}° up` : 'moon below horizon');
-    $('skyTime').textContent = `${two(d.getHours())}:${two(d.getMinutes())} · ${city} · ${alt}`;
-    drawMoon(il.phase, il.fraction);
+    $('skyTime').textContent = `${hm} · ${city} · ${alt}`;
+    drawMoon(mx, il.phase, il.fraction);
+    /* the card at the door says the same, until you are in */
+    if (!st.entered) { $('iSky').textContent = `${st.timeMode === 'live' ? 'Live sky' : 'The sky'} over ${city}`; $('iSkyTime').textContent = `${hm} · ${phase}`; drawMoon(imx, il.phase, il.fraction); }
   }
   $('sky').addEventListener('click', () => toggleSettings(true));
 
   /* ── time ── */
   function startOfDay(ms) { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
-  let fullCache = null;
+  /* the time the sky shows. It only ever moves on continuously, so a time-lapse never jumps: a picked hour counts from
+     the day it was picked, and the full-moon preview moves the whole timeline on by whole days, to the next full moon.
+     (It used to put each day's clock onto that one date, which sent the sky back a day at every midnight: every 86
+     seconds at 1000×.) Picking a time, or switching the preview on, starts both afresh from today */
+  let fullShift = null; st.day0 = startOfDay(Date.now());
+  const restartTime = () => { st.offset = 0; st.day0 = startOfDay(Date.now()); fullShift = null; };
   function nowMs() {
-    let ms = st.timeMode === 'live' ? Date.now() : startOfDay(Date.now()) + st.hour * 3600e3;
-    ms += st.offset;
+    let ms = (st.timeMode === 'live' ? Date.now() : st.day0 + st.hour * 3600e3) + st.offset;
     if (st.full) {
-      if (!fullCache || Math.abs(fullCache.base - startOfDay(Date.now())) > 1) { const f = Astro.nextFullMoon(Date.now() - 2 * 864e5); fullCache = { base: startOfDay(Date.now()), day: startOfDay(f) }; }
-      ms = fullCache.day + (ms - startOfDay(ms));
+      if (fullShift === null) { const now = Date.now(); fullShift = startOfDay(Astro.nextFullMoon(now - 2 * 864e5)) - startOfDay(now); }
+      ms += fullShift;
     }
     return ms;
   }
@@ -310,13 +316,13 @@
     const h = Math.floor(st.hour), m = Math.floor((st.hour - h) * 60); $('tHourV').textContent = `${two(h)}:${two(m)}`;
     $('tNote').textContent = st.timeMode === 'live' ? `Following your local time in ${city}${st.full ? ', on the next full moon' : " and tonight's real moon"}.` : `Holding the hour you pick${st.full ? ', on the next full moon' : ''}.`;
   }
-  document.querySelectorAll('[data-time]').forEach(b => b.addEventListener('click', () => { st.timeMode = b.dataset.time; st.offset = 0; store.set('timeMode', st.timeMode); syncTimeUI(); }));
+  document.querySelectorAll('[data-time]').forEach(b => b.addEventListener('click', () => { st.timeMode = b.dataset.time; restartTime(); store.set('timeMode', st.timeMode); syncTimeUI(); }));
   document.querySelectorAll('[data-flow]').forEach(b => b.addEventListener('click', () => { st.flow = +b.dataset.flow; syncTimeUI(); }));
-  $('tHour').addEventListener('input', e => { st.hour = +e.target.value; st.timeMode = 'custom'; st.offset = 0; store.set('hour', st.hour); store.set('timeMode', 'custom'); syncTimeUI(); });
+  $('tHour').addEventListener('input', e => { st.hour = +e.target.value; st.timeMode = 'custom'; restartTime(); store.set('hour', st.hour); store.set('timeMode', 'custom'); syncTimeUI(); });
   /* one-tap moments: sunset, night, sunrise at your location today */
   document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
     const p = b.dataset.preset, day0 = startOfDay(Date.now()), toH = ms => (ms - day0) / 3600e3;
-    st.offset = 0;
+    restartTime();
     if (p === 'now') { st.timeMode = 'live'; }
     else {
       st.timeMode = 'custom';
@@ -327,7 +333,7 @@
     store.set('timeMode', st.timeMode); syncTimeUI();
     toast(p === 'now' ? 'Back to live time.' : `Jumped to ${p}.`, false, 1800);
   }));
-  $('tFull').addEventListener('click', () => { st.full = !st.full; store.set('full', st.full); syncTimeUI(); });
+  $('tFull').addEventListener('click', () => { st.full = !st.full; fullShift = null; store.set('full', st.full); syncTimeUI(); });
   $('lSoft').value = st.soft; $('lSoft').addEventListener('input', e => { st.soft = +e.target.value; store.set('soft', st.soft); });
   $('lMotion').value = st.motion; $('lMotion').addEventListener('input', e => { st.motion = +e.target.value; store.set('motion', st.motion); });
   /* how much life there is: insects, fish, shells (0.5 is the cove as it always was; shells start all out) */
@@ -337,7 +343,9 @@
   }
   /* where the lights are heading (not how bright they are mid-fade): the button flips that */
   const lightsWanted = () => st.lightsMode === 'on' ? true : st.lightsMode === 'off' ? false : !!(st.S && st.S.lightsAuto);
-  function syncLightsUI() { seg('lights', st.lightsMode); $('bLights').setAttribute('aria-pressed', String(lightsWanted())); }
+  /* (called every frame: it touches the page only when something has changed) */
+  let lightsUI = '';
+  function syncLightsUI() { const k = st.lightsMode + lightsWanted(); if (k === lightsUI) return; lightsUI = k; seg('lights', st.lightsMode); $('bLights').setAttribute('aria-pressed', String(lightsWanted())); }
   document.querySelectorAll('[data-lights]').forEach(b => b.addEventListener('click', () => { st.lightsMode = b.dataset.lights; store.set('lightsMode', st.lightsMode); st.lightsQuick = 1; syncLightsUI(); }));
   $('bLights').addEventListener('click', () => { st.lightsMode = lightsWanted() ? 'off' : 'on'; store.set('lightsMode', st.lightsMode); st.lightsQuick = 1; syncLightsUI(); });
 
@@ -788,26 +796,45 @@
   }
   size(); addEventListener('resize', size);
   if (window.ResizeObserver) new ResizeObserver(size).observe(cv);
-  let ready = false;
-  setTimeout(() => {
+  let ready = false, drawn = 0;
+  /* the cove is built only once the loader (loader.js) has been on screen for a frame: its animation then belongs to
+     the compositor, and keeps moving while this thread spends a few seconds building geometry. The shaders are
+     compiled next, in the background, and the loader stays until the first frames have been drawn */
+  const afterPaint = fn => { let go = false; const run = () => { if (!go) { go = true; setTimeout(fn, 0); } }; requestAnimationFrame(() => requestAnimationFrame(run)); setTimeout(run, document.hidden ? 0 : 3000); };
+  afterPaint(() => {
     try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40 }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
-    catch (e) { $('introNote').textContent = 'This device could not start WebGL 2, which the cove needs.'; console.error(e); return; }
+    catch (e) { introFailed(); console.error(e); return; }
     /* print the menu card with the résumé's own words once the page fonts are ready */
     const coverInfo = { kicker: 'The Moonlit Cove', name: 'How it’s made', sub: 'a menu of the build' };
     const printCovers = () => { Engine.paintMenu(coverInfo); Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
     printCovers();
     if (document.fonts && document.fonts.load) Promise.all(['500 70px Fraunces', 'italic 400 25px Fraunces', '600 25px Fraunces', '500 21px "JetBrains Mono"', '600 40px Caveat', '700 40px Caveat'].map(f => document.fonts.load(f))).then(() => { rd.docs = {}; printCovers(); }, () => {});
+    /* (nothing may keep the door shut: a warm-up that never finishes, or frames that fail to draw, give way in time) */
+    Promise.race([Engine.warm(), new Promise(r => setTimeout(r, 20000))]).catch(() => {}).then(() => { requestAnimationFrame(frame); setTimeout(() => { if (!st.shown) introReady(); }, 30000); });
+  });
+  /* the first frames are on screen: the loader gives way to the card, over the live cove; once it has faded, its
+     animations stop (typeof, as the loader is a page-level const, not a property of window) */
+  const loaderOff = () => setTimeout(() => { if (typeof Loader !== 'undefined') Loader.stop(); }, 1400);
+  function introReady() {
+    st.shown = true; skyTick = 0;
     $('enterSound').disabled = false; $('enterQuiet').disabled = false;
-    $('introNote').textContent = `Live sky over ${city}. Best with headphones.`;
-    requestAnimationFrame(frame);
-  }, 30);
+    $('intro').classList.add('ready'); loaderOff();
+  }
+  function introFailed() { $('intro').classList.add('ready', 'failed'); loaderOff(); }
   function enter(withSound) {
-    st.entered = true; document.body.classList.add('entered'); $('intro').classList.add('gone');
+    if (st.entered) return;
+    st.entered = true; document.body.classList.add('entered', 'entering'); $('intro').classList.add('gone');
     if (withSound) startSound();
+    /* once it has faded, the veil goes altogether (its blur is a full-screen pass every frame) */
+    setTimeout(() => { $('intro').hidden = true; document.body.classList.remove('entering'); }, 1700);
     setTimeout(() => { if (!st.hintGone) $('hint').style.opacity = 1; }, 2500);
   }
   $('enterSound').addEventListener('click', () => enter(true));
   $('enterQuiet').addEventListener('click', () => enter(false));
+
+  /* the render-scale ladder the frame rate is kept comfortable on (see the end of frame) */
+  const RS = [0.55, 0.62, 0.7, 0.78, 0.87, 1];
+  Object.assign(st, { rsI: RS.length - 1, rsSlow: 0, rsQuick: 0, rsJudged: 0, rsAt: 0 });
 
   const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const lerpCam = (a, b, t) => ({ pos: a.pos.map((v, i) => v + (b.pos[i] - v) * t), look: a.look.map((v, i) => v + (b.look[i] - v) * t), fov: a.fov + (b.fov - a.fov) * t, focus: (a.focus || 25) + ((b.focus || 25) - (a.focus || 25)) * t });
@@ -879,12 +906,16 @@
 
     const t0 = performance.now();
     st.readK = Math.max(0, Math.min(1, (st.readK || 0) + (rd.on ? dtR / 1.5 : -dtR / 1.0)));
-    /* the clouds keep their own clock: it runs with the scene, and moving the time of day moves them on too */
-    const cloudT = st.t + ((ms / 60000) % 1440) * 6;
+    /* the clouds keep their own clock: it runs with the scene, and moving the time of day moves them on too. It counts
+       from the first frame's time, never wrapping (a wrap at each midnight made them jump; small numbers keep the
+       shader's sums precise) */
+    if (st.ms0 == null) st.ms0 = ms;
+    const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, dens: st.dens, cam, shiftX, msaa: 0, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
+    if (!st.shown && ++drawn >= 3) introReady();
     updateSky(ms, S);
     syncLightsUI();
 
@@ -925,12 +956,17 @@
       sound.amb.schedule(ctx.currentTime + 0.6, { rocks, night, crickets: tod.crickets * (1 - 0.8 * W.rain), birds: tod.birds * (1 - W.rain), gulls: tod.gulls * (1 - W.rain), owl: tod.owl * (1 - W.rain), fireI: tod.fire * (1 - 0.6 * W.rain) * (ss.fireOut == null ? 1 : 0), waves, douse: sound.douse, oceanNear, fireNear, rain: W.rain, thunder: sound.thunder });
     }
 
-    /* keep the frame rate comfortable */
-    const ft = performance.now() - t0; st.fms.push(ft); if (st.fms.length > 30) st.fms.shift();
-    if (st.fms.length === 30) {
-      const avg = st.fms.reduce((a, b) => a + b, 0) / 30;
-      if (avg > 34 && st.rs > 0.55) { st.rs = Math.max(0.55, st.rs * 0.88); st.fms = []; }
-      else if (avg < 16 && st.rs < 1) { st.rs = Math.min(1, st.rs * 1.06); st.fms = []; }
+    /* keep the frame rate comfortable. A change of resolution remakes every render target and shows, so it is rare
+       and small: judged every two seconds on the median frame (one slow frame is not a trend), one rung of the ladder
+       at a time, down only after two slow verdicts running and up only after three quick ones, never soon after
+       the last change */
+    const ft = performance.now() - t0, tn = performance.now(); st.fms.push(ft); if (st.fms.length > 120) st.fms.shift();
+    if (tn - st.rsJudged >= 2000 && st.fms.length >= 20) {
+      const w = st.fms.slice(-90).sort((a, b) => a - b), med = w[w.length >> 1];
+      st.rsJudged = tn; st.rsSlow = med > 32 ? st.rsSlow + 1 : 0; st.rsQuick = med < 15 ? st.rsQuick + 1 : 0;
+      if (st.rsSlow >= 2 && st.rsI > 0 && tn - st.rsAt > 4000) { st.rsI--; st.rsAt = tn; st.rsSlow = 0; }
+      else if (st.rsQuick >= 3 && st.rsI < RS.length - 1 && tn - st.rsAt > 10000) { st.rsI++; st.rsAt = tn; st.rsQuick = 0; }
+      st.rs = RS[st.rsI];
     }
   }
   /* ── wishes: a sky lantern carries one up, and it is pinned to the board by the fire for everyone to read.
