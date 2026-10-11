@@ -367,7 +367,8 @@ void main(){
       const pt = Mats.tex(pc), pm = Mats.lit({ map: pt, roughness: 0.9 });
       const sheet = mesh(new T.PlaneGeometry(0.24, 0.336), pm, false); at(sheet, 0, -0.012, 0.0005); cb.add(sheet);
       cb.add(at(mesh(new T.BoxGeometry(0.09, 0.03, 0.012), new T.MeshStandardMaterial({ color: C('#c9ccd1'), roughness: 0.3, metalness: 0.9 })), 0, bh / 2 - 0.012, 0.004));
-      cb.add(at(mesh(new T.CylinderGeometry(0.004, 0.004, 0.03, 6), L('#3a3a3a')), 0, bh / 2 + 0.01, 0.0));
+      /* the hook it hangs from stays on the van when the clipboard is taken down */
+      { const hk = mesh(new T.CylinderGeometry(0.004, 0.004, 0.03, 6), L('#3a3a3a')); hk.rotation.x = Math.PI / 2; at(hk, 0.62, 1.22 + bh / 2 + 0.01, -SZ - 0.012); g.add(hk); }
       refs.clipboard = cb; refs.clipSheet = { mesh: sheet, canvas: pc, tex: pt }; }
     refs.vanLightPos = g.localToWorld(new T.Vector3(DX, 1.1, -SZ - 0.2));
     refs.vanDoor = g.localToWorld(new T.Vector3(DX, DY - 0.1, -SZ - 0.02));

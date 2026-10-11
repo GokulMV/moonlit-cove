@@ -182,12 +182,32 @@ const Book = (() => {
       st.spread = 0; makeSheets(fronts, backs);
       return { spreads: st.maxSpread + 1 };
     }
+    /* a page held by a drag: it follows the pointer (f goes 0 → 1 across the turn) and, let go, either
+       finishes the turn from where it is or falls back to where it lay */
+    let drag = null;
+    function dragStart(dir) {
+      if (!st.open || drag || busy()) return false;
+      const k = st.spread + dir, i = dir > 0 ? st.spread : st.spread - 1;
+      if (k < 0 || k > st.maxSpread || !st.sheets[i]) return false;
+      drag = { dir, i, k, f: 0 }; return true;
+    }
+    function dragTo(f) {
+      if (!drag) return; drag.f = Math.max(0, Math.min(1, f));
+      const s = st.sheets[drag.i], th = Math.PI * (drag.dir > 0 ? drag.f : 1 - drag.f);
+      Object.assign(s, { from: th, to: th, th, t0: 0, dur: 0, done: true, dir: drag.dir });
+      bend(s.G, th, restR(drag.i), restL(drag.i), drag.dir);
+    }
+    function dragEnd(commit) {
+      if (!drag) return false; const d = drag; drag = null;
+      if (commit) go(d.k, true); else turnTo(st.sheets[d.i], d.dir > 0 ? 0 : Math.PI);
+      return !!commit;
+    }
     function paintCover(fn) { fn(coverC); coverT.needsUpdate = true; }
     /* readable after dark: the paper carries a little light of its own, scaled to the exposure */
     function setReadLight(k) { if (Math.abs(k - st.emissive) < 1e-4) return; st.emissive = k; st.sheets.forEach(s => { s.mf.material.emissiveIntensity = k; s.mb.material.emissiveIntensity = k; }); insideMat.emissiveIntensity = k; backInnerMat.emissiveIntensity = k; }
     const busy = () => st.sheets.some(s => !s.done) || !st.cover.done;
     makeSheets([blank, blank, blank], [blank, blank, blank]);
-    return { group: root, W, H, CW, CH, go, setPages, paintCover, update: () => layout(false), setReadLight, state: st, busy };
+    return { group: root, W, H, CW, CH, go, setPages, paintCover, update: () => layout(false), setReadLight, state: st, busy, dragStart, dragTo, dragEnd, get dragging() { return !!drag; } };
   }
   return { build };
 })();

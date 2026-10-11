@@ -580,6 +580,7 @@ const Engine = (() => {
   }
   const bookApi = (name, get) => ({
     go: (k, open) => get().go(k, open), setPages: c => get().setPages(c), frame: () => bookFrame(name), paintCover: fn => get().paintCover(fn),
+    dragStart: d => get().dragStart(d), dragTo: f => get().dragTo(f), dragEnd: c => get().dragEnd(c), get dragging() { return get().dragging; },
     busy: () => get().busy(), get spread() { return get().state.spread; }, get maxSpread() { return get().state.maxSpread; }, get open() { return get().state.open; }
   });
   const book = bookApi('menu', () => camp.book), books = { menu: book, journal: bookApi('journal', () => camp.journal) };
@@ -593,10 +594,12 @@ const Engine = (() => {
     if (name === 'clipboard') p.add(new T.Vector3(0, -0.012, 0.002).applyQuaternion(q));
     return { p: p.toArray(), q: q.toArray() };
   }
+  /* the cork: out (it hops onto the sand) before the letter can come out; back in once the letter is home */
+  function corkOut(out) { if (cork.to === (out ? 1 : 0)) return; cork.to = out ? 1 : 0; cork.t0 = performance.now() / 1000; }
   function prop(name, visible) {
-    if (name === 'bottle') { camp.letterProp.forEach(m => { m.visible = visible; }); cork.to = visible ? 0 : 1; cork.t0 = performance.now() / 1000; }
+    if (name === 'bottle') camp.letterProp.forEach(m => { m.visible = visible; });
     if (name === 'roll' && camp.planRoll) camp.planRoll.visible = visible;
-    if (name === 'clipboard' && camp.clipSheet) camp.clipSheet.mesh.visible = visible;
+    if (name === 'clipboard' && camp.clipboard) camp.clipboard.visible = visible;
   }
   function paintClip(canvas) { if (!camp.clipSheet) return; const c = camp.clipSheet.canvas, a = c.getContext('2d'); a.drawImage(canvas, 0, 0, c.width, c.height); camp.clipSheet.tex.needsUpdate = true; }
   /* bulbs of one strand, for hanging the journey's tags */
@@ -608,5 +611,5 @@ const Engine = (() => {
   function finish() { const px = new Uint8Array(4); const gl = R.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  return { init, render, project, paintMenu, book, books, get world() { return world; }, get life() { return life; }, get paper() { return paper; }, origin, prop, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock, get camera() { return camera; }, get renderer() { return R; } };
+  return { init, render, project, paintMenu, book, books, get world() { return world; }, get life() { return life; }, get paper() { return paper; }, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock, get camera() { return camera; }, get renderer() { return R; } };
 })();
