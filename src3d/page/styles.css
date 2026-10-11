@@ -31,10 +31,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); out
 /* brand */
 .brand::before { content: ''; position: absolute; z-index: -1; left: -60px; top: -50px; width: calc(100% + 160px); height: calc(100% + 110px); background: radial-gradient(ellipse 60% 62% at 34% 42%, rgba(6, 9, 15, 0.62), rgba(6, 9, 15, 0.32) 55%, rgba(6, 9, 15, 0) 100%); pointer-events: none; }
 .brand { position: absolute; z-index: 0; isolation: isolate; top: calc(env(safe-area-inset-top, 0px) + 22px); left: max(var(--gut), 26px); max-width: min(420px, calc(100% - 2 * var(--gut))); pointer-events: none; text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55); transition: opacity .6s; }
-.brand h1 { margin: 6px 0 2px; font: 500 clamp(34px, 5vw, 52px)/0.95 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 96; letter-spacing: -0.01em; }
-.brand .role { margin: 0; font: 500 13px/1.4 var(--mono); letter-spacing: 0.04em; color: var(--fg); }
-.brand .role span { color: rgba(236, 230, 218, 0.78); }
-.brand .line { margin: 10px 0 0; max-width: 36ch; color: rgba(236, 230, 218, 0.88); font-size: 14px; text-wrap: pretty; }
+.brand h1 { margin: 5px 0 3px; font: 500 clamp(24px, 2.6vw, 32px)/1 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; letter-spacing: -0.005em; }
+.brand .role { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: 0.04em; color: rgba(236, 230, 218, 0.86); }
+/* the name can be put away, and brought back from the corner or the settings */
+.brand-hide { position: absolute; top: -4px; right: -34px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: rgba(11, 15, 24, 0.55); color: var(--dim); opacity: 0; pointer-events: auto; transition: opacity .25s, color .2s; }
+.brand-hide svg, .brand-show svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.brand:hover .brand-hide, .brand-hide:focus-visible { opacity: 1; }
+.brand-hide:hover { color: var(--fg); }
+@media (hover: none) { .brand-hide { opacity: 0.7; } }
+#hud .brand { pointer-events: auto; }
+.brand.off { opacity: 0 !important; pointer-events: none !important; transform: translateY(-6px); }
+.brand { transition: opacity .45s, transform .45s; }
+.brand-show { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 22px); left: max(var(--gut), 22px); width: 34px; height: 34px; display: grid; place-items: center; padding: 0; color: var(--dim); pointer-events: auto; border-radius: 50%; }
+.brand-show:hover { color: var(--fg); }
+.brand-show svg { width: 16px; height: 16px; }
 
 /* sky chip */
 .sky { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 20px); right: max(var(--gut), 22px); display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; }
@@ -153,6 +163,22 @@ body.driving #hud .dock, body.driving #hud #spots, body.driving #hud .hint { opa
 .seg button { border: 0; background: none; padding: 5px 9px; border-radius: 7px; font: 500 12px/1 var(--mono); color: var(--dim); }
 .seg button:hover { color: var(--fg); }
 .credit { margin: 6px 0 2px; font-size: 11px; line-height: 1.45; color: var(--faint); }
+.linkish { border: 0; padding: 0; background: none; color: var(--amber); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.linkrow { width: 100%; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; }
+.linkrow:hover span:first-child { color: var(--amber); }
+
+/* credits: a panel over the cove */
+.credits { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(600px, calc(100% - 2 * var(--gut))); max-height: min(78vh, 760px); overflow-y: auto; padding: 26px 26px 22px; background: var(--glass-hi); pointer-events: auto; animation: rise .35s ease-out; z-index: 5; }
+.credits h2 { margin: 8px 0 14px; font: 500 30px/1.08 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; }
+.credits section { padding: 12px 0 6px; border-top: 1px solid var(--line); }
+.credits h3 { margin: 0 0 8px; font: 500 11px/1.2 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+.credits ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.credits li { display: grid; gap: 2px; font-size: 13.5px; line-height: 1.45; }
+.credits li b { font-weight: 600; color: var(--fg); }
+.credits li span { color: var(--dim); }
+.credits .cl { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 400 12px/1.5 var(--mono); }
+.credits .cl a { color: var(--moon); text-decoration: none; border-bottom: 1px solid rgba(184, 203, 239, 0.35); }
+.credits .cl em { font-style: normal; color: var(--faint); }
 .seg button[aria-checked="true"] { background: var(--amber); color: var(--night); }
 input[type="range"] { width: 140px; accent-color: var(--amber); }
 input[type="range"]:disabled { opacity: 0.35; }
@@ -172,11 +198,10 @@ input[type="range"]:disabled { opacity: 0.35; }
 
 body.entered .brand { opacity: 1; }
 body.reading #hud .hint { opacity: 0 !important; }
-body:not(.entered) #hud .brand, body:not(.entered) #hud .dock, body:not(.entered) #hud .ctrl, body:not(.entered) #hud .sky, body:not(.entered) #hud .hint, body:not(.entered) #hud #spots { opacity: 0; pointer-events: none; }
+body:not(.entered) #hud .brand, body:not(.entered) #hud .brand-show, body:not(.entered) #hud .dock, body:not(.entered) #hud .ctrl, body:not(.entered) #hud .sky, body:not(.entered) #hud .hint, body:not(.entered) #hud #spots { opacity: 0; pointer-events: none; }
 .dock, .ctrl, .sky, #spots { transition: opacity .9s .2s; }
 
 @media (max-width: 720px) {
-  .brand .line { display: none; }
   .sky { padding: 6px 10px 6px 6px; }
   .sky-text span { display: none; }
   /* phones: the chapters get the full width, the five controls sit on their own row beneath */
@@ -249,8 +274,14 @@ body:not(.entered) #hud .brand, body:not(.entered) #hud .dock, body:not(.entered
 .r-hint { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); transform: translateX(-50%); margin: 0; font: 400 11.5px/1.3 var(--mono); color: var(--dim); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8); white-space: nowrap; pointer-events: none; }
 .r-links a { padding: 9px 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--fg); text-decoration: none; font-size: 13.5px; }
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-body.reading-book #hud .dock, body.reading-book #hud #spots, body.reading-book #hud .brand, body.reading-book #hud .hint, body.reading-book #hud .sky, body.reading-book #hud .toast { opacity: 0 !important; pointer-events: none; }
+body.reading-book #hud .dock, body.reading-book #hud #spots, body.reading-book #hud .brand, body.reading-book #hud .brand-show, body.reading-book #hud .hint, body.reading-book #hud .sky, body.reading-book #hud .toast { opacity: 0 !important; pointer-events: none; }
 body.reading-book #scene { cursor: pointer; }
+/* which way a tap turns the page, shown by the cursor; and a hand while a page is held */
+body.rd-next #scene { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><circle cx='16' cy='16' r='13' fill='rgba(10,13,20,0.55)' stroke='rgba(255,250,240,0.85)' stroke-width='1.5'/><path d='M13 10l6 6-6 6' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/></svg>") 16 16, e-resize; }
+body.rd-prev #scene { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><circle cx='16' cy='16' r='13' fill='rgba(10,13,20,0.55)' stroke='rgba(255,250,240,0.85)' stroke-width='1.5'/><path d='M19 10l-6 6 6 6' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/></svg>") 16 16, w-resize; }
+body.rd-grab #scene { cursor: grabbing; }
+.r-hint { transition: opacity .8s; }
+body.rd-hint-off .r-hint { opacity: 0; }
 @media (max-width: 720px) {
   .r-links { display: none; }
   body.reading-book #hud .ctrl { opacity: 0; pointer-events: none; }

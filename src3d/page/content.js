@@ -1,17 +1,19 @@
 /* ─────────────────────────────────────────────────────────────
-   content.js — the résumé, as chapters anchored to the cove.
-   Source: GokulMV's résumé. Phone and email are deliberately
-   not published here.
+   content.js — what the cove says, chapter by chapter, each one
+   anchored to an object in the scene:
+     making     the menu on the picnic table: how the cove is made
+     plans      blueprints in the basket: its architecture, drawn
+     stack      the clipboard on the van: what it is built with
+     notes      the journal by the fire: stories from the build
+     milestones the string lights: the journey so far
+     contact    the letter in the bottle
    ───────────────────────────────────────────────────────────── */
 const Content = {
   name: 'GokulMV',
-  role: 'Senior Software Engineer',
-  place: 'Hyderabad, India',
-  line: 'Seven years building Java backends that stay fast under load: p90 held at 200 ms through a 10× traffic surge. Lately, AI tooling too, with skills that cut bugs in AI-written code from 40% to 15%.',
-  summary: 'Senior Software Engineer with seven years in Java, Spring Boot and event-driven systems at Thoughtworks, OpenText and Cognizant. I keep busy platforms fast (p90 at 200 ms through a 10× traffic increase; 50K+ API calls a minute over 600M+ records), make them recoverable (full disaster recovery cut from 6 hours to 3–4) and ship to production daily. Lately I build multi-agent debugging and GitHub Copilot skills that cut the share of bugs from AI-written code from 40% to 15%.',
+  role: 'Senior Consultant at Thoughtworks',
   links: [['LinkedIn', 'https://linkedin.com/in/gokulmv', 'linkedin.com/in/gokulmv'], ['GitHub', 'https://github.com/GokulMV', 'github.com/GokulMV']],
-  /* the letter in the bottle: edit freely; the contact lines close it */
-  contact: { phone: '+91 80194 43788', tel: '+918019443788', email: 'reddy.gokul@gmail.com' },
+  contact: { email: 'reddy.gokul@gmail.com' },
+  /* the letter in the bottle: edit freely; the ways to reach me close it */
   letter: {
     to: 'To the stranger who wandered in,',
     body: [
@@ -30,114 +32,90 @@ const Content = {
     { when: '2023', title: 'Thoughtworks', text: 'Senior Consultant on an e-commerce customer-service platform' },
     { when: 'Today', title: 'Still building', text: 'Fast, steady backends, and AI tooling that helps teams write better code' }
   ],
-  resumeProjects: [
-    { name: 'Levitas Validators', tech: 'Java 17, Maven, GitHub Actions, Maven Central', license: 'Apache 2.0', text: 'Zero-dependency Java library that validates and masks Indian identifiers (GSTIN, PAN, IFSC, UPI, Aadhaar) offline; published on Maven Central.' },
-    { name: 'Over&Out', tech: 'Swift, Apple Vision, Core ML, Core Audio, Accessibility API, Homebrew', license: 'GPL-3.0', text: 'macOS menu-bar app that uses on-device camera detection to mute the mic, turn off meeting video and pause media when you step away or take a call, then restores everything on return.' },
-    { name: 'ClipHive', tech: 'C#, .NET, WPF, AES-256-GCM, Windows DPAPI, Windows.Media.Ocr', license: 'MIT', text: 'Windows clipboard manager with AES-256-GCM encryption at rest, offline OCR image search and zero network calls.' }
+
+  /* ── the menu on the table: how the cove is made, one course at a time ── */
+  making: [
+    { course: 'To start', title: 'What this is', lead: 'A portfolio you can walk into: a beach camp under the real sky over wherever you are, drawn live in your browser. No video, no game engine, no framework. Every object you can open is a chapter.',
+      points: ['Plain JavaScript, joined into one page by a small build script.', 'One library, <b>three.js</b>, for the WebGL plumbing. Every shader, model and texture is written in code.', 'The sun and the moon are placed for your time zone and today’s date, and the moon shows its real phase.', 'The sounds load only when you turn sound on.'] },
+    { course: 'The main course', title: 'One frame', lead: 'About sixty times a second, in this order:',
+      steps: [['Time', 'Your clock, or the hour you picked, becomes the sun’s and moon’s height, bearing and phase.'],
+        ['Sky', 'Those angles mix the sky’s colours, the light on the clouds, the moonlight and the shadows.'],
+        ['Sea and sand', 'One shader draws both: tide swells and the ones you clicked, the swash on the sand, foam, wet sand, tyre tracks, the moon’s glitter.'],
+        ['The coast', 'Headlands, rocks and forest are built a few milliseconds at a time as you travel, with less detail far away.'],
+        ['Light', 'The fire and the string lights render shadow maps of their own; the sky becomes the reflection in anything glossy.'],
+        ['Finish', 'The frame renders in high precision, then gets ambient occlusion, a ray-marched fire, bloom, depth of field, heat haze, rain and grain.'],
+        ['Sound', 'Each wave you see is scheduled into the soundtrack, so its wash lands as it reaches the sand.']] },
+    { course: 'From the sea', title: 'Waves', lead: 'Close to the shore the water is a fine mesh that follows the camera and really rises and falls; further out it is a 40-kilometre plane drawn with the same maths.',
+      points: ['Click the water and a swell rolls in. Clicks close together stack into a taller one.', 'A big one runs up the sand, puts out the fire and knocks things over: the props use the same run-up the shader draws.', 'Far water keeps its ripples: its textures are filtered along the view and fade by how much sea each pixel covers.'] },
+    { course: 'From the sky', title: 'Sun, moon and weather', lead: 'The sky is one shader painted from the sun’s and moon’s real positions.',
+      points: ['Five kinds of cloud drift on their own clock and change shape as they go.', 'Rain darkens the sand and rings the shallows; a storm brings lightning, with thunder a few seconds later.', 'Change the hour in the settings and the whole cove relights: dusk, deep night, sunrise.'] },
+    { course: 'Along the shore', title: 'A coast that never ends', lead: 'Drive the van in either direction and the beach keeps going, and it never repeats.',
+      points: ['Every 280 metres of coast rolls its own headland: how wide, how far it juts out, how high its rock terraces climb, how many sea stacks stand off it.', 'Rocks are rough spheres cut by random planes into fractured faces; the forest is thousands of palms, trees, bushes and ferns, instanced chunk by chunk.', 'Park anywhere and pitch camp there: awning, rug, table, lights, fire and kettle go up one at a time.'] },
+    { course: 'At the camp', title: 'Things you can open', lead: 'Everything at the camp is modelled in code: the van, the rug, the chairs, the fire, the bottle.',
+      points: ['The books are real books, with boards, a spine, and pages that bend into the gutter and pile up on the left as you read.', 'Every page is typeset onto a canvas in Fraunces, Caveat and JetBrains Mono, then laid onto the paper in 3D.', 'Tap either half of a page to turn it, or take hold of it and drag.'] },
+    { course: 'On the side', title: 'Sound', lead: 'Recorded ocean, crickets, birds, gulls, an owl, the fire, rain and thunder, mixed live.',
+      points: ['They follow the time of day: no crickets in the morning, and the fire crackles only while it is lit.', 'The mix is centred on 111 Hz, with a soft 111 Hz tone you can switch off.', 'The van’s engine is a recorded loop pitched by its speed and throttle.'] },
+    { course: 'To finish', title: 'Shipping it', lead: 'One page, cached hard, served by a server with no dependencies.',
+      points: ['The build puts the engine, styles and fonts into one HTML file; three.js and the sounds get content-hashed names and are cached for a year.', 'A Node server serves it with brotli, ETags and a strict content-security policy, and keeps the wish board.', 'Docker builds it on Railway; Cloudflare sits in front. Every push to GitHub ships.', 'Tested headless: Chromium renders every chapter and drives the van, with software graphics.'] }
   ],
-  education: { school: 'Jawaharlal Nehru Technological University (JNTU) Anantapur', degree: 'B.Tech, Electronics and Communications Engineering', year: '2018', where: 'Anantapur' },
+
+  /* ── the journal by the fire: stories from the build ── */
+  notes: [
+    { title: 'The sea looked like fog', problem: 'A few metres out the water smeared into a grey haze.', fix: 'The water’s textures are now filtered along the view, each ripple fades by how much sea a pixel covers, and three plain swell trains replaced a blotchy swell texture. The sea stays water all the way to the horizon.' },
+    { title: 'Ripples, not waves', problem: 'A click on the sea made rings, like a pond.', fix: 'A click now sends a real swell along the wave field. Clicks close together stack into a taller one, and it runs up the sand by the same rule in the shader and in the code that knocks things over.' },
+    { title: 'Pins pointing at nothing', problem: 'The dots for the chapters floated in the air, one of them out at sea.', fix: 'Each dot is measured from its object every frame: the book, the bottle, the clipboard on the van, wherever the van has been driven.' },
+    { title: 'A book of loose paper', problem: 'The menu looked like sheets thrown on a pad.', fix: 'Now it has boards larger than the pages, a spine that stands up as it shuts, page blocks that thicken as you read, and pages that dive into a shaded gutter.' },
+    { title: 'Tyre tracks that slid', problem: 'Tracks drew off to one side, and stayed after the sea came over them.', fix: 'They are stamped every 12 cm into a window of sand that follows the van, and each wave smooths them away where it actually reached.' },
+    { title: 'The engine', problem: 'The first engine was synthesised, and it was rude.', fix: 'A recorded engine loop, pitched by speed and throttle, with a starter crank before it catches.' },
+    { title: '111 Hz', problem: 'Every sound should sit around one frequency.', fix: 'The whole mix is EQ’d around 111 Hz, with a quiet 111 Hz tone underneath that you can switch off.' },
+    { title: 'Stuck van', problem: 'The van hit a rock and couldn’t get out.', fix: 'The van is three circles. Anything it touches pushes it out sideways, so it slides along rocks instead of sticking, and R puts it back on open sand.' },
+    { title: 'The end of the beach', problem: 'The beach stopped at a wall.', fix: 'The coast is built in 128-metre chunks around you, a few milliseconds a frame, and every stretch rolls its own headland.' },
+    { title: 'A flickering horizon', problem: 'With softness at zero the horizon shimmered.', fix: 'Ripples fade before they can alias, ambient occlusion fades out far away, and the ground is cut into cells so depth doesn’t tear.' },
+    { title: 'The eraser line', problem: 'Where the sea drew back, the wet sand dried along a straight line, like someone rubbing it out.', fix: 'Each wave’s reach now wanders along the beach, the sand dries in patches and soaks in from the edge, and the foam breaks into lace as it goes.' }
+  ],
+
+  /* ── the clipboard: what this cove is built with ── */
+  stack: [
+    { group: 'In your browser', items: ['JavaScript, no framework', 'GLSL shaders', 'three.js r160', 'WebGL 2', 'Web Audio API', 'Canvas 2D'] },
+    { group: 'Type', items: ['Fraunces', 'Instrument Sans', 'Caveat', 'JetBrains Mono', 'via Fontsource'] },
+    { group: 'Sky', items: ['SunCalc’s sun and moon formulas', 'your time zone, for where you are'] },
+    { group: 'Sound', items: ['Ocean clips made with ElevenLabs', 'Moodist ambience library', 'Kenney’s engine and knocks', 'a 111 Hz mix'] },
+    { group: 'Server', items: ['Node.js 22', 'a server with no dependencies', 'brotli, ETags, CSP'] },
+    { group: 'Shipping', items: ['GitHub', 'Docker', 'Railway', 'Cloudflare'] },
+    { group: 'Tools', items: ['Playwright + headless Chromium', 'ffmpeg', 'Git', 'Claude, as pair programmer'] }
+  ],
+
+  /* ── who made what: every sound, typeface, library and idea that came from someone else ── */
+  credits: [
+    { group: 'Sound', items: [
+      { what: 'Breaking waves: swell, lap and crash', who: 'Made by GokulMV with ElevenLabs', link: ['elevenlabs.io', 'https://elevenlabs.io'], licence: 'ElevenLabs terms; credit: elevenlabs.io' },
+      { what: 'Ocean bed, crickets, birds, seagulls, owl, campfire, rain and thunder', who: 'The Moodist sound library by MAZE (remvze)', link: ['github.com/remvze/moodist', 'https://github.com/remvze/moodist'], licence: 'Each sound under the Pixabay Content License or CC0' },
+      { what: 'The van’s engine and knocks', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
+    ] },
+    { group: 'Code and ideas', items: [
+      { what: 'WebGL plumbing', who: 'three.js r160, © 2010–2023 three.js authors', link: ['github.com/mrdoob/three.js', 'https://github.com/mrdoob/three.js'], licence: 'MIT' },
+      { what: 'Where the sun and moon are', who: 'Formulas from SunCalc by Vladimir Agafonkin', link: ['github.com/mourner/suncalc', 'https://github.com/mourner/suncalc'], licence: 'BSD-2-Clause' },
+      { what: 'Cloth and paper motion', who: 'The idea, Verlet integration with gravity and wind, from Pedro Ferraz’s PhysicsBasedClothAnimation; written afresh here, no code copied', link: ['github.com/pedromsferraz/PhysicsBasedClothAnimation', 'https://github.com/pedromsferraz/PhysicsBasedClothAnimation'], licence: 'Credited as inspiration' },
+      { what: 'Font packages', who: 'Fontsource', link: ['github.com/fontsource/fontsource', 'https://github.com/fontsource/fontsource'], licence: 'MIT' },
+      { what: 'Testing', who: 'Playwright, driving headless Chromium', link: ['github.com/microsoft/playwright', 'https://github.com/microsoft/playwright'], licence: 'Apache-2.0' }
+    ] },
+    { group: 'Typefaces', items: [
+      { what: 'Fraunces', who: 'The Fraunces Project Authors', link: ['github.com/undercasetype/Fraunces', 'https://github.com/undercasetype/Fraunces'], licence: 'SIL Open Font License 1.1' },
+      { what: 'Instrument Sans', who: 'The Instrument Sans Project Authors', link: ['github.com/Instrument/instrument-sans', 'https://github.com/Instrument/instrument-sans'], licence: 'SIL Open Font License 1.1' },
+      { what: 'Caveat', who: 'The Caveat Project Authors', link: ['github.com/googlefonts/caveat', 'https://github.com/googlefonts/caveat'], licence: 'SIL Open Font License 1.1' },
+      { what: 'JetBrains Mono', who: 'The JetBrains Mono Project Authors', link: ['github.com/JetBrains/JetBrainsMono', 'https://github.com/JetBrains/JetBrainsMono'], licence: 'SIL Open Font License 1.1' }
+    ] },
+    { group: 'Made by', items: [
+      { what: 'The cove', who: 'GokulMV, with Claude (Anthropic) as pair programmer', link: ['github.com/GokulMV/moonlit-cove', 'https://github.com/GokulMV/moonlit-cove'], licence: '' }
+    ] }
+  ],
+
   chapters: [
-    {
-      id: 'resume', label: 'Résumé', anchor: 'menu', cam: 'menu', wide: true,
-      eyebrow: 'On the picnic table',
-      title: 'Tonight’s menu'
-    },
-    {
-      id: 'experience', label: 'Experience', anchor: 'journal', cam: 'journal',
-      eyebrow: 'Stories by the fire',
-      title: 'Where I’ve worked',
-      body: [
-        { kind: 'role', org: 'Thoughtworks', title: 'Senior Consultant (Senior SWE)', when: 'Dec 2023 – Present', where: 'Hyderabad',
-          context: 'E-commerce customer-service platform · team of 14',
-          points: [
-            'Design and build Spring Boot microservices with Domain-Driven Design and Hexagonal Architecture, producing and consuming <b>millions of events</b> across teams over Kafka and SQS.',
-            'Hold <b>p50 at 150 ms and p90 at 200 ms</b> through a <b>10× traffic increase</b> (3K → 30K API calls an hour) since the platform moved from agent-mediated to direct customer access.',
-            'Rebuilt disaster recovery as automated Terraform provisioning plus scripted bootstrap, cutting full application recovery from a <b>6-hour SLA to 3–4 hours</b>.',
-            'Ship to production daily through trunk-based delivery, feature toggles and GitHub Actions with <b>Trivy and OWASP Dependency-Check</b> gates; fix cloud and container vulnerabilities flagged by <b>Wiz</b>.',
-            'Build and maintain a <b>multi-agent debugging workflow</b> that triages production errors from <b>AWS CloudWatch</b> logs and traces each failure to its likely root cause for engineers to verify and fix.',
-            'Build <b>GitHub Copilot skills</b> for code review and Jira-to-spec generation that standardise AI-generated code across the team, cutting the share of bugs from AI-written code from <b>40% to 15%</b>.',
-            'Adapt open-source skills to load only the context a task needs, cutting AI spend from <b>$80 to $50 per developer a month (38%)</b>; mentor engineers on when to reject AI-generated code.'
-          ] },
-        { kind: 'role', org: 'OpenText', title: 'Software Engineer', when: 'Jul 2021 – Dec 2023', where: 'Hyderabad',
-          context: 'OT2 multi-tenant SaaS platform · team of 8–12',
-          points: [
-            'Sustained <b>50K+ API calls a minute at 100–120 ms</b> over <b>600M+ customer records</b> by tuning PostgreSQL queries and access patterns; met a 2-hour incident-response SLA with <b>New Relic</b>.',
-            'Architected <b>OT2Central</b>, the replacement for Admin Center with graphical modelling of applications, tenants and subscriptions, and owned it end to end as product owner, full-stack developer and QA.',
-            'Built <b>Admin Center</b> for multi-tenant tenant, subscription and user lifecycle management with RBAC, and <b>Entitlement Tenant Services</b>, the Protobuf-based backend authority for entitlements behind both products.',
-            'Delivered an <b>Azure → GCP migration with zero downtime</b> as part of the platform migration team.',
-            'Upgraded Angular 9 → 17 with no breaking changes and shipped operability tooling (failed-events view, batch-job controls, in-app API console) that removed Postman from the team’s daily workflow.'
-          ] },
-        { kind: 'role', org: 'Cognizant Technology Solutions', title: 'Programmer Analyst', when: 'Feb 2019 – Jul 2021', where: 'Hyderabad',
-          context: 'IVS Portal · North American automotive OEM',
-          points: [
-            'Built backend services in Java 8, Spring Boot, Spring MVC and Hibernate/HQL over Oracle, replacing manual engineering workflows.',
-            'Developed REST APIs for file upload and download on Amazon S3, and Spring Integration flows for inter-system communication.',
-            'Delivered microservice components with JUnit coverage against SLA-bound release commitments.'
-          ] }
-      ]
-    },
-    {
-      id: 'milestones', label: 'Milestones', anchor: 'lights', cam: 'lights',
-      eyebrow: 'One bulb for each', title: 'The journey so far'
-    },
-    {
-      id: 'projects', label: 'Projects', anchor: 'basket', cam: 'basket',
-      eyebrow: 'Rolled up in the basket',
-      title: 'Things I’ve built',
-      body: [
-        { kind: 'group', text: 'At Thoughtworks' },
-        { kind: 'proj', name: 'Customer-service platform', tag: 'Spring Boot · Kafka · SQS · DDD · Hexagonal',
-          text: 'Event-driven microservices for an e-commerce customer-service platform, producing and consuming millions of events across teams. Held p50 at 150 ms and p90 at 200 ms while traffic grew 10×, from 3K to 30K API calls an hour.' },
-        { kind: 'proj', name: 'Disaster recovery, automated', tag: 'Terraform · scripted bootstrap · AWS',
-          text: 'Rebuilt disaster recovery as automated provisioning plus a scripted bootstrap, cutting full application recovery from a 6-hour SLA to 3–4 hours.' },
-        { kind: 'proj', name: 'Multi-agent debugging', tag: 'AI agents · AWS CloudWatch',
-          text: 'A workflow of agents that triages production errors from CloudWatch logs and traces each failure to its likely root cause, for engineers to verify and fix.' },
-        { kind: 'proj', name: 'GitHub Copilot skills', tag: 'Code review · Jira-to-spec · context-lean skills',
-          text: 'Skills that standardise AI-generated code across the team: the share of bugs from AI-written code fell from 40% to 15%, and AI spend from $80 to $50 per developer a month.' },
-        { kind: 'group', text: 'At OpenText' },
-        { kind: 'proj', name: 'OT2Central', tag: 'Product owner · full-stack developer · QA',
-          text: 'The replacement for Admin Center, with graphical modelling of applications, tenants and subscriptions. Architected it and owned it end to end.' },
-        { kind: 'proj', name: 'Admin Center & Entitlement Tenant Services', tag: 'Multi-tenant · RBAC · Protocol Buffers',
-          text: 'Tenant, subscription and user lifecycle management with RBAC, backed by Entitlement Tenant Services, the Protobuf-based authority for entitlements behind both products.' },
-        { kind: 'proj', name: 'OT2 at scale', tag: 'PostgreSQL · New Relic',
-          text: 'Tuned queries and access patterns to sustain 50K+ API calls a minute at 100–120 ms over 600M+ customer records, inside a 2-hour incident-response SLA.' },
-        { kind: 'proj', name: 'Azure → GCP migration', tag: 'Platform migration team',
-          text: 'Moved the platform from Azure to GCP with zero downtime.' },
-        { kind: 'proj', name: 'Operability tooling', tag: 'Angular 9 → 17',
-          text: 'A failed-events view, batch-job controls and an in-app API console that took Postman out of the team’s daily workflow, alongside an Angular 9 → 17 upgrade with no breaking changes.' },
-        { kind: 'group', text: 'At Cognizant' },
-        { kind: 'proj', name: 'IVS Portal', tag: 'Java 8 · Spring Boot · Hibernate · Oracle · Amazon S3',
-          text: 'Backend services for a North American automotive OEM that replaced manual engineering workflows, with S3 file upload and download APIs and Spring Integration flows between systems.' },
-        { kind: 'group', text: 'Open source' },
-        { kind: 'proj', name: 'Levitas Validators', tag: 'Java 17 · Maven Central · Apache 2.0',
-          text: 'A zero-dependency Java library that validates and masks Indian identifiers (GSTIN, PAN, IFSC, UPI, Aadhaar) offline.' },
-        { kind: 'proj', name: 'Over&Out', tag: 'Swift · Apple Vision · Core ML · Homebrew · GPL-3.0',
-          text: 'A macOS menu-bar app that sees, on-device, when you step away or take a call: it mutes the mic, turns off meeting video and pauses media, then restores everything when you are back.' },
-        { kind: 'proj', name: 'ClipHive', tag: 'C# · .NET · WPF · MIT',
-          text: 'A Windows clipboard manager with AES-256-GCM encryption at rest, offline OCR image search and zero network calls.' }
-      ]
-    },
-    {
-      id: 'stack', label: 'Stack', anchor: 'clipboard', cam: 'van',
-      eyebrow: 'What travels with me',
-      title: 'Stack',
-      body: [
-        { kind: 'stack', group: 'Languages', items: ['Java', 'SQL (MongoDB, PostgreSQL, MySQL, Oracle)', 'TypeScript', 'JavaScript', 'HTML/CSS'] },
-        { kind: 'stack', group: 'Backend frameworks', items: ['Spring Boot', 'Spring (Core, Data, MVC, Security)', 'Hibernate/JPA', 'JUnit'] },
-        { kind: 'stack', group: 'Frontend frameworks', items: ['Angular', 'React', 'Vue.js', 'Single SPA (micro frontends)', 'Jasmine'] },
-        { kind: 'stack', group: 'APIs & protocols', items: ['REST', 'gRPC', 'Protocol Buffers', 'OAuth 2.0'] },
-        { kind: 'stack', group: 'Data & messaging', items: ['Apache Kafka', 'AWS SQS/SNS', 'MongoDB', 'DynamoDB'] },
-        { kind: 'stack', group: 'Cloud & DevOps', items: ['AWS (EC2, S3, Lambda)', 'GCP', 'Terraform', 'Docker', 'Kubernetes', 'GitHub Actions', 'Jenkins'] },
-        { kind: 'stack', group: 'Architecture', items: ['Microservices', 'Event-driven architecture', 'DDD', 'Hexagonal architecture', 'Multi-tenant systems', 'RBAC', 'HLD/LLD'] },
-        { kind: 'stack', group: 'AI & LLM', items: ['LangChain4j', 'MCP (Model Context Protocol)', 'RAG pipelines'] },
-        { kind: 'stack', group: 'Observability', items: ['Splunk', 'Datadog', 'New Relic', 'Grafana', 'AWS CloudWatch'] },
-        { kind: 'stack', group: 'Security & code quality', items: ['Wiz', 'Trivy', 'OWASP Dependency-Check', 'SonarQube'] },
-        { kind: 'stack', group: 'Developer tools', items: ['Git', 'Claude Code', 'GitHub Copilot'] }
-      ]
-    },
-    {
-      id: 'contact', label: 'Contact', anchor: 'bottle', cam: 'bottle',
-      eyebrow: 'Message in a bottle', title: 'A letter'
-    }
+    { id: 'making', label: 'How it’s made', anchor: 'menu', cam: 'menu', eyebrow: 'On the picnic table', title: 'How the cove is made' },
+    { id: 'plans', label: 'Blueprints', anchor: 'basket', cam: 'basket', eyebrow: 'Rolled up in the basket', title: 'Blueprints' },
+    { id: 'stack', label: 'Stack', anchor: 'clipboard', cam: 'van', eyebrow: 'On the van', title: 'What it’s built with' },
+    { id: 'notes', label: 'Build notes', anchor: 'journal', cam: 'journal', eyebrow: 'By the fire', title: 'Stories from the build' },
+    { id: 'milestones', label: 'Milestones', anchor: 'lights', cam: 'lights', eyebrow: 'One bulb for each', title: 'The journey so far' },
+    { id: 'contact', label: 'Contact', anchor: 'bottle', cam: 'bottle', eyebrow: 'Message in a bottle', title: 'A letter' }
   ]
 };

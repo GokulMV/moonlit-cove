@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <title>Moonlit Cove</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="GokulMV — Senior Software Engineer. A moonlit beach camp you can explore: experience by the fire, milestones on the string lights, projects on the table.">
+<meta name="description" content="GokulMV, Senior Consultant at Thoughtworks. A moonlit beach camp you can explore, drawn live in your browser: how it is made on the picnic table, its blueprints in the basket, the stack on the van.">
 <style>
 /*@FONTS*/
 /*@CSS*/
@@ -12,9 +12,10 @@
   <header class="brand" id="brand">
     <p class="eyebrow">Moonlit Cove</p>
     <h1 id="hName">GokulMV</h1>
-    <p class="role" id="hRole">Senior Software Engineer <span>· Hyderabad</span></p>
-    <p class="line" id="hLine"></p>
+    <p class="role" id="hRole">Senior Consultant at Thoughtworks</p>
+    <button class="brand-hide" id="bBrandHide" type="button" title="Hide the name" aria-label="Hide the name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </header>
+  <button class="brand-show glass" id="bBrandShow" type="button" hidden title="Show the name" aria-label="Show the name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
 
   <button class="sky glass" id="sky" type="button" aria-label="Sky and time settings">
     <canvas id="moonIcon" width="64" height="64" aria-hidden="true"></canvas>
@@ -52,7 +53,7 @@
       <span id="rPage" aria-live="polite">Contents</span>
       <button id="rNext" type="button" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>
-    <p class="r-hint" id="rHint">Scroll or pinch to zoom · double-click to look closer</p>
+    <p class="r-hint" id="rHint">Tap the right side for the next page, the left to go back · or drag a page</p>
     <div class="r-links" id="rLinks"></div>
     <div class="sr-only" id="rText"></div>
   </div>
@@ -84,7 +85,7 @@
       <div class="srow"><span>Insects</span><button class="sw" id="sInsects" type="button" role="switch" aria-checked="true" aria-label="Insects"><i></i></button></div>
       <div class="srow"><span>Rain and thunder</span><button class="sw" id="sWeather" type="button" role="switch" aria-checked="true" aria-label="Rain and thunder"><i></i></button></div>
       <div class="srow"><span>111 Hz tone</span><button class="sw" id="sTone" type="button" role="switch" aria-checked="true" aria-label="111 Hz tone"><i></i></button></div>
-      <p class="credit">The mix is centred on 111 Hz, with a soft 111 Hz tone underneath. Waves follow the ones you see; the fire crackles only while it is lit; crickets come out after dark. Recordings: ocean samples from GokulMV, and the Moodist library (Pixabay licence and CC0). The van's engine and knocks: Kenney's Starter Kit Racing (MIT).</p>
+      <p class="credit">The mix is centred on 111 Hz, with a soft 111 Hz tone underneath. Waves follow the ones you see; the fire crackles only while it is lit; crickets come out after dark. Where every sound comes from is under <button type="button" class="linkish" data-open-credits>Credits</button>.</p>
       <label class="srow" for="sVol"><span>Volume</span><input id="sVol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
     </div>
     <div class="sgroup">
@@ -119,7 +120,18 @@
       <label class="srow" for="lSoft"><span>Softness</span><input id="lSoft" type="range" min="0" max="1" step="0.01" value="0.55"></label>
       <label class="srow" for="lMotion"><span>Motion</span><input id="lMotion" type="range" min="0.3" max="1.2" step="0.01" value="0.7"></label>
       <div class="srow"><span>Lights</span><div class="seg" role="radiogroup" aria-label="Lights"><button type="button" role="radio" data-lights="auto" aria-checked="true">Auto</button><button type="button" role="radio" data-lights="on" aria-checked="false">On</button><button type="button" role="radio" data-lights="off" aria-checked="false">Off</button></div></div>
+      <div class="srow"><span>Name in the corner</span><button class="sw" id="lBrand" type="button" role="switch" aria-checked="true" aria-label="Show the name in the corner"><i></i></button></div>
     </div>
+    <div class="sgroup">
+      <button type="button" class="srow linkrow" data-open-credits><span>Credits and licences</span><span aria-hidden="true">→</span></button>
+    </div>
+  </section>
+
+  <section class="credits glass" id="credits" hidden aria-label="Credits and licences" role="dialog" aria-modal="false">
+    <button class="icon close" id="cClose" type="button" aria-label="Close credits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <p class="eyebrow">Credits and licences</p>
+    <h2>Made with help</h2>
+    <div id="cBody"></div>
   </section>
 
   <div class="intro" id="intro">

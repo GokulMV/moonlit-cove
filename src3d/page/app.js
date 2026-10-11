@@ -38,7 +38,7 @@
     bottle: { pos: [-2.25, 1.0, -3.5], look: [-3.3, 0.12, -5.2], fov: 38, focus: 2.1 }
   };
   let anchors = null;
-  /* the view of the van is kept relative to the van, so the packing list reads well wherever it was parked */
+  /* the view of the van is kept relative to the van, so the clipboard reads well wherever it was parked */
   const V0van = JSON.parse(JSON.stringify(V.van)); let van0 = null;
   function vanView() {
     if (!van0) return V0van;
@@ -50,45 +50,18 @@
 
   /* ── text content ── */
   $('hName').textContent = Content.name; $('iName').textContent = Content.name;
-  $('hRole').innerHTML = `${Content.role} <span>· ${Content.place.split(',')[0]}</span>`; $('iRole').textContent = Content.role;
-  $('hLine').textContent = Content.line;
+  $('hRole').textContent = Content.role; $('iRole').textContent = Content.role;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const todo = t => t ? `<div class="todo">${esc(t)}</div>` : '';
-  /* the whole résumé, laid out like a bistro menu: dates and licences sit where prices would */
-  function menuHTML() {
-    const C = Content, ch = id => C.chapters.find(x => x.id === id).body;
-    const row = (l, r) => `<div class="m-row"><span class="m-l">${l}</span><i class="m-dots" aria-hidden="true"></i><span class="m-r">${r}</span></div>`;
-    const sec = (k, t, inner) => `<section class="m-sec"><p class="m-k">${k}</p><h3 class="m-t">${t}</h3>${inner}</section>`;
-    const orn = '<p class="m-orn" aria-hidden="true">· ❦ ·</p>';
-    const E = C.education;
-    return `<div class="menu">
-      <p class="m-role">${esc(C.role)} · ${esc(C.place)}</p>
-      <p class="m-links">${C.links.map(([n, h, t]) => `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(t)}</a>`).join('<span aria-hidden="true">·</span>')}</p>
-      ${orn}
-      ${sec('To start', 'Summary', `<p class="m-p">${esc(C.summary)}</p>`)}
-      ${orn}
-      ${sec('Mains', 'Experience', ch('experience').map(r => `<article class="m-item">${row(`<b>${esc(r.org)}</b>`, esc(r.when))}<p class="m-meta">${esc(r.title)} · ${esc(r.context)} · ${esc(r.where)}</p><ul class="m-ul">${r.points.map(p => `<li>${p}</li>`).join('')}</ul></article>`).join(''))}
-      ${orn}
-      ${sec('From the basket', 'Projects', C.resumeProjects.map(p => `<article class="m-item">${row(`<b>${esc(p.name)}</b>`, esc(p.license))}<p class="m-meta">${esc(p.tech)}</p><p class="m-p">${esc(p.text)}</p></article>`).join(''))}
-      ${orn}
-      ${sec('The pantry', 'Technical skills', `<dl class="m-dl">${ch('stack').map(g => `<dt>${esc(g.group)}</dt><dd>${g.items.map(esc).join(' · ')}</dd>`).join('')}</dl>`)}
-      ${orn}
-      ${sec('To finish', 'Education', `<article class="m-item">${row(`<b>${esc(E.school)}</b>`, esc(E.year))}<p class="m-meta">${esc(E.degree)} · ${esc(E.where)}</p></article>`)}
-      <p class="m-foot">Served under the string lights. Thank you for stopping by.</p>
-    </div>`;
-  }
-  function chapterHTML(c) {
-    if (c.id === 'resume') return menuHTML();
-    if (c.id === 'milestones') return `<ul class="miles">${c.body.map(m => `<li><span class="when">${esc(m.when || '')}</span>${esc(m.text)}${m.todo ? `<br><span class="todo">${esc(m.todo)}</span>` : ''}</li>`).join('')}</ul>`;
-    return c.body.map(b => {
-      if (b.kind === 'role') return `<article class="role-card"><h4>${esc(b.org)}</h4><div class="meta">${esc(b.title)} · ${esc(b.when)}${b.where ? ' · ' + esc(b.where) : ''}</div>${b.context ? `<div class="ctx">${esc(b.context)}</div>` : ''}${b.text ? `<p>${esc(b.text)}</p>` : ''}${b.points ? `<ul class="pts">${b.points.map(p => `<li>${p}</li>`).join('')}</ul>` : ''}${todo(b.todo)}</article>`;
-      if (b.kind === 'edu') return `<p class="edu">${esc(b.text)}</p>`;
-      if (b.kind === 'group') return `<h3 class="pgroup">${esc(b.text)}</h3>`;
-      if (b.kind === 'proj') return `<article class="proj"><h4>${esc(b.name)}</h4><span class="tag">${esc(b.tag)}</span>${b.text ? `<p>${esc(b.text)}</p>` : ''}${todo(b.todo)}</article>`;
-      if (b.kind === 'stack') return `<div class="stack"><h4>${esc(b.group)}</h4><div class="chips">${b.items.map(i => `<span>${esc(i)}</span>`).join('')}</div></div>`;
-      if (b.kind === 'links') return `<div class="links">${b.items.map(([n, h]) => h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(n)} ↗</a>` : `<span>${esc(n)}</span>`).join('')}</div>${todo(b.todo)}`;
-      return `<p>${esc(b.text)}</p>`;
-    }).join('');
+  /* the words of each chapter as plain HTML, for screen readers (the pages themselves are pictures on paper) */
+  function docText(id) {
+    const C = Content, li = a => `<ul>${a.map(t => `<li>${t}</li>`).join('')}</ul>`;
+    if (id === 'making') return C.making.map(s => `<h3>${esc(s.title)}</h3><p>${esc(s.lead)}</p>${s.points ? li(s.points) : ''}${s.steps ? li(s.steps.map(([l, t]) => `<b>${esc(l)}</b>: ${esc(t)}`)) : ''}`).join('');
+    if (id === 'notes') return C.notes.map(n => `<h3>${esc(n.title)}</h3><p>${esc(n.problem)}</p><p>${esc(n.fix)}</p>`).join('');
+    if (id === 'plans') return Pages.SHEETS.map(([t, sub, , notes]) => `<h3>${esc(t)}</h3><p>${esc(sub)}</p>${li(notes.map(esc))}`).join('');
+    if (id === 'stack') return C.stack.map(g => `<h3>${esc(g.group)}</h3>${li(g.items.map(esc))}`).join('');
+    if (id === 'contact') return `<p>${esc(C.letter.to)}</p>${C.letter.body.map(p => `<p>${esc(p)}</p>`).join('')}<p>${esc(C.letter.close)} ${esc(C.letter.sign)}</p><p>Email ${esc(C.contact.email)} · ${C.links.map(l => esc(l[2])).join(' · ')}</p>`;
+    if (id === 'milestones') return li(C.journey.map(j => `${esc(j.when)} · ${esc(j.title)}: ${esc(j.text)}`));
+    return '';
   }
   const dock = $('dock'), spots = $('spots');
   Content.chapters.forEach(c => {
@@ -111,12 +84,12 @@
     if (c && RD[c.id]) { d.hidden = true; document.body.classList.remove('reading'); startReading(c.id); return; }
     document.body.classList.toggle('reading', !!c);
     d.classList.toggle('menu-mode', false);
-    if (c) { $('dEyebrow').textContent = c.id === 'resume' ? 'Tonight’s menu · on the picnic table' : c.eyebrow; $('dTitle').textContent = c.id === 'resume' ? Content.name : c.title; $('dBody').innerHTML = chapterHTML(c); d.hidden = false; d.scrollTop = 0; goView(c.cam); }
+    if (c) { $('dEyebrow').textContent = c.eyebrow; $('dTitle').textContent = c.title; $('dBody').innerHTML = docText(c.id); d.hidden = false; d.scrollTop = 0; goView(c.cam); }
     else { d.hidden = true; goView('wide'); }
   }
   $('dClose').addEventListener('click', () => openChapter(null));
   addEventListener('keydown', e => {
-    if (e.key === 'Escape') { if (!$('settings').hidden) toggleSettings(false); else openChapter(null); return; }
+    if (e.key === 'Escape') { if (!$('credits').hidden) toggleCredits(false); else if (!$('settings').hidden) toggleSettings(false); else openChapter(null); return; }
     if (rd.on) {
       const k = e.key;
       if (k === '+' || k === '=') { rd.zoomT = Math.min(2.4, rd.zoomT * 1.25); e.preventDefault(); }
@@ -126,21 +99,21 @@
 
     }
   });
-  function goView(name) { st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = V[name] || V.wide; st.camT = 0; }
+  function goView(name) { st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = V[name] || V.wide; st.camT = 0; st.camDur = camDur(st.from, st.to); }
 
   /* ── reading in the scene: every chapter is an object that opens where it lies ──
      book   the menu on the table, the journal by the fire: the camera comes down and the pages turn
-     paper  the letter, the blueprints, the packing list: picked up, unrolled, held in front of you
+     paper  the letter, the blueprints, the clipboard: picked up, unrolled, held in front of you
      tags   the journey: the string lights flicker, then a paper tag hangs under a bulb for each stop */
   const RD = {
-    resume: { kind: 'book', book: 'menu', doc: 'menu', tilt: 0.2, links: ['linkedin', 'github'] },
-    experience: { kind: 'book', book: 'journal', doc: 'journal', tilt: 0.42 },
-    projects: { kind: 'paper', doc: 'plans', origin: 'roll', view: 'basket', W: 0.46, H: 0.325, R0: 0.013, rolled: true, back: '#2a5a95', links: ['github'] },
-    stack: { kind: 'paper', doc: 'packing', origin: 'clipboard', view: 'van', W: 0.24, H: 0.336, rolled: false, board: true, back: '#f2eee4' },
-    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.24, H: 0.341, R0: 0.011, rolled: true, back: '#e6d4ad', links: ['phone', 'email', 'linkedin', 'github'] },
+    making: { kind: 'book', book: 'menu', doc: 'making', tilt: 0.2, links: ['source'] },
+    notes: { kind: 'book', book: 'journal', doc: 'notes', tilt: 0.42 },
+    plans: { kind: 'paper', doc: 'plans', origin: 'roll', view: 'basket', W: 0.46, H: 0.325, R0: 0.013, rolled: true, back: '#2a5a95', links: ['source'] },
+    stack: { kind: 'paper', doc: 'stack', origin: 'clipboard', view: 'van', W: 0.24, H: 0.336, rolled: false, board: true, back: '#f2eee4' },
+    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.24, H: 0.341, R0: 0.011, rolled: true, back: '#e6d4ad', links: ['email', 'linkedin', 'github'] },
     milestones: { kind: 'tags', view: 'journey' }
   };
-  const rd = { on: false, id: null, cfg: null, docs: {}, s: 1, cam: null, openAt: 0, held: null, tagT0: 0, tagIdx: 0, flick: 0, zoom: 1, zoomT: 1, pan: [0, 0], panT: [0, 0] };
+  const rd = { on: false, id: null, cfg: null, docs: {}, s: 1, cam: null, pending: null, held: null, tagT0: 0, tagIdx: 0, flick: 0, zoom: 1, zoomT: 1, pan: [0, 0], panT: [0, 0], drag: null };
   const single = () => view.w < 720 || view.w / view.h < 1.0;
   /* documents are typeset once per layout (phones get narrower sheets with bigger type) */
   const bookKey = {};
@@ -154,43 +127,56 @@
   }
   const docOf = cfg => rd.docs[cfg.doc + (single() ? ':c' : '')] || doc(cfg.doc);
   const LINKS = {
-    phone: () => [`Call ${Content.contact.phone}`, `tel:${Content.contact.tel}`],
     email: () => ['Email', `mailto:${Content.contact.email}`],
     linkedin: () => ['LinkedIn ↗', Content.links[0][1]],
-    github: () => ['GitHub ↗', Content.links[1][1]]
+    github: () => ['GitHub ↗', Content.links[1][1]],
+    source: () => ['Source on GitHub ↗', 'https://github.com/GokulMV/moonlit-cove']
   };
   function startReading(id) {
     const cfg = RD[id]; rd.on = true; rd.id = id; rd.cfg = cfg; rd.cam = null; rd.held = null; rd.zoom = rd.zoomT = 1; rd.pan = [0, 0]; rd.panT = [0, 0];
     toggleSettings(false);
     document.body.classList.add('reading-book'); $('reader').hidden = false;
     $('rLinks').innerHTML = (cfg.links || []).map(k => { const [t, h] = LINKS[k](); return `<a href="${esc(h)}"${h.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(t)}</a>`; }).join('');
-    $('rText').innerHTML = id === 'resume' ? menuHTML() : '';
+    $('rText').innerHTML = docText(id);
     st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.camT = 0;
+    /* first the camera comes to the object; only once it is there does the object open */
+    const arrive = fn => { rd.pending = () => { if (rd.on && rd.id === id) fn(); }; };
     if (cfg.kind === 'book') {
-      doc(cfg.doc); rd.s = single() ? 1 : 1;
-      st.to = bookView(); rd.openAt = performance.now() + 1300;
+      doc(cfg.doc); rd.s = 1;
+      st.to = bookView();
+      arrive(() => Engine.books[cfg.book].go(spreadOf(rd.s), true));
     } else if (cfg.kind === 'paper') {
-      const r = doc(cfg.doc), v = V[cfg.view], c0 = r.canvases[0], W = single() && cfg.doc === 'plans' ? 0.26 : cfg.W, H = W * c0.height / c0.width;
+      const r = doc(cfg.doc), v = V[cfg.view], c0 = r.canvases[0], W = cfg.W, H = W * c0.height / c0.width;
       rd.held = heldPose(v, W, H); rd.paperWH = [W, H];
       st.to = Object.assign({}, v, { focus: rd.held.d });
-      if (cfg.origin === 'bottle') Engine.prop('bottle', false);
-      setTimeout(() => {
-        if (!rd.on || rd.id !== id) return;
+      const go = () => {
         Engine.prop(cfg.origin, false);
-        Engine.paper.open({ W: rd.paperWH[0], H: rd.paperWH[1], R0: cfg.R0, rolled: cfg.rolled, board: cfg.board, backColor: cfg.back, pages: r.canvases, origin: Engine.origin(cfg.origin), held: rd.held, fly: 1.5 });
+        Engine.paper.open({ W: rd.paperWH[0], H: rd.paperWH[1], R0: cfg.R0, rolled: cfg.rolled, board: cfg.board, backColor: cfg.back, pages: r.canvases, origin: Engine.origin(cfg.origin), held: rd.held, fly: cfg.board ? 1.25 : 1.5, lift: cfg.board ? 1 : 0 });
         syncReader();
-      }, cfg.origin === 'bottle' ? 650 : 250);
+      };
+      /* the bottle: the cork pops first, and the letter slides out once it is clear */
+      arrive(cfg.origin === 'bottle' ? () => { Engine.corkOut(true); setTimeout(() => { if (rd.on && rd.id === id) go(); }, 520); } : go);
     } else if (cfg.kind === 'tags') {
-      st.to = V[cfg.view]; rd.tagT0 = performance.now() + 1500; rd.flick = performance.now(); rd.tagIdx = 0;
+      st.to = V[cfg.view]; rd.tagT0 = 0; rd.flick = 0; rd.tagIdx = 0;
       buildTags();
+      /* the lights flicker once the camera is under them, then the tags come down */
+      arrive(() => { rd.flick = performance.now(); rd.tagT0 = rd.flick + 1500; });
     }
+    st.camDur = camDur(st.from, st.to);
+    /* how to turn the pages: said once as it opens, then it fades */
+    const many = cfg.kind === 'book' || (cfg.kind === 'paper' && cfg.doc !== 'letter');
+    $('rHint').textContent = many ? (isTouch ? 'Tap the right side for the next page, the left to go back, or drag a page · pinch to zoom' : 'Click the right side for the next page, the left to go back, or drag a page · scroll to zoom') : (cfg.kind === 'paper' ? 'Scroll or pinch to look closer' : '');
+    document.body.classList.remove('rd-hint-off'); clearTimeout(rd.hintTimer); rd.hintTimer = setTimeout(() => document.body.classList.add('rd-hint-off'), 7000);
     syncReader();
   }
+  /* how long the camera takes: short hops are quick, the long way round from the wide view takes its time */
+  const camDur = (a, b) => { const d = a && b ? Math.hypot(...a.pos.map((v, i) => v - b.pos[i])) : 20; return Math.max(1.1, Math.min(2.2, 0.8 + d / 14)); };
   function stopReading(goingElsewhere) {
     if (!rd.on) return;
-    const cfg = rd.cfg; rd.on = false; rd.openAt = 0;
+    const cfg = rd.cfg, opened = !rd.pending; rd.on = false; rd.pending = null; endPageDrag(false);
     if (cfg.kind === 'book') Engine.books[cfg.book].go(0, false);
-    if (cfg.kind === 'paper') { const o = cfg.origin; Engine.paper.close(() => { Engine.prop(o, true); }); }
+    if (cfg.kind === 'paper') { const o = cfg.origin; if (Engine.paper.mode === 'hidden') { Engine.prop(o, true); Engine.corkOut(false); } else Engine.paper.close(() => { Engine.prop(o, true); if (o === 'bottle') Engine.corkOut(false); }); }
+    if (!opened && cfg.origin === 'bottle') Engine.corkOut(false);
     if (cfg.kind === 'tags') { $('tags').hidden = true; $('tags').innerHTML = ''; }
     rd.id = null; rd.cfg = null;
     document.body.classList.remove('reading-book'); $('reader').hidden = true;
@@ -206,7 +192,7 @@
       if (one) rd.s = Math.max(0, Math.min(r.last, rd.s + dir));
       else { const k = Math.max(0, Math.min(bk.maxSpread, spreadOf(rd.s) + dir)); rd.s = k * 2 + 1; }
       if (rd.s === s0) return;
-      if (spreadOf(rd.s) !== spreadOf(s0)) { if (!rd.openAt) bk.go(spreadOf(rd.s), true); pageSound(); }
+      if (spreadOf(rd.s) !== spreadOf(s0)) { if (!rd.pending) bk.go(spreadOf(rd.s), true); pageSound(); }
     } else if (cfg.kind === 'paper') { if (Engine.paper.turn(dir)) pageSound(); }
     else if (cfg.kind === 'tags') { rd.tagIdx = Math.max(0, Math.min(Content.journey.length - 1, rd.tagIdx + dir)); }
     syncReader();
@@ -216,13 +202,14 @@
     const cfg = rd.cfg; if (!cfg) return;
     let txt = '', canP = false, canN = false;
     if (cfg.kind === 'book') {
-      const r = docOf(cfg), bk = Engine.books[cfg.book], one = single(), k = spreadOf(rd.s), name = s => s === 0 ? (cfg.doc === 'menu' ? 'Contents' : 'Cover page') : s > r.pages ? 'Last page' : `Page ${s}`;
+      const r = docOf(cfg), bk = Engine.books[cfg.book], one = single(), k = spreadOf(rd.s), name = s => s === 0 ? 'Contents' : s > r.pages ? 'Last page' : `Page ${s}`;
       if (one) txt = `${name(rd.s)} · ${r.labels[rd.s] || ''}`;
       else { const L = 2 * k, R = 2 * k + 1, sec = r.labels[R] || r.labels[L] || ''; txt = L === 0 ? `${name(0)} · page 1 of ${r.pages}` : R > r.pages ? `Page ${L} of ${r.pages} · ${r.labels[L]}` : `Pages ${L}–${R} of ${r.pages} · ${sec}`; }
       canP = one ? rd.s > 0 : k > 0; canN = one ? rd.s < r.last : k < bk.maxSpread;
     } else if (cfg.kind === 'paper') {
-      const r = docOf(cfg), i = Engine.paper.count ? Engine.paper.idx : 0;
-      txt = cfg.doc === 'letter' ? 'A letter, from the bottle' : cfg.doc === 'plans' ? `Sheet ${i + 1} of ${r.pages} · ${r.labels[i]}` : `Packing list · page ${i + 1} of ${r.pages}`;
+      /* the sheet being turned to, not the one still lifting away */
+      const r = docOf(cfg), i = Engine.paper.count ? Engine.paper.target : 0;
+      txt = cfg.doc === 'letter' ? 'A letter, from the bottle' : cfg.doc === 'plans' ? `Sheet ${i + 1} of ${r.pages} · ${r.labels[i] || ''}` : `${r.title || 'Page'} · ${i + 1} of ${r.pages}`;
       canP = i > 0; canN = i < r.pages - 1;
     } else { const one = single(); txt = one ? `${Content.journey[rd.tagIdx].when} · ${Content.journey[rd.tagIdx].title}` : 'The journey so far'; canP = one && rd.tagIdx > 0; canN = one && rd.tagIdx < Content.journey.length - 1; }
     $('rPage').textContent = txt; $('rPrev').disabled = !canP; $('rNext').disabled = !canN;
@@ -261,7 +248,7 @@
     const one = single(), shown = Math.floor((now - rd.tagT0) / 380) + 1;
     $('tags').querySelectorAll('.tag').forEach((el, i) => {
       const p = Engine.project(tagBulbs[i]), x = view.x + p[0] * view.w, y = view.y + p[1] * view.h;
-      const vis = now >= rd.tagT0 && (one ? i === rd.tagIdx : i < shown) && p[2] < 1;
+      const vis = rd.tagT0 > 0 && now >= rd.tagT0 && (one ? i === rd.tagIdx : i < shown) && p[2] < 1;
       const drop = one ? 40 : 30 + (i % 2) * 150;
       el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`; el.style.setProperty('--drop', drop + 'px');
       const cw = Math.min(260, view.w * 0.8) / 2 + 12; el.style.setProperty('--nudge', `${(Math.max(view.x + cw, Math.min(view.x + view.w - cw, x)) - x).toFixed(1)}px`);
@@ -354,6 +341,23 @@
   document.querySelectorAll('[data-lights]').forEach(b => b.addEventListener('click', () => { st.lightsMode = b.dataset.lights; store.set('lightsMode', st.lightsMode); st.lightsQuick = 1; syncLightsUI(); }));
   $('bLights').addEventListener('click', () => { st.lightsMode = lightsWanted() ? 'off' : 'on'; store.set('lightsMode', st.lightsMode); st.lightsQuick = 1; syncLightsUI(); });
 
+  /* ── the name in the corner: shown or hidden, remembered ── */
+  st.brand = store.get('brand', true);
+  function syncBrand() { $('brand').classList.toggle('off', !st.brand); $('bBrandShow').hidden = st.brand; setSw($('lBrand'), st.brand); }
+  const setBrand = v => { st.brand = v; store.set('brand', v); syncBrand(); };
+  $('bBrandHide').addEventListener('click', () => setBrand(false));
+  $('bBrandShow').addEventListener('click', () => setBrand(true));
+  $('lBrand').addEventListener('click', () => setBrand(!st.brand));
+  syncBrand();
+
+  /* ── credits: every sound, typeface, library and idea that came from someone else ── */
+  function renderCredits() {
+    $('cBody').innerHTML = Content.credits.map(g => `<section><h3>${esc(g.group)}</h3><ul>${g.items.map(i => `<li><b>${esc(i.what)}</b><span>${esc(i.who)}</span><span class="cl">${i.link ? `<a href="${esc(i.link[1])}" target="_blank" rel="noopener">${esc(i.link[0])} ↗</a>` : ''}${i.licence ? `<em>${esc(i.licence)}</em>` : ''}</span></li>`).join('')}</ul></section>`).join('');
+  }
+  function toggleCredits(open) { const c = $('credits'), o = open ?? c.hidden; c.hidden = !o; if (o) { renderCredits(); toggleSettings(false); c.scrollTop = 0; } }
+  document.querySelectorAll('[data-open-credits]').forEach(b => b.addEventListener('click', () => toggleCredits(true)));
+  $('cClose').addEventListener('click', () => toggleCredits(false));
+
   /* ── sound ── */
   const chIds = { ocean: 'sOcean', forest: 'sForest', fire: 'sFire', insects: 'sInsects', weather: 'sWeather', tone: 'sTone' };
   function startSound() {
@@ -413,12 +417,68 @@
   }
   $('toastBtn').addEventListener('click', () => { Engine.rebuildCamp(); st.wrecked = false; sound.douse = null; toast('Camp rebuilt. The fire is going again.', false, 2600); });
 
+  /* ── reading: tap the right half for the next page, the left half to go back. Or take hold of a page and drag
+     it: it follows the pointer, and let go past halfway (or with a flick) it turns, otherwise it settles back ── */
+  function startPageDrag(dir) {
+    const cfg = rd.cfg; if (!cfg || rd.pending) return false;
+    if (cfg.kind === 'book') return Engine.books[cfg.book].dragStart(dir);
+    if (cfg.kind === 'paper' && cfg.doc !== 'letter') return Engine.paper.dragStart(dir);
+    return false;
+  }
+  function endPageDrag(commit) {
+    const g = rd.drag; rd.drag = null; document.body.classList.remove('rd-grab');
+    if (!g || !g.live || !rd.cfg) return;
+    const cfg = rd.cfg;
+    if (cfg.kind === 'book') {
+      const bk = Engine.books[cfg.book], k0 = bk.spread;
+      if (bk.dragEnd(commit)) { const k = k0 + g.dir; rd.s = single() ? (g.dir > 0 ? 2 * k : 2 * k + 1) : 2 * k + 1; pageSound(); }
+    } else if (Engine.paper.dragEnd(commit)) pageSound();
+    syncReader();
+  }
+  /* which half of the page the pointer is over, shown with the cursor */
+  function readCursor(e) {
+    let c = '';
+    if (rd.on && rd.cfg && rd.cfg.kind !== 'tags' && !rd.pending && !(rd.drag && rd.drag.live)) { const next = e.clientX - view.x >= view.w / 2; c = next ? ($('rNext').disabled ? '' : 'rd-next') : ($('rPrev').disabled ? '' : 'rd-prev'); }
+    document.body.classList.toggle('rd-next', c === 'rd-next'); document.body.classList.toggle('rd-prev', c === 'rd-prev');
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (rd.on && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) rd.drag = { x0: e.clientX, y0: e.clientY, id: e.pointerId, live: false, dir: 0, axis: 'x', f: 0, v: 0, lf: 0, lt: performance.now() };
+  });
+  cv.addEventListener('pointermove', e => {
+    readCursor(e);
+    const g = rd.drag; if (!g || g.id !== e.pointerId || !rd.on) return;
+    if (pinch.size > 1) { if (g.live) endPageDrag(false); else rd.drag = null; return; }
+    const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+    if (!g.live) {
+      if (Math.hypot(dx, dy) < 12) return;
+      /* a book turns sideways; a loose sheet lifts over its top edge, so up (or left) is onward */
+      g.axis = rd.cfg.kind === 'book' || Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      g.dir = (g.axis === 'x' ? dx : dy) < 0 ? 1 : -1;
+      if (!startPageDrag(g.dir)) { rd.drag = null; return; }
+      g.live = true; document.body.classList.add('rd-grab'); readCursor(e);
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
+    }
+    const span = rd.cfg.kind === 'book' ? Math.min(view.w * (single() ? 0.7 : 0.4), 560) : Math.min(view.h * 0.5, 460);
+    const f = Math.max(0, Math.min(1, -(g.axis === 'x' ? dx : dy) * g.dir / span)), now = performance.now();
+    g.v = 0.6 * g.v + 0.4 * (f - g.lf) / Math.max(1, now - g.lt) * 1000; g.lf = f; g.lt = now; g.f = f;
+    if (rd.cfg.kind === 'book') Engine.books[rd.cfg.book].dragTo(f); else Engine.paper.dragTo(f);
+  });
+  cv.addEventListener('pointercancel', () => { if (rd.drag && rd.drag.live) endPageDrag(false); rd.drag = null; });
+
   /* ── clicks on the sea ── */
   let down = null;
   cv.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   cv.addEventListener('pointerup', e => {
     if (!down || !st.entered) return; const dx = e.clientX - down.x, moved = Math.hypot(dx, e.clientY - down.y); down = null;
-    if (rd.on) { if (pinch.size >= 1 || pinch0) return; if (rd.zoomT > 1.05 && moved <= 8) return; if (moved > 40 && Math.abs(dx) > 30 && rd.zoomT <= 1.05) readNav(dx < 0 ? 1 : -1); else if (moved <= 8) readNav(e.clientX - view.x < view.w / 2 ? -1 : 1); return; }
+    if (rd.on) {
+      const g = rd.drag;
+      if (g && g.live) { endPageDrag(g.f > 0.42 || (g.v > 1.6 && g.f > 0.06)); return; }
+      rd.drag = null;
+      /* (the pinch map still holds this pointer: more than one means it was a pinch) */
+      if (pinch.size > 1 || pinch0) return;
+      if (moved <= 10) readNav(e.clientX - view.x < view.w / 2 ? -1 : 1);
+      return;
+    }
     if (moved > 8) return;
     const r = cv.getBoundingClientRect(), info = Engine.clickSea((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, st.t);
     if (!info) return;
@@ -435,13 +495,12 @@
     const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? view.h : 1;
     walkBy((e.deltaY + e.deltaX) * k * 0.05);
   }, { passive: false });
-  cv.addEventListener('dblclick', e => { if (!zoomable()) return; rd.zoomT = rd.zoomT > 1.3 ? 1 : 2; });
   const pinch = new Map(); let pinch0 = null;
   cv.addEventListener('pointerdown', e => { pinch.set(e.pointerId, [e.clientX, e.clientY]); if (pinch.size === 2) { const [a, b] = [...pinch.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: rd.zoomT }; } });
   cv.addEventListener('pointermove', e => { if (!pinch.has(e.pointerId)) return; pinch.set(e.pointerId, [e.clientX, e.clientY]); if (pinch.size === 2 && pinch0 && zoomable()) { const [a, b] = [...pinch.values()]; rd.zoomT = Math.max(1, Math.min(2.4, pinch0.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0.d)); } });
   const unpinch = e => { pinch.delete(e.pointerId); if (pinch.size < 2) pinch0 = null; };
   cv.addEventListener('pointerup', unpinch); cv.addEventListener('pointercancel', unpinch);
-  addEventListener('pointermove', e => { if (zoomable()) rd.panT = [Math.max(-1, Math.min(1, ((e.clientX - view.x) / view.w) * 2 - 1)) * 1.15, Math.max(-1, Math.min(1, ((e.clientY - view.y) / view.h) * 2 - 1)) * 1.15]; }, { passive: true });
+  addEventListener('pointermove', e => { if (zoomable() && !(rd.drag && rd.drag.live)) rd.panT = [Math.max(-1, Math.min(1, ((e.clientX - view.x) / view.w) * 2 - 1)) * 1.15, Math.max(-1, Math.min(1, ((e.clientY - view.y) / view.h) * 2 - 1)) * 1.15]; }, { passive: true });
   addEventListener('pointermove', e => { st.parT = [(e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1]; if (car.on && down && e.buttons) car.yaw = Math.max(-2.6, Math.min(2.6, car.yaw - e.movementX * 0.006)); }, { passive: true });
   addEventListener('pointerup', () => { if (car.on) car.yaw *= 0.5; });
 
@@ -734,11 +793,11 @@
   if (window.ResizeObserver) new ResizeObserver(size).observe(cv);
   let ready = false;
   setTimeout(() => {
-    try { Engine.init(cv, { shadowSize: 2048, decalPPM: 40 }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
+    try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40 }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
     catch (e) { $('introNote').textContent = 'This device could not start WebGL 2, which the cove needs.'; console.error(e); return; }
     /* print the menu card with the résumé's own words once the page fonts are ready */
-    const coverInfo = { name: Content.name, kicker: 'The Moonlit Cove', sub: Content.role };
-    const printCovers = () => { Engine.paintMenu(coverInfo); Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Stories by the fire', name: Content.name })); try { Engine.paintClip(doc('packing').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
+    const coverInfo = { kicker: 'The Moonlit Cove', name: 'How it’s made', sub: 'a menu of the build' };
+    const printCovers = () => { Engine.paintMenu(coverInfo); Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
     printCovers();
     if (document.fonts && document.fonts.load) Promise.all(['500 70px Fraunces', 'italic 400 25px Fraunces', '600 25px Fraunces', '500 21px "JetBrains Mono"', '600 40px Caveat', '700 40px Caveat'].map(f => document.fonts.load(f))).then(() => { rd.docs = {}; printCovers(); }, () => {});
     $('enterSound').disabled = false; $('enterQuiet').disabled = false;
@@ -759,13 +818,15 @@
   function frame(now) {
     requestAnimationFrame(frame);
     if (!ready) return;
-    const dtR = st.last ? Math.min(0.1, (now - st.last) / 1000) : 1 / 60; st.last = now;
+    const dtR = st.last ? Math.min(window.__coveDtCap || 0.1, (now - st.last) / 1000) : 1 / 60; st.last = now;   /* (the test bench raises the cap: software GL draws a frame every few seconds) */
     st.t += dtR * st.motion;
     st.offset += dtR * 1000 * (st.flow - 1);
     const ms = nowMs();
 
     /* camera: transition + gentle parallax */
-    st.camT = Math.min(1, st.camT + dtR / 2.2);
+    st.camT = Math.min(1, st.camT + dtR / (st.camDur || 2.2));
+    /* the camera has come to rest at what is being opened: now open it */
+    if (rd.on && rd.pending && st.camT >= 0.92) { const f = rd.pending; rd.pending = null; f(); }
     if (rd.on) {
       const a = 1 - Math.exp(-dtR * 6); rd.zoom += (rd.zoomT - rd.zoom) * a; rd.pan[0] += (rd.panT[0] - rd.pan[0]) * a; rd.pan[1] += (rd.panT[1] - rd.pan[1]) * a;
       if (rd.cfg.kind === 'paper' && rd.paperWH && Engine.paper.mode !== 'hidden' && Engine.paper.mode !== 'closing') { const v = V[rd.cfg.view], hp = heldPose(v, rd.paperWH[0], rd.paperWH[1], rd.zoom, rd.pan); Engine.paper.setHeld(hp.p, hp.q); st.to = Object.assign({}, v, { focus: hp.d }); }
@@ -773,7 +834,6 @@
     if (rd.on && rd.cfg.kind === 'book') {
       const tv = bookView(), a = rd.cam ? 1 - Math.exp(-dtR * 4) : 1;
       rd.cam = rd.cam ? lerpCam(rd.cam, tv, a) : tv; st.to = rd.cam;
-      if (rd.openAt && performance.now() >= rd.openAt) { rd.openAt = 0; Engine.books[rd.cfg.book].go(spreadOf(rd.s), true); }
     }
     if (rd.on && rd.cfg.kind === 'tags' && single() && tagBulbs) {
       const b = tagBulbs[rd.tagIdx], tv = { pos: [b[0], b[1] - 0.25, b[2] + 1.7], look: [b[0], b[1] - 0.3, b[2] - 0.4], fov: 50, focus: 1.8 }, a = rd.cam ? 1 - Math.exp(-dtR * 3) : 1;
