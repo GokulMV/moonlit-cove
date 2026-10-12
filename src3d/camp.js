@@ -98,6 +98,7 @@ void main(){
   box(ro, rd, vec3(1.16, 0.46, -0.74), vec3(1.62, 0.86, -0.12), 6.0, t, n, hit);    /* the passenger's */
   box(ro, rd, vec3(1.1, 0.86, -0.72), vec3(1.24, 1.52, -0.14), 6.0, t, n, hit);
   box(ro, rd, vec3(1.8, 0.92, -0.8), vec3(2.02, 1.18, 0.8), 7.0, t, n, hit);        /* the dashboard */
+  box(ro, rd, vec3(0.28, 0.46, -0.8), vec3(1.05, 1.84, -0.46), 9.0, t, n, hit);     /* the wardrobe by the cab, on the door's side */
   /* the steering wheel: a ring, tipped back toward the driver, its hub and a spoke across */
   { vec3 c = vec3(1.66, 1.14, 0.43), wn = normalize(vec3(-0.85, 0.53, 0.0)), up = normalize(cross(wn, vec3(0.0, 0.0, 1.0))); float dn = dot(rd, wn);
     if (abs(dn) > 1e-4){ float tw = dot(c - ro, wn)/dn; vec3 q = ro + rd*tw - c; float rr = length(q);
@@ -130,6 +131,8 @@ void main(){
         if (side < 0.0){ for (int i = 0; i < 3; i++){ float c0 = 0.55 - float(i)*0.97; if (abs(p.x - c0) < 0.4 && abs(p.y - 1.36) < 0.21){ open = true; liv = true; xc = c0; hw = 0.4; } } }
         if (abs(p.x - 1.5) < 0.33 && abs(p.y - 1.36) < 0.21) open = true;
         if (side > 0.0 && uDoor > 0.5 && p.x > -0.86 && p.x < 0.2 && p.y < 1.76) open = true;
+        /* (and on that side, a chart of the coast in a frame) */
+        if (side > 0.0 && p.x > -1.27 && p.x < -0.93 && abs(p.y - 1.4) < 0.15){ vec2 m = vec2(p.x + 1.1, p.y - 1.4); float fr = min(0.17 - abs(m.x), 0.15 - abs(m.y)); alb = fr < 0.018 ? vec3(0.25, 0.15, 0.08) : mix(vec3(0.2, 0.42, 0.55), vec3(0.78, 0.7, 0.52), smoothstep(-0.01, 0.01, m.y - 0.06*sin(m.x*28.0) + 0.03))*(0.9 + 0.1*step(0.92, fract(m.x*30.0))); }
         /* (curtains gathered at the sides of the living windows) */
         if (side < 0.0){ for (int i = 0; i < 3; i++){ float c0 = 0.55 - float(i)*0.97, dx = abs(p.x - c0); if (dx > 0.27 && dx < 0.45 && abs(p.y - 1.36) < 0.25){ open = false; alb = vec3(0.62, 0.24, 0.1)*(0.72 + 0.28*sin(p.x*95.0)); } } }
       } else if (n.x > 0.5){
@@ -156,6 +159,9 @@ void main(){
   else if (hit == 7.0){
     alb = vec3(0.07, 0.07, 0.075);
     if (n.x < -0.5){ for (int i = 0; i < 2; i++){ float d = length(p.yz - vec2(1.07, 0.32 + float(i)*0.19)); if (d < 0.055) alb = d > 0.045 ? vec3(0.7) : vec3(0.82, 0.78, 0.66); } }
+  } else if (hit == 9.0){
+    alb = wood(p, vec3(0.46, 0.3, 0.16));
+    if (n.z > 0.5){ float dx = abs(p.x - 0.665); alb *= 0.75 + 0.25*smoothstep(0.0, 0.012, dx)*smoothstep(0.0, 0.025, min(p.x - 0.28, 1.05 - p.x)); if (length(vec2(dx - 0.05, p.y - 1.15)) < 0.018) alb = vec3(0.75, 0.7, 0.6); }
   } else alb = vec3(0.82, 0.78, 0.68);
   vec3 col;
   if (open) col = outside(rd);

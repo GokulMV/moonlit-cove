@@ -47,11 +47,15 @@ if (what.includes('crab')) await session(22, async (page, frames) => {
   const c = await approach(page, frames, ['crab'], 6.5);
   check(!!c, 'a ghost crab out on the sand at night' + (c ? ` (${c.x.toFixed(1)}, ${c.z.toFixed(1)})` : ''));
   if (!c) return;
-  /* (it may have moved off: find it again where it is now) */
-  const c2 = await page.evaluate(() => { const w = window.__cove.wk, l = Engine.inspect.candidates().filter(c => c.kind === 'crab'); l.sort((a, b) => Math.hypot(a.x - w.x, a.z - w.z) - Math.hypot(b.x - w.x, b.z - w.z)); return l[0] && { x: l[0].x, y: l[0].y, z: l[0].z }; });
   await shot(page, prefix + '_crab0');
-  await clickOn(page, c2 || c); await frames(22);
-  const H = await page.evaluate(() => Engine.inspect.held);
+  /* (crabs scuttle: find the nearest again where it is now, just before each click, and try again if it was gone
+     from under the pointer by the time the click landed) */
+  let H = null;
+  for (let k = 0; k < 3 && !H; k++) {
+    const c2 = await page.evaluate(() => { const w = window.__cove.wk, l = Engine.inspect.candidates().filter(c => c.kind === 'crab'); l.sort((a, b) => Math.hypot(a.x - w.x, a.z - w.z) - Math.hypot(b.x - w.x, b.z - w.z)); return l[0] && { x: l[0].x, y: l[0].y, z: l[0].z }; });
+    await clickOn(page, c2 || c); await frames(22);
+    H = await page.evaluate(() => Engine.inspect.held);
+  }
   check(H && H.kind === 'crab', 'clicked, it is picked up and held' + (H ? ` (${H.name}, ${H.phase})` : ''));
   const panel = await page.evaluate(() => !document.getElementById('insp').hidden && document.getElementById('iName').textContent);
   check(panel === 'Ghost crab', `its card shows (${panel})`);
