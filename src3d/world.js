@@ -15,7 +15,7 @@
 const World = (() => {
   const T = THREE, TAU = Math.PI * 2, Co = Layout.Coast;
   const CW = 128, X0 = -64;                                   /* chunk c covers [X0 + c·CW, X0 + (c+1)·CW) along the coast; chunk 0 holds the camp */
-  const LOD = { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 1700, keep: 2100 };
+  const LOD = { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 3400, keep: 3800 };   /* (beyond the rocks' reach a chunk is only its land, its canopy and the crowns over it: the coast and its mountains run on into the haze) */
   const rng = s => Textures.rng(s);
   const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   /* the building is done in small steps: each piece of work checks late() as it goes and hands the frame back (yields)

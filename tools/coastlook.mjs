@@ -3,7 +3,7 @@
    node tools/coastlook.mjs [hour 15] [prefix coast] [places: x,x,…] */
 import { open, root } from './lib.mjs';
 import fs from 'fs'; import path from 'path';
-const hour = +(process.argv[2] || 15), prefix = process.argv[3] || 'coast', xs = (process.argv[4] || '0,700,-1300,2600').split(',').map(Number);
+const hour = +(process.argv[2] || 15), prefix = process.argv[3] || 'coast', xs = (process.argv[4] || '0,700,-1300,2600').split(',').filter(Boolean).map(Number);
 const out = path.join(root, 'shots'); fs.mkdirSync(out, { recursive: true });
 const { browser, page, logs } = await open({ w: 1280, h: 720, rs: 0.8, dtCap: 1, hour });
 await page.evaluate(() => { window.__coveFilm = true; window.__coveBuildMs = 400; });
@@ -22,6 +22,8 @@ for (const x of xs) {
 const P = await page.evaluate(() => ({ sz: Layout.shoreZ(60), vz: Layout.vegZ(60), vz3: Layout.vegZ(300) }));
 await shot('along', { pos: [60, 2.2, P.sz + 2], look: [300, 14, P.vz3 + 60], fov: 60, focus: 200 }, 14);
 await shot('inland', { pos: [30, 1.8, P.sz + 1], look: [60, 60, P.vz + 500], fov: 66, focus: 300 }, 6);
+/* down the coast from out at sea, to the horizon: does the mountain run on as far as the eye goes? */
+await shot('oblique', { pos: [0, 24, P.sz - 380], look: [1800, 40, P.vz + 300], fov: 55, focus: 900 }, 24);
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));
 console.log(errs.length ? 'page errors:\n  ' + errs.slice(0, 6).join('\n  ') : 'no page errors');
 await browser.close();
