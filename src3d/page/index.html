@@ -163,11 +163,20 @@
     </form>
   </section>
 
-  <!-- sitting by the fire: stand up again, and the radio on the picnic table -->
+  <!-- sitting: stand up again, change seat, turn the chair, and the radio by the fire -->
   <div class="seathud" id="seatHud" hidden>
     <button class="r-close glass" id="bStand" type="button">Stand up <kbd>Esc</kbd></button>
-    <p class="seat-hint" id="seatHint">Drag to look around · the radio on the table is yours</p>
-    <section class="radio glass" id="radio" aria-label="The radio on the picnic table">
+    <p class="seat-hint" id="seatHint">Drag to look around</p>
+    <div class="seatbar glass" role="group" aria-label="Where you sit">
+      <button type="button" id="bSeatPrev" aria-label="The seat before"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="seat-name" id="seatName" aria-live="polite">The chair by the fire</span>
+      <button type="button" id="bSeatNext" aria-label="The next seat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <span class="seat-turn" id="seatTurn">
+        <button type="button" id="bTurnL" aria-label="Turn the chair left" title="Turn the chair left (Q)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button>
+        <button type="button" id="bTurnR" aria-label="Turn the chair right" title="Turn the chair right (E)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg></button>
+      </span>
+    </div>
+    <section class="radio glass" id="radio" aria-label="The radio by the fire">
       <div class="rd-top">
         <button class="rd-power" id="rdPower" type="button" aria-pressed="false" title="Radio on or off" aria-label="Radio on or off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8"/><path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg></button>
         <div class="rd-now" aria-live="polite"><b id="rdName">The radio</b><span id="rdSub">Off</span></div>

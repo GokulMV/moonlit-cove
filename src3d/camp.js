@@ -422,8 +422,7 @@ void main(){
     const r = Textures.rng(91);
     const noFire = o => { o.userData.noFireShadow = true; return o; };
     const barkT = Mats.tex(Paint.logBark(7), { repeat: true });
-    const logM = Mats.lit({ map: barkT, roughness: 0.95 }, 'log'), charM = Mats.lit({ map: barkT, color: new T.Color(0.32, 0.29, 0.27), roughness: 1 }, 'log');
-    const log = (pts, r0, r1, m) => noFire(mesh(Nature.taperTube(new T.CatmullRomCurve3(pts), 14, 9, t => r0 + (r1 - r0) * t, 0.35), m));
+    const charM = Mats.lit({ map: barkT, color: new T.Color(0.32, 0.29, 0.27), roughness: 1 }, 'log');
     /* stone ring */
     const nS = 13;
     for (let i = 0; i < nS; i++) {
@@ -440,18 +439,8 @@ void main(){
     /* ash + embers */
     const bed = mesh(new T.CircleGeometry(0.36, 32), L('#2a2622', { roughness: 1 }, 'log'), false, true); bed.rotation.x = -Math.PI / 2; at(bed, 0, 0.012, 0); g.add(noFire(bed));
     for (let i = 0; i < 18; i++) { const a = r() * TAU, k = Math.sqrt(r()) * 0.27, c = mesh(rockGeo(0.02 + r() * 0.022, 500 + i, 1), charM, false); c.scale.y = 0.7; at(c, Math.cos(a) * k, 0.02, Math.sin(a) * k); g.add(noFire(c)); }
-    /* teepee: five slightly crooked logs leaning together */
-    for (let i = 0; i < 7; i++) {
-      const a = i / 7 * TAU + 0.2 + (r() - 0.5) * 0.3, b = new T.Vector3(Math.cos(a) * 0.33, 0.03, Math.sin(a) * 0.33);
-      const tp = new T.Vector3(Math.cos(a + 2.6) * 0.04, 0.42 + r() * 0.08, Math.sin(a + 2.6) * 0.04);
-      const mid = b.clone().lerp(tp, 0.5).add(new T.Vector3((r() - 0.5) * 0.05, 0, (r() - 0.5) * 0.05));
-      g.add(log([b, mid, tp], 0.058 + r() * 0.016, 0.032, i % 2 ? logM : charM));
-    }
-    /* (no long logs: open log ends read as hollow tubes) */
-    for (const [a, len] of []) {
-      const o = new T.Vector3(Math.cos(a) * len, 0.13, Math.sin(a) * len), n = new T.Vector3(Math.cos(a) * 0.06, 0.05, Math.sin(a) * 0.06);
-      g.add(log([o, o.clone().lerp(n, 0.5).add(new T.Vector3(0, 0.02, 0)), n], 0.06, 0.045, logM));
-    }
+    /* the fire as it is laid: logs in a star over the embers, sticks leaning over the middle (models/camp/firewood.js) */
+    { const fl = Models.make('camp/fireLogs'); g.add(fl); refs.fireLogs = fl; }
     refs.coals = new T.MeshBasicMaterial({ color: new T.Color(0, 0, 0) });
     /* iron tripod, chain and the hanging kettle */
     const ironM = new T.MeshStandardMaterial({ color: C('#1d1c1e'), roughness: 0.45, metalness: 0.75 });
@@ -546,27 +535,7 @@ void main(){
     }
     for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) { const a = j * (NU + 1) + i, b = a + NU + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
-    const m = mesh(geo, Mats.lit({ map: tex, side: T.DoubleSide, roughness: 0.97 })); ch.add(m);
-  }
-  /* acoustic guitar, built upright along +y, back face toward -z */
-  function guitar() {
-    const g = new T.Group(), pts = [], N = 40, k = 70;
-    const wOf = y => { const lo = Math.sqrt(Math.max(0, 0.18 * 0.18 - y * y)), upv = Math.sqrt(Math.max(0, 0.135 * 0.135 - (y - 0.27) * (y - 0.27))); return Math.log(Math.exp(k * lo) + Math.exp(k * upv)) / k - Math.log(2) / k * (lo > 0 && upv > 0 ? 1 : 0); };
-    for (let i = 0; i <= N; i++) { const y = -0.18 + (0.405 + 0.18) * i / N; pts.push(new T.Vector2(Math.max(0.0, wOf(y)), y)); }
-    const sh = new T.Shape(); sh.moveTo(0, -0.18); pts.forEach(p => sh.lineTo(p.x, p.y)); for (let i = pts.length - 1; i >= 0; i--) sh.lineTo(-pts[i].x, pts[i].y);
-    const bg = new T.ExtrudeGeometry(sh, { depth: 0.085, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 6 }); bg.translate(0, 0, -0.0425);
-    const topT = Mats.tex(Paint.guitarTop()); topT.repeat.set(1 / 0.4, 1 / 0.8); topT.offset.set(0.5, 0.25);
-    g.add(new T.Mesh(bg, [Mats.lit({ map: topT, roughness: 0.35 }), L('#4a2816', { roughness: 0.4 })]));
-    g.children[0].castShadow = true;
-    const neck = mesh(new T.BoxGeometry(0.05, 0.46, 0.03), L('#5a3520', { roughness: 0.5 })); at(neck, 0, 0.62, -0.005); g.add(neck);
-    g.add(at(mesh(new T.BoxGeometry(0.047, 0.45, 0.007), L('#1c120c', { roughness: 0.4 })), 0, 0.625, 0.012));
-    const head = mesh(new T.BoxGeometry(0.078, 0.17, 0.02), L('#2a1810', { roughness: 0.4 })); head.rotation.x = -0.22; at(head, 0, 0.93, -0.02); g.add(head);
-    const pegM = new T.MeshStandardMaterial({ color: C('#d6d2c8'), roughness: 0.25, metalness: 0.9 });
-    for (let i = 0; i < 6; i++) { const pg = mesh(new T.CylinderGeometry(0.006, 0.006, 0.03, 6), pegM); pg.rotation.z = Math.PI / 2; at(pg, (i % 2 ? 1 : -1) * 0.05, 0.89 + Math.floor(i / 2) * 0.045, -0.03); g.add(pg); }
-    const sp = []; for (let i = 0; i < 6; i++) { const x = (i - 2.5) * 0.007; sp.push(x, -0.065, 0.051, x * 1.3, 0.85, 0.018); }
-    const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(sp, 3));
-    g.add(new T.LineSegments(sg, new T.LineBasicMaterial({ color: new T.Color(0.022, 0.021, 0.02) })));
-    return g;
+    const m = mesh(geo, Mats.lit({ map: tex, side: T.DoubleSide, roughness: 0.97 })); ch.add(m); return m;
   }
   function chairs(root, refs) {
     const paintT = [Mats.tex(Paint.plank(31, '#e7e1d3', 1), { repeat: true }), Mats.tex(Paint.plank(38, '#e3dccd', 1), { repeat: true })];
@@ -574,13 +543,13 @@ void main(){
     Layout.chairs.forEach((ch, idx) => {
       const ry = Math.atan2(-(ch.face[1] - ch.z), ch.face[0] - ch.x);
       const m = Mats.lit({ map: paintT[idx], roughness: 0.72 });
-      const g = adirondack(m); g.position.set(ch.x, 0, ch.z); g.rotation.y = ry; root.add(g); chs.push(g);
+      const g = adirondack(m); g.position.set(ch.x, 0, ch.z); g.rotation.y = ry; g.userData.ry0 = ry; root.add(g); chs.push(g);
       refs.dyn.push({ o: g, kind: 'tip', half: 0.45, tip: 1.3 });
       g.userData.pick = 'chair' + idx;                              /* a click on either chair sits you in it */
     });
-    refs.chairs = chs;
-    /* a plaid throw over the first chair, a striped cushion and a guitar at the second */
-    throwOver(chs[0], Mats.tex(Paint.plaid(), { repeat: true }));
+    refs.chairs = chs; refs.chairProps = chs.map(() => []);    /* (what lies on a chair, out of sight while you sit in it) */
+    /* a plaid throw over the first chair, a striped pad and a guitar at the second */
+    refs.chairProps[0].push(throwOver(chs[0], Mats.tex(Paint.plaid(), { repeat: true })));
     /* a log round beside the first chair, with the journal on it */
     { const c1 = chs[0]; c1.updateMatrixWorld(true);
       const pos = c1.localToWorld(new T.Vector3(0.1, 0, 0.66)), F = Layout.fire;
@@ -593,10 +562,14 @@ void main(){
       const jg = grp(0, 0.4031, 0, face - Math.PI / 2); lg.add(jg);
       refs.journal = Book.build(jg, { W: 0.17, H: 0.24, cloth: '#4a2a18', ribbon: '#a3262a', T: 0.014 }); refs.journalGroup = jg; refs.logRound = lg;
       refs.dyn.push({ o: lg, kind: 'tip', half: 0.2, tip: 1.2 }); }
+    /* a thin striped pad on the second chair's seat, and the guitar leaning on its arm (models/camp/guitar.js) */
     { const c2 = chs[1], { yc, phi } = c2.userData.back;
-      const cu = mesh(new T.SphereGeometry(1, 24, 14), Mats.lit({ map: Mats.tex(Paint.stripes('#2f4d5e', '#e8dfc8', 9)), roughness: 0.95 }));
-      cu.scale.set(0.24, 0.05, 0.27); cu.rotation.z = phi; at(cu, 0.1, yc(0.1) + 0.11, 0); c2.add(cu);
-      const gt = guitar(); gt.position.set(0.5, 0.17, -0.48); gt.rotation.set(-0.08, 0.35, 0.36, 'YXZ'); c2.add(gt); }
+      const pad = mesh(Models.extrude(Models.rshape(-0.21, -0.25, 0.21, 0.25, [0.06, 0.06, 0.06, 0.06]), 0.03, 0.012), Mats.lit({ map: Mats.tex(Paint.stripes('#2f4d5e', '#e8dfc8', 9)), roughness: 0.95 }));
+      pad.rotation.set(-Math.PI / 2, 0, 0); const pg = grp(0.08, yc(0.08) + 0.075, 0); pg.rotation.z = phi; pg.add(pad); c2.add(pg);
+      const gt = Models.make('camp/guitar'); gt.rotation.set(-0.06, 0.4, 0.3, 'YXZ'); gt.position.set(0.52, 0, -0.5); c2.add(gt);
+      /* stood on the sand, leaning */
+      c2.updateMatrixWorld(true); gt.position.y -= new T.Box3().setFromObject(gt).min.y - c2.position.y;
+      refs.chairProps[1].push(pg); refs.guitar = gt; }
     towel(chs[1], refs);
   }
   /* a beach towel left over the second chair's back to dry by the fire. It is cloth: the two rows lying over the
@@ -631,21 +604,12 @@ void main(){
     const ground = { type: 'plane', n: [0, 1, 0], d: 0.02 }; cl.colliders.push(ground);
     const m = mesh(cl.geometry(0), Mats.lit({ map: tex, side: T.DoubleSide, roughness: 0.97 }));
     const c = new T.Vector3(x0 - 0.2, 0.75, 0); m.geometry.boundingSphere = new T.Sphere(c.clone(), 0.9); ch.add(m);
-    refs.fabric.push({ cl, mesh: m, frame: ch, gust: 0.8, r: 0.9, c, ground });
+    refs.fabric.push({ cl, mesh: m, frame: ch, gust: 0.8, r: 0.9, c, ground }); refs.chairProps[1].push(m);
   }
-  /* split firewood stacked by the fire */
+  /* split firewood stacked by the fire (models/camp/firewood.js) */
   function woodpile(root, refs) {
     const W = { x: 8.35, z: -5.15, rot: 0.6 }, g = grp(W.x, 0, W.z, W.rot); root.add(g);
-    const split = Mats.lit({ map: Mats.tex(Paint.plank(53, '#b58a5c', 0), { repeat: true }), roughness: 0.9 });
-    const barkM = Mats.lit({ map: Mats.tex(Paint.logBark(19), { repeat: true }), roughness: 0.95 });
-    const r = Textures.rng(55);
-    const piece = (x, y, z, rad, ang, rot) => {
-      const sh = new T.Shape(); sh.moveTo(0, 0); sh.lineTo(rad, 0); sh.absarc(0, 0, rad, 0, ang, false); sh.lineTo(0, 0);
-      const geo = new T.ExtrudeGeometry(sh, { depth: 0.42 + r() * 0.08, bevelEnabled: false, curveSegments: 8 }); geo.translate(-rad * 0.4, -rad * 0.35, -0.23);
-      const m = new T.Mesh(geo, [split, barkM]); m.castShadow = m.receiveShadow = true; m.position.set(x, y, z); m.rotation.set(0, 0, rot); g.add(m);
-    };
-    [[-0.13, 0.05, 0, 0.085, 1.4, 0.1], [0.02, 0.05, 0.02, 0.08, 1.5, -0.2], [0.17, 0.05, -0.01, 0.09, 1.3, 0.3],
-     [-0.06, 0.15, 0.01, 0.08, 1.4, 2.2], [0.1, 0.15, 0, 0.085, 1.5, 1.9], [0.02, 0.24, 0.02, 0.075, 1.6, -1.2]].forEach(a => piece(...a));
+    g.add(Models.make('camp/woodpile'));
     refs.dyn.push({ o: g, kind: 'slide', half: 0.25, tip: 0.5 }); refs.woodpile = g;
   }
 
@@ -715,36 +679,13 @@ void main(){
 
   /* ── a little valve radio on the picnic table, two-tone like the van: a speaker grille, a dial that glows amber
      while it plays (its needle moves as it tunes), two knobs and a chrome handle ── */
-  function radio(refs) {
-    const g = grp(-0.47, 0.425, 0.25, 0.5); refs.table.add(g); g.userData.pick = 'radio';
-    const RW = 0.24, RH = 0.14, RD = 0.085, bv = 0.008, cy = RH / 2 + bv, fz = RD / 2 + bv + 0.0006;
-    const caseM = Mats.litP({ color: C('#2f6158'), roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.18 });
-    g.add(at(mesh(extrude(rshape(-RW / 2, -RH / 2, RW / 2, RH / 2, [0.028, 0.028, 0.028, 0.028]), RD, bv), caseM), 0, cy, 0));
-    const cream = L('#e9dcc0', { roughness: 0.5 }), chrome = new T.MeshStandardMaterial({ color: C('#d6d9dc'), roughness: 0.2, metalness: 0.95 });
-    g.add(at(mesh(new T.ShapeGeometry(rshape(-0.105, -0.052, 0.105, 0.052, [0.016, 0.016, 0.016, 0.016])), cream, false), 0, cy, fz));
-    /* the speaker: dark cloth behind chrome bars */
-    g.add(at(mesh(new T.PlaneGeometry(0.1, 0.078), L('#3a2f26', { roughness: 0.95 }), false), -0.047, cy + 0.003, fz + 0.0004));
-    for (let i = 0; i < 6; i++) g.add(at(mesh(new T.BoxGeometry(0.098, 0.004, 0.004), chrome, false), -0.047, cy - 0.031 + i * 0.0136, fz + 0.002));
-    /* the dial: a printed scale that lights up, a red needle */
-    const dc = document.createElement('canvas'); dc.width = 256; dc.height = 160;
-    { const a = dc.getContext('2d'); a.fillStyle = '#e8c88a'; a.fillRect(0, 0, 256, 160);
-      a.fillStyle = 'rgba(120,70,20,0.18)'; a.fillRect(0, 0, 256, 18); a.fillRect(0, 142, 256, 18);
-      a.fillStyle = '#4a2a12'; for (let i = 0; i <= 40; i++) a.fillRect(18 + i * 5.5, 38, 1.6, i % 5 ? 12 : 24);
-      a.font = `600 19px Fraunces, Georgia, serif`; a.textAlign = 'center';
-      ['55', '60', '70', '80', '100', '120', '140', '160', '170'].forEach((t, i) => a.fillText(t, 18 + i * 27.5, 90));
-      a.font = `500 15px 'JetBrains Mono', monospace`; a.fillText('MEDIUM WAVE · SHORT WAVE', 128, 124); }
-    const dt = Mats.tex(dc), dialM = Mats.lit({ map: dt, emissive: new T.Color(1, 0.7, 0.38), emissiveMap: dt, emissiveIntensity: 0, roughness: 0.35 });
-    g.add(at(mesh(new T.PlaneGeometry(0.078, 0.049), dialM, false), 0.05, cy + 0.012, fz + 0.0005));
-    for (const [w, h, x, y] of [[0.084, 0.003, 0.05, cy + 0.038], [0.084, 0.003, 0.05, cy - 0.014], [0.003, 0.055, 0.008, cy + 0.012], [0.003, 0.055, 0.092, cy + 0.012]]) g.add(at(mesh(new T.BoxGeometry(w, h, 0.003), chrome, false), x, y, fz + 0.0015));
-    const needleM = L('#b8261c', { roughness: 0.4, emissive: C('#ff3a20'), emissiveIntensity: 0 }), needle = mesh(new T.BoxGeometry(0.0016, 0.042, 0.001), needleM, false);
-    at(needle, 0.05, cy + 0.012, fz + 0.0012); g.add(needle);
-    for (const x of [0.026, 0.074]) { const k = mesh(new T.CylinderGeometry(0.011, 0.012, 0.012, 16), cream); k.rotation.x = Math.PI / 2; at(k, x, cy - 0.031, fz + 0.006); g.add(k); }
-    /* the carrying handle */
-    { const h = mesh(new T.TorusGeometry(0.075, 0.0045, 6, 20, Math.PI), chrome); h.scale.y = 0.55; at(h, 0, RH + 2 * bv, 0); g.add(h);
-      for (const x of [-0.075, 0.075]) g.add(at(mesh(new T.CylinderGeometry(0.008, 0.009, 0.008, 10), chrome), x, RH + 2 * bv + 0.002, 0)); }
-    refs.radio = { group: g,
-      /* glow: how lit the dial is (0 off); dial: where the needle sits along the scale, 0 to 1 */
-      set(glow, dial) { dialM.emissiveIntensity = glow; needleM.emissiveIntensity = glow * 0.5; needle.position.x = 0.014 + 0.072 * dial; } };
+  /* the radio, on an old crate between the chairs by the fire (models/camp/radio.js, crate.js) */
+  function radio(root, refs) {
+    const K = Layout.crate, cg = grp(K.x, 0, K.z, K.rot); root.add(cg);
+    const crate = Models.make('camp/crate'); cg.add(crate);
+    const g = Models.make('camp/radio'); g.position.set(0.02, crate.userData.top, 0.01); g.rotation.y = K.radio; cg.add(g); g.userData.pick = 'radio';
+    refs.dyn.push({ o: cg, kind: 'tip', half: 0.22, tip: 1.2 }); refs.crate = cg;
+    refs.radio = { group: g, set: g.userData.set };
   }
 
   /* string-light pools, top-down, sqrt-encoded (R channel) */
@@ -765,9 +706,12 @@ void main(){
   function build(root, U) {
     const refs = { candles: [], lanterns: [], dyn: [], vanHead: [], vanTail: [], vanWheels: [], fabric: [] };
     picnic(root, refs); lanterns(root, refs); stringLights(root, refs, U); van(root, refs, U); campfire(root, refs); chairs(root, refs); woodpile(root, refs); shoreBits(root, refs);
-    wishBoard(root, refs); radio(refs);
-    /* what a click in the scene can land on: the two chairs, the radio, the wish board */
-    refs.pick = [...refs.chairs, refs.radio.group, refs.board.group];
+    wishBoard(root, refs); radio(root, refs);
+    /* what a click in the scene can land on: the chairs, the driftwood and the cushions at the table (all seats), the
+       radio, the wish board */
+    if (refs.driftwood) refs.driftwood.userData.pick = 'log0';
+    if (refs.cushions) { if (refs.cushions[1]) refs.cushions[1].userData.pick = 'rug0'; if (refs.cushions[0]) refs.cushions[0].userData.pick = 'rug1'; }
+    refs.pick = [...refs.chairs, refs.radio.group, refs.board.group, refs.driftwood, ...(refs.cushions || []).slice(0, 2)].filter(Boolean);
     refs.pool = poolMap(refs.bulbs);
     return refs;
   }

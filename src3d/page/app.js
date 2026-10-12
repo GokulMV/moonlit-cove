@@ -1388,6 +1388,7 @@
     wk.camK = clamp(wk.camK + (wk.on ? dtR / 1.4 : -dtR / 1.6), 0, 1);
     if (wk.on) stepWalk(dtR);
     if (wk.camK > 0) { const e = ease(wk.camK); cam = e >= 1 ? wk.cam : lerpCam(cam, wk.cam, e); }
+    if (window.__coveCamFix) cam = window.__coveCamFix;     /* (the test bench can put the camera anywhere) */
     if (sound.amb) sound.amb.engine(car.on, Math.min(1, Math.abs(car.v) / 14), drv ? drv.thr : 0, Math.min(1, Math.abs(car.v) / 8));
     const aspect = view.w / view.h;
     if (aspect < 1.2 && !rd.on) cam = Object.assign({}, cam, { fov: Math.min(80, cam.fov * (1 + (1.2 - aspect) * 0.75)) });
@@ -1626,52 +1627,93 @@
     toast(res.local ? 'Your lantern rises, and your wish is pinned to the board by the fire (kept only on this device).' : 'Your lantern rises, and your wish is pinned to the board by the fire.', false, 4200);
   }
 
-  /* ── sitting by the fire: either chair (its dot, or a click on it) puts you in it, eyes at a seated height,
-     facing the fire and the sea. Drag to look around a little; Esc or Stand up gets you up again ── */
-  const seat = { on: false, i: 0, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null, hintT: 0 };
+  /* ── sitting: in either chair by the fire, on the driftwood log, or on a cushion at the picnic table. You sit down
+     into it (the eyes come down from standing height and settle), breathe a little, and can look round as far as a
+     seated person turns their head. ‹ › moves you to the next seat (up, across, and down again); in a chair, Q and E turn
+     it. Esc or Stand up gets you up ── */
+  const seat = { on: false, i: 0, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null, hintT: 0, sitAt: 0, pose: null,
+    turn: (store.get('chairTurn', [0, 0]) || [0, 0]).map(v => clamp(+v || 0, -1.4, 1.4)), turnT: null };
+  seat.turnT = seat.turn.slice();
+  const easeOut3 = u => 1 - Math.pow(1 - u, 3);
   function seatCam() {
     const P = Engine.seatPose(seat.i); if (!P) return V.wide;
-    const e = P.eye, yaw = Math.atan2(P.fire[0] - e[0], e[2] - P.fire[2]) + seat.yaw, pitch = -0.24 + seat.pitch, cp = Math.cos(pitch) * 8;
-    return { pos: e.slice(), look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: 56, focus: 2.8 };
+    seat.pose = P;
+    /* sitting down: the eyes come down from standing height, a little forward of the seat, and settle */
+    const u = clamp((performance.now() - seat.sitAt) / 800, 0, 1), k = easeOut3(u), drop = 0.56 * (1 - k) - 0.014 * Math.sin(Math.PI * u) * (1 - u), fwd = 0.2 * (1 - k);
+    const breathe = reduced ? 0 : 0.0035 * Math.sin(performance.now() / 1000 * 1.55);
+    const yaw0 = P.yaw, e = [P.eye[0] + Math.sin(yaw0) * fwd, P.eye[1] + drop + breathe, P.eye[2] - Math.cos(yaw0) * fwd];
+    const yaw = yaw0 + seat.yaw, pitch = P.pitch + seat.pitch - 0.08 * (1 - k), cp = Math.cos(pitch) * 8;
+    return { pos: e, look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: P.kind === 'rug' ? 54 : 58, focus: P.kind === 'rug' ? 1.2 : 2.6 };
   }
   function sit(i) {
-    if (!ready || !st.entered || car.on || (seat.on && seat.i === i)) return;
+    if (!ready || !st.entered || car.on || (seat.on && seat.i === i) || !(i >= 0 && i < Engine.seatCount())) return;
     if (rd.on || st.chapter) openChapter(null);
     toggleSettings(false);
     const moving = seat.on;
     if (wk.on) stopWalk();
+    if (moving) Engine.seatProps(seat.i, false);
     Object.assign(seat, { on: true, i, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null });
-    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = seatCam(); st.camT = 0; st.camDur = moving ? 1.4 : camDur(st.from, st.to);
+    Engine.seatProps(i, true);
+    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = seatCam(); st.camT = 0; st.camDur = moving ? 1.6 : camDur(st.from, st.to);
+    seat.sitAt = performance.now() + st.camDur * 1000 * 0.62;
     document.body.classList.add('seated'); document.body.classList.remove('seat-hint-off'); $('seatHud').hidden = false;
-    clearTimeout(seat.hintT); seat.hintT = setTimeout(() => document.body.classList.add('seat-hint-off'), 6500);
+    clearTimeout(seat.hintT); seat.hintT = setTimeout(() => document.body.classList.add('seat-hint-off'), 7000);
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
-    syncRadioUI();
+    syncSeatUI(); syncRadioUI();
+  }
+  const seatBy = id => Engine.seatIndex(id);
+  function nextSeat(d) { if (!seat.on) return; const n = Engine.seatCount(); sit((seat.i + d + n) % n); }
+  /* turning the chair you are in: a quarter of a right angle a press, as far as a person would shift it */
+  function turnChair(d) {
+    const P = seat.pose; if (!seat.on || !P || P.kind !== 'chair') return;
+    seat.turnT[P.i] = clamp(seat.turnT[P.i] + d * 0.3, -1.4, 1.4); store.set('chairTurn', seat.turnT);
+  }
+  /* (every frame: the engine only moves a chair that is not where it should be, so a rebuilt camp gets its turns back) */
+  function stepChairs(dt) {
+    const a = 1 - Math.exp(-dt * 5);
+    for (let i = 0; i < seat.turn.length; i++) { const t = seat.turnT[i]; seat.turn[i] += (t - seat.turn[i]) * a; if (Math.abs(t - seat.turn[i]) < 1e-4) seat.turn[i] = t; Engine.turnChair(i, seat.turn[i]); }
+  }
+  function syncSeatUI() {
+    const P = seat.pose || Engine.seatPose(seat.i), chair = P && P.kind === 'chair', byFire = P && P.near === 'fire';
+    $('seatName').textContent = P ? P.name : '';
+    $('seatTurn').hidden = !chair;
+    $('radio').hidden = !byFire;
+    $('seatHint').textContent = (chair ? 'Drag to look around · ‹ › another seat · Q E turn the chair' : 'Drag to look around · ‹ › another seat') + (byFire ? ' · the radio is beside you' : '');
   }
   /* getting up switches the radio off: it is the seat's */
-  function leaveSeat() { if (!seat.on) return; seat.on = false; seat.drag = null; document.body.classList.remove('seated', 'look-drag'); $('seatHud').hidden = true; radioOff(); }
+  function leaveSeat() { if (!seat.on) return; Engine.seatProps(seat.i, false); seat.on = false; seat.drag = null; document.body.classList.remove('seated', 'look-drag'); $('seatHud').hidden = true; radioOff(); }
   function standUp() { if (!seat.on) return; leaveSeat(); goView('wide'); }
   $('bStand').addEventListener('click', standUp);
-  /* looking around: a gentle drag, only so far either way */
+  $('bSeatPrev').addEventListener('click', () => nextSeat(-1)); $('bSeatNext').addEventListener('click', () => nextSeat(1));
+  $('bTurnL').addEventListener('click', () => turnChair(1)); $('bTurnR').addEventListener('click', () => turnChair(-1));
+  /* looking around: a drag, as far as a seated person turns their head */
   cv.addEventListener('pointerdown', e => { if (seat.on && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) seat.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: seat.yawT, pitch: seat.pitchT }; });
   addEventListener('pointermove', e => {
     const g = seat.drag; if (!g || g.id !== e.pointerId || !seat.on) return;
-    const k = 2.4 / Math.max(500, view.h);
+    const k = 2.6 / Math.max(500, view.h);
     if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 4) document.body.classList.add('look-drag');
-    seat.yawT = clamp(g.yaw - (e.clientX - g.x) * k, -1, 1); seat.pitchT = clamp(g.pitch + (e.clientY - g.y) * k, -0.3, 0.3);
+    seat.yawT = clamp(g.yaw - (e.clientX - g.x) * k, -1.55, 1.55); seat.pitchT = clamp(g.pitch + (e.clientY - g.y) * k, -0.6, 0.5);
   }, { passive: true });
   const unlook = e => { if (seat.drag && seat.drag.id === e.pointerId) { seat.drag = null; document.body.classList.remove('look-drag'); } };
   addEventListener('pointerup', unlook); addEventListener('pointercancel', unlook);
-  /* Esc closes the wish, then gets you up from the chair; the arrow keys look around while seated (and don't start the van) */
+  /* Esc closes the wish, then gets you up; the arrow keys look around while seated (and don't start the van); [ ] or
+     , . change seat; Q E turn the chair */
   addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (!$('wish').hidden) { closeWish(); e.stopPropagation(); e.preventDefault(); return; }
       if (seat.on && $('credits').hidden && $('settings').hidden) { standUp(); e.stopPropagation(); return; }
     }
-    if (seat.on && /^Arrow/.test(e.key) && !(e.target && e.target.closest && e.target.closest('input, textarea, select'))) {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') seat.yawT = clamp(seat.yawT + (e.key === 'ArrowLeft' ? -0.2 : 0.2), -1, 1);
-      else seat.pitchT = clamp(seat.pitchT + (e.key === 'ArrowUp' ? 0.1 : -0.1), -0.3, 0.3);
-      e.stopPropagation(); e.preventDefault();
-    }
+    if (!seat.on || (e.target && e.target.closest && e.target.closest('input, textarea, select'))) return;
+    const k = e.key;
+    if (/^Arrow/.test(k)) {
+      if (k === 'ArrowLeft' || k === 'ArrowRight') seat.yawT = clamp(seat.yawT + (k === 'ArrowLeft' ? 0.2 : -0.2), -1.55, 1.55);
+      else seat.pitchT = clamp(seat.pitchT + (k === 'ArrowUp' ? 0.1 : -0.1), -0.6, 0.5);
+    } else if (k === '[' || k === ',') nextSeat(-1);
+    else if (k === ']' || k === '.') nextSeat(1);
+    else if (k === 'q' || k === 'Q') turnChair(1);
+    else if (k === 'e' || k === 'E') turnChair(-1);
+    else return;
+    e.stopPropagation(); e.preventDefault();
   }, true);
 
   /* ── the radio on the picnic table: stations from the Radio Browser community directory, or the visitor's own
@@ -1789,7 +1831,7 @@
   }
   const radioToggle = () => radio.on ? radioOff() : radioOn();
   /* the radio itself, clicked in the scene: from anywhere, it sits you down by the fire with it on */
-  function radioClick() { if (!seat.on) { sit(1); if (!radio.on) radioOn(); } else radioToggle(); }
+  function radioClick() { const P = seat.on && Engine.seatPose(seat.i); if (!P || P.near !== 'fire') { sit(seatBy('chair1')); if (!radio.on) radioOn(); } else radioToggle(); }
   function step(d) { if (!radio.on) return; radio.msg = ''; if (radio.src === 'songs') playSong(radio.qi + d); else if (radio.stations) tune(radio.si + d, d); }
   function setSource(s, start = true) {
     if (s === radio.src) { if (start && s === 'songs' && !radio.songs.length) $('rdFile').click(); return; }
@@ -1842,19 +1884,19 @@
     if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
     const hit = pickAt(e); if (!hit) return;
     down = null;                    /* (the sea's click handler, next in line, now has nothing to do) */
-    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else sit(+hit.slice(5));
+    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
   }, true);
   cv.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return;
     const now = performance.now(); if (now - hoverT < 80) return; hoverT = now;
     const hit = ready && st.entered && !rd.on && !car.on ? pickAt(e) : null;
-    document.body.classList.toggle('pick-hover', !!hit && hit !== 'chair' + (seat.on ? seat.i : -1));
+    document.body.classList.toggle('pick-hover', !!hit && hit !== (seat.on && seat.pose ? seat.pose.id : ''));
   });
   /* the van drives round the board, as it does round everything else at the camp */
   campObs.push([Layout.board.x, Layout.board.z, 0.9, 'board']);
 
   /* dots on the board and the chairs (and the radio, while you sit) */
-  const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(0)], ['chair1', 'Sit', 'Sit in this chair', () => sit(1)], ['radio', 'Radio', 'Switch the radio on or off', radioToggle]].map(([key, label, aria, fn]) => {
+  const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(seatBy('chair0'))], ['chair1', 'Sit', 'Sit in this chair', () => sit(seatBy('chair1'))], ['radio', 'Radio', 'Switch the radio on or off', radioToggle]].map(([key, label, aria, fn]) => {
     const s = document.createElement('button'); s.type = 'button'; s.className = 'spot extra'; s.setAttribute('aria-label', aria);
     s.innerHTML = `<span class="lbl">${esc(label)}</span><i></i>`; s.addEventListener('click', e => { e.stopPropagation(); fn(); }); spots.appendChild(s);
     return { key, el: s };
@@ -1899,6 +1941,7 @@
     if (!wish.started) startWishes();
     /* opening something else, or taking the van, gets you up out of the chair */
     if (seat.on && (rd.on || car.on || wk.on || st.chapter)) { leaveSeat(); if (!rd.on && !st.chapter && !wk.on) goView('wide'); }
+    stepChairs(dt);
     if (seat.on) { const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a; st.to = seatCam(); }
     if (st.chapter !== 'wishes' && $('drawer').classList.contains('wishes-mode')) $('drawer').classList.remove('wishes-mode');
     wish.look += ((st.chapter === 'wishes' ? 1 : 0) - wish.look) * Math.min(1, dt * 1.5); Engine.setBoardLook(wish.look);

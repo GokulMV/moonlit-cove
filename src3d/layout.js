@@ -102,6 +102,8 @@ const Layout = (() => {
   const grate = { x: 6.94, z: -4.55, rot: 0.2 };     /* grill straddling the fire ring */
   const chairs = [{ x: 5.7, z: -3.1, face: [6.9, -4.5] }, { x: 8.4, z: -3.5, face: [6.9, -4.5] }];
   const driftwood = { x: 7.0, z: -6.05, len: 2.6, rot: 0.15 };
+  /* an old crate between the chairs, the radio on it turned toward the first chair and the fire */
+  const crate = { x: 7.08, z: -2.92, rot: -0.12, radio: -0.55 };
   /* the wish board: a corkboard on two posts to the right of the fire, its face turned to the chairs and the camp */
   const board = { x: 10.5, z: -3.7, rot: -1.07 };
 
@@ -142,5 +144,5 @@ const Layout = (() => {
   };
 
   return { shoreZ, shoreDZ, vegZ, head, headD, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, coastGL, NGL, SH: S, VG, WIN,
-           camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots, board };
+           camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, palms, trees, bushes, wind, cameras, hotspots, board };
 })();

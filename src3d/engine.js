@@ -348,6 +348,7 @@ const Engine = (() => {
     add(camp.fireGroup, 5.3, 0.6, 'grow'); add(camp.tripod, 5.9, 0.45, 'grow'); add(camp.mug, 6.3, 0.3, 'grow'); add(camp.kettle, 6.6, 0.35, 'grow');
     add(camp.woodpile, 6.0, 0.45, 'grow'); add(camp.logRound, 6.2, 0.4, 'grow'); add(camp.driftwood, 6.4, 0.5, 'grow'); add(camp.bottle, 6.5, 0.4, 'grow');
     if (camp.board) add(camp.board.group, 6.8, 0.6, 'grow');
+    if (camp.crate) add(camp.crate, 6.1, 0.4, 'grow');
     return L;
   }
   const backOut = u => { const c = 1.5; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
@@ -820,11 +821,47 @@ const Engine = (() => {
     const b = camp.board, g = b.group;
     return { c: g.localToWorld(new T.Vector3(0, b.Y, 0)).toArray(), n: new T.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new T.Quaternion())).toArray(), W: b.W, H: b.H };
   }
-  /* where a seated visitor's eyes are in chair i (leaning back a little), and the fire in front of them */
+  /* ── seats: the two chairs by the fire, two places on the driftwood log, and the floor cushions either side of the
+     picnic table. For each: where a seated person's eyes are, which way they face (as the app's yaw: atan2(x, -z) of the
+     way they look), how far down they look to begin with, and what they are near ── */
+  const SEATS = [
+    { id: 'chair0', name: 'The chair by the fire', kind: 'chair', i: 0, near: 'fire' },
+    { id: 'chair1', name: 'The striped chair', kind: 'chair', i: 1, near: 'fire' },
+    { id: 'log0', name: 'The driftwood log', kind: 'log', at: -0.55, near: 'fire' },
+    { id: 'log1', name: 'The far end of the log', kind: 'log', at: 0.5, near: 'fire' },
+    { id: 'rug0', name: 'A cushion at the table', kind: 'rug', c: 1, near: 'table' },
+    { id: 'rug1', name: 'Across the table', kind: 'rug', c: 0, near: 'table' }
+  ];
+  const yawOf = (fx, fz) => Math.atan2(fx, -fz);
   function seatPose(i) {
-    const ch = camp.chairs && camp.chairs[i]; if (!ch) return null;
-    return { eye: ch.localToWorld(new T.Vector3(-0.27, 0.9, 0)).toArray(), fire: [Layout.fire.x, 0.35, Layout.fire.z] };
+    const S = SEATS[i]; if (!S || !camp) return null;
+    if (S.kind === 'chair') {
+      const ch = camp.chairs && camp.chairs[S.i]; if (!ch) return null; ch.updateMatrixWorld(true);
+      const eye = ch.localToWorld(new T.Vector3(-0.24, 0.96, 0)), f = new T.Vector3(1, 0, 0).applyQuaternion(ch.quaternion);
+      return { eye: eye.toArray(), yaw: yawOf(f.x, f.z), pitch: -0.12, ...S };
+    }
+    if (S.kind === 'log') {
+      const dw = camp.driftwood; if (!dw) return null; dw.updateMatrixWorld(true);
+      const seat = dw.localToWorld(new T.Vector3(S.at, 0, 0)), F = Layout.fire, d = new T.Vector3(F.x - seat.x, 0, F.z - seat.z).normalize();
+      const eye = seat.clone().addScaledVector(d, -0.08); eye.y = 0.98;
+      return { eye: eye.toArray(), yaw: yawOf(d.x, d.z), pitch: -0.14, ...S };
+    }
+    const cu = camp.cushions && camp.cushions[S.c]; if (!cu) return null; cu.updateMatrixWorld(true);
+    const p = cu.getWorldPosition(new T.Vector3()), tb = new T.Vector3(Layout.table.x, 0, Layout.table.z), d = tb.clone().sub(p).setY(0).normalize();
+    const eye = p.clone().addScaledVector(d, -0.07); eye.y = 0.98;
+    return { eye: eye.toArray(), yaw: yawOf(d.x, d.z), pitch: -0.32, ...S };
   }
+  const seatCount = () => SEATS.length, seatIndex = id => SEATS.findIndex(s => s.id === id);
+  /* a chair turned by ry from where it was set out (it turns about its seat; what lies on it turns with it) */
+  function turnChair(i, ry) {
+    const ch = camp && camp.chairs && camp.chairs[i]; if (!ch) return;
+    const want = (ch.userData.ry0 || 0) + ry; if (Math.abs(ch.rotation.y - want) < 1e-5) return;
+    if (surge.dyn.some(d => d.o === ch && d.hit)) return;            /* (knocked over by a wave: let it lie) */
+    ch.rotation.y = want; ch.updateMatrixWorld(true);
+  }
+  /* what lies on a seat goes out of sight while you sit there (you would be sitting on it) */
+  function seatProps(i, hidden) { const S = SEATS[i]; if (!S || S.kind !== 'chair' || !camp.chairProps) return; (camp.chairProps[S.i] || []).forEach(o => { o.visible = !hidden; }); }
+  Object.assign(api, { seatCount, seatIndex, turnChair, seatProps });
   /* where the radio is, for its sound */
   function radioPos() { const g = camp && camp.radio && camp.radio.group; if (!g) return null; g.updateMatrixWorld(true); const v = g.getWorldPosition(new T.Vector3()); return [v.x, v.y, v.z]; }
   Object.assign(api, { radioPos });
