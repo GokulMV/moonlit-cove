@@ -15,6 +15,13 @@
      DELETE /api/wishes/<id>      with the header X-Admin-Key: $WISH_ADMIN_KEY (switched off when unset)
    Wishes live in $DATA_DIR/wishes.json (./data by default; a Railway volume at /data in production, or wherever
    RAILWAY_VOLUME_MOUNT_PATH says the attached volume is).
+
+   The drawing board, under /api/drawings (pictures drawn at the picnic table, kept in the toolbox):
+     GET    /api/drawings?limit=n     the newest first: { drawings: [{ id, name, at, w, h, url }], total, kept }
+     GET    /api/drawings/<id>.png    the picture itself (PNG or WebP; never changes, so cached for a year)
+     POST   /api/drawings             { image: a PNG or WebP data: URL, name } → { drawing, total }, or { error }
+     DELETE /api/drawings/<id>        with the header X-Admin-Key: $WISH_ADMIN_KEY
+   They live in $DATA_DIR/drawings/ with an index in $DATA_DIR/drawings.json.
    ───────────────────────────────────────────────────────────── */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -101,6 +108,52 @@ function saveWishes() {
   return queued;
 }
 
+/* ── the drawing board ── */
+const DRAW = { keep: 600, body: 1100 * 1024, bytes: 700 * 1024, maxW: 1600, maxH: 1200, minW: 64, minH: 48, gap: 30e3, perHour: 10, name: 32 };
+const DRAW_DIR = path.join(DATA_DIR, 'drawings'), DRAW_FILE = path.join(DATA_DIR, 'drawings.json');
+let drawings = [];               /* newest first: { id, name, at, w, h, ext } */
+function loadDrawings() {
+  try { fs.mkdirSync(DRAW_DIR, { recursive: true }); } catch (e) { console.warn(`Drawings: could not make ${DRAW_DIR} (${e.code}).`); }
+  try {
+    const j = JSON.parse(fs.readFileSync(DRAW_FILE, 'utf8')), list = Array.isArray(j && j.drawings) ? j.drawings : [];
+    drawings = list.filter(d => d && /^[A-Za-z0-9_-]{6,40}$/.test(d.id) && (d.ext === 'png' || d.ext === 'webp') && fs.existsSync(path.join(DRAW_DIR, `${d.id}.${d.ext}`)))
+      .map(d => ({ id: d.id, name: typeof d.name === 'string' ? d.name : '', at: String(d.at), w: d.w | 0, h: d.h | 0, ext: d.ext })).slice(0, DRAW.keep);
+  } catch (e) { if (e.code !== 'ENOENT') console.warn(`Drawings: could not read ${DRAW_FILE} (${e.code || e.message}); starting afresh.`); }
+}
+loadDrawings();
+let drawWriting = Promise.resolve(), drawQueued = null;
+function saveDrawings() {
+  if (drawQueued) return drawQueued;
+  const run = async () => {
+    drawQueued = null;
+    const tmp = `${DRAW_FILE}.${process.pid}.tmp`, fh = await fsp.open(tmp, 'w');
+    try { await fh.writeFile(JSON.stringify({ drawings })); await fh.sync(); } finally { await fh.close(); }
+    await fsp.rename(tmp, DRAW_FILE);
+  };
+  drawQueued = drawWriting = drawWriting.then(run, run);
+  return drawQueued;
+}
+/* what a picture is and how big, from its own header: PNG or WebP only (nothing else is taken, SVG least of all) */
+function imageInfo(b) {
+  if (b.length > 33 && b.readUInt32BE(0) === 0x89504e47 && b.readUInt32BE(4) === 0x0d0a1a0a && b.toString('ascii', 12, 16) === 'IHDR')
+    return b.toString('ascii', b.length - 8, b.length - 4) === 'IEND' ? { ext: 'png', w: b.readUInt32BE(16), h: b.readUInt32BE(20) } : null;
+  if (b.length > 30 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') {
+    const c = b.toString('ascii', 12, 16);
+    if (c === 'VP8X') return { ext: 'webp', w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) };
+    if (c === 'VP8L' && b[20] === 0x2f) { const v = b.readUInt32LE(21); return { ext: 'webp', w: (v & 0x3fff) + 1, h: ((v >>> 14) & 0x3fff) + 1 }; }
+    if (c === 'VP8 ' && b[23] === 0x9d && b[24] === 0x01 && b[25] === 0x2a) return { ext: 'webp', w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff };
+  }
+  return null;
+}
+const recentDraw = new Map();
+function tooSoonDraw(ip, now) {
+  const t = (recentDraw.get(ip) || []).filter(x => now - x < 3600e3);
+  if (t.length && now - t[t.length - 1] < DRAW.gap) { const s = Math.ceil((DRAW.gap - (now - t[t.length - 1])) / 1000); return { wait: s, error: `The toolbox is still closing. Try again in ${s} second${s === 1 ? '' : 's'}.` }; }
+  if (t.length >= DRAW.perHour) return { wait: Math.ceil((3600e3 - (now - t[0])) / 1000), error: 'That’s a lot of drawings for one hour. Come back a little later and draw another.' };
+  return null;
+}
+setInterval(() => { const now = Date.now(); for (const [ip, t] of recentDraw) if (!t.length || now - t[t.length - 1] > 3600e3) recentDraw.delete(ip); }, 600e3).unref();
+
 /* who is asking: Cloudflare's header, then the first proxy hop, then the socket. IPv6 visitors usually hold a whole /64, so count by that */
 function clientIp(req) {
   const h = req.headers;
@@ -165,6 +218,17 @@ function refusal(text, name) {
     if (PHONE.test(s)) return 'Please leave out phone numbers: everyone can read the board.';
     if (unkind(s)) return 'That doesn’t sound kind. Everyone reads this board, so try saying it another way.';
   }
+  return '';
+}
+
+/* what is wrong with a name signed on a drawing; '' when there is nothing */
+function nameRefusal(name) {
+  if (name.length > DRAW.name) return `Keep your name to ${DRAW.name} characters.`;
+  if (!name) return '';
+  if (EMAIL.test(name)) return 'Please leave out email addresses: everyone can open the toolbox.';
+  if (hasLink(name)) return 'Please leave out links and web addresses.';
+  if (HANDLE.test(name) || PHONE.test(name)) return 'Please leave out @handles and phone numbers: everyone can open the toolbox.';
+  if (unkind(name)) return 'That doesn’t sound kind. Everyone can open the toolbox, so try another name.';
   return '';
 }
 
@@ -250,11 +314,83 @@ async function wishApi(req, res, url) {
   return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: 'DELETE' });
 }
 
+const drawingOut = d => ({ id: d.id, name: d.name, at: d.at, w: d.w, h: d.h, url: `/api/drawings/${d.id}.${d.ext}` });
+async function postDrawing(req, res) {
+  if (!fromHere(req)) return sendJSON(req, res, 403, { error: 'Drawings can only be made at the cove itself.' });
+  if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) return sendJSON(req, res, 415, { error: 'Send the drawing as JSON.' });
+  const ip = clientIp(req), now = Date.now(), soon = tooSoonDraw(ip, now);
+  if (soon) return sendJSON(req, res, 429, { error: soon.error }, { 'Retry-After': String(soon.wait) });
+  let raw;
+  try { raw = await readBody(req, DRAW.body); } catch (e) { return sendJSON(req, res, e.status || 400, { error: e.status === 413 ? 'That drawing is too big to carry.' : 'That didn’t arrive as a drawing.' }, { Connection: 'close' }); }
+  let j; try { j = JSON.parse(raw); } catch (e) { return sendJSON(req, res, 400, { error: 'That didn’t arrive as a drawing.' }); }
+  if (!j || typeof j.image !== 'string' || (j.name != null && typeof j.name !== 'string')) return sendJSON(req, res, 400, { error: 'That didn’t arrive as a drawing.' });
+  const m = /^data:image\/(png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(j.image);
+  if (!m) return sendJSON(req, res, 400, { error: 'Drawings come as PNG or WebP pictures.' });
+  const buf = Buffer.from(m[2], 'base64'), info = imageInfo(buf);
+  if (!info || info.ext !== m[1]) return sendJSON(req, res, 400, { error: 'That picture couldn’t be read.' });
+  if (buf.length > DRAW.bytes) return sendJSON(req, res, 413, { error: 'That drawing is too big to keep.' });
+  if (info.w > DRAW.maxW || info.h > DRAW.maxH || info.w < DRAW.minW || info.h < DRAW.minH) return sendJSON(req, res, 400, { error: 'That picture is an odd size for the board.' });
+  const name = tidy(j.name || ''), why = nameRefusal(name);
+  if (why) return sendJSON(req, res, 400, { error: why });
+  const d = { id: crypto.randomBytes(9).toString('base64url'), name, at: new Date(now).toISOString(), w: info.w, h: info.h, ext: info.ext };
+  const file = path.join(DRAW_DIR, `${d.id}.${d.ext}`), tmp = `${file}.${process.pid}.tmp`;
+  try {
+    await fsp.mkdir(DRAW_DIR, { recursive: true });
+    const fh = await fsp.open(tmp, 'w'); try { await fh.writeFile(buf); await fh.sync(); } finally { await fh.close(); }
+    await fsp.rename(tmp, file);
+    drawings.unshift(d);
+    const gone = drawings.length > DRAW.keep ? drawings.splice(DRAW.keep) : [];
+    await saveDrawings();
+    for (const g of gone) fsp.unlink(path.join(DRAW_DIR, `${g.id}.${g.ext}`)).catch(() => {});
+  } catch (e) {
+    drawings = drawings.filter(x => x.id !== d.id); fsp.unlink(file).catch(() => {}); fsp.unlink(tmp).catch(() => {});
+    console.error('Drawings: could not keep one:', e.message);
+    return sendJSON(req, res, 503, { error: 'The toolbox couldn’t keep your drawing just now. Try again in a moment.' });
+  }
+  const t = (recentDraw.get(ip) || []).filter(x => now - x < 3600e3); t.push(now); recentDraw.set(ip, t);
+  console.log(`Drawings: ${d.id} put in the toolbox (${drawings.length} in it, ${Math.round(buf.length / 1024)} KB)`);
+  sendJSON(req, res, 201, { drawing: drawingOut(d), total: drawings.length });
+}
+async function drawApi(req, res, url) {
+  if (url.pathname === '/api/drawings') {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const n = Math.max(1, Math.min(DRAW.keep, parseInt(url.searchParams.get('limit'), 10) || 60));
+      return sendJSON(req, res, 200, { drawings: drawings.slice(0, n).map(drawingOut), total: drawings.length, kept: KEPT });
+    }
+    if (req.method === 'POST') return postDrawing(req, res);
+    return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: 'GET, HEAD, POST' });
+  }
+  const rest = url.pathname.slice('/api/drawings/'.length), m = /^([A-Za-z0-9_-]{6,40})(?:\.(png|webp))?$/.exec(rest);
+  if (!m) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
+  const d = drawings.find(x => x.id === m[1]);
+  if (req.method === 'DELETE' && !m[2]) {
+    if (!ADMIN_KEY) return sendJSON(req, res, 403, { error: 'Taking drawings out is switched off: set WISH_ADMIN_KEY on the server to allow it.' });
+    if (!isAdmin(req)) { console.warn(`Drawings: a delete without the right key, from ${clientIp(req)}`); return sendJSON(req, res, 403, { error: 'That key doesn’t open the toolbox.' }); }
+    if (!d) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
+    drawings = drawings.filter(x => x !== d);
+    try { await saveDrawings(); } catch (e) { drawings.unshift(d); return sendJSON(req, res, 503, { error: 'Could not save the toolbox just now.' }); }
+    fsp.unlink(path.join(DRAW_DIR, `${d.id}.${d.ext}`)).catch(() => {});
+    console.log(`Drawings: ${d.id} taken out (${drawings.length} left)`);
+    return sendJSON(req, res, 200, { deleted: d.id, total: drawings.length });
+  }
+  if ((req.method === 'GET' || req.method === 'HEAD') && m[2]) {
+    if (!d || d.ext !== m[2]) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
+    let body; try { body = await fsp.readFile(path.join(DRAW_DIR, `${d.id}.${d.ext}`)); } catch (e) { return sendJSON(req, res, 404, { error: 'That drawing has gone.' }); }
+    res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': d.ext === 'png' ? 'image/png' : 'image/webp', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Disposition': 'inline' });
+    res.end(req.method === 'HEAD' ? undefined : body); return;
+  }
+  return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: m[2] ? 'GET, HEAD' : 'DELETE' });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); res.end('ok'); return; }
   if (url.pathname === '/api/wishes' || url.pathname.startsWith('/api/wishes/')) {
     wishApi(req, res, url).catch(e => { console.error('Wishes:', e); if (!res.headersSent) sendJSON(req, res, 500, { error: 'Something went wrong at the board.' }); });
+    return;
+  }
+  if (url.pathname === '/api/drawings' || url.pathname.startsWith('/api/drawings/')) {
+    drawApi(req, res, url).catch(e => { console.error('Drawings:', e); if (!res.headersSent) sendJSON(req, res, 500, { error: 'Something went wrong at the toolbox.' }); });
     return;
   }
   if (url.pathname.startsWith('/api/')) { sendJSON(req, res, 404, { error: 'Nothing here.' }); return; }
@@ -275,6 +411,6 @@ const server = http.createServer((req, res) => {
 });
 /* a slow sender can't hold a connection open for long */
 server.headersTimeout = 15000; server.requestTimeout = 20000;
-server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes in ${WISH_FILE}${KEPT ? '' : ' (NOT KEPT: no volume)'}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
+server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes, ${drawings.length} drawings in ${DATA_DIR}${KEPT ? '' : ' (NOT KEPT: no volume)'}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
 /* on the way down, let a wish that is being written finish first */
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { writing.catch(() => {}).then(() => server.close(() => process.exit(0))); setTimeout(() => process.exit(0), 3000).unref(); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { Promise.all([writing.catch(() => {}), drawWriting.catch(() => {})]).then(() => server.close(() => process.exit(0))); setTimeout(() => process.exit(0), 3000).unref(); });
