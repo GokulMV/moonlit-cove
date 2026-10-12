@@ -93,7 +93,7 @@ const Nature = (() => {
     for (let i = 0; i <= seg; i++) {
       const u = i / seg, x = u * len, y = rise * u * len - droop * len * u * u;
       const w = width * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.05 + 0.04)), 0.7) * (1 - 0.35 * u);
-      const fold = w * 0.32;
+      const fold = w * 0.46;   /* (the leaflets hang either side of the rib in a V) */
       pos.push(x, y - fold, -w / 2, x, y, 0, x, y - fold, w / 2);
       uv.push(0, u, 0.5, u, 1, u);
     }
@@ -127,8 +127,9 @@ const Nature = (() => {
       for (let i = 0; i < nf; i++) {
         const az = i * GOLD + r() * 0.2;
         const age = i / nf;                                   /* 0 = youngest (top), 1 = oldest */
-        const rise = 1.6 - age * 1.7 + (r() - 0.5) * 0.25;
-        const droop = 0.18 + age * 0.85 + r() * 0.15;
+        /* (each arching out and over: the youngest rise steeply only near the crown and bow at their tips, the oldest hang) */
+        const rise = 1.1 - age * 1.3 + (r() - 0.5) * 0.25;
+        const droop = 0.38 + age * 0.7 + r() * 0.15;
         const len = cr * (0.72 + 0.32 * Math.sin(Math.PI * Math.min(1, age * 1.2 + 0.15))) * (0.92 + r() * 0.16);
         const geo = frondGeo(len, 1.35 + r() * 0.35, rise, droop, 14);
         const k = Math.floor(r() * 2), f = new T.Mesh(geo, fm[k]);

@@ -165,21 +165,33 @@ const float AB = 5200.0, AT = 5650.0;
 /* fp: how many metres one pixel spans out there */
 float altoDen(vec3 P, float hf, float fp){
   vec2 wn = normalize(uWind + vec2(1e-5)), wf = vec2(dot(P.xz, wn), dot(P.xz, vec2(-wn.y, wn.x)));
-  /* where the sheet lies: broad patches, more of the sky the more there is of it */
-  float m = textureLod(uWeather, vec2(wf.x - uAltoD.y, wf.y)*(1.0/WT) + vec2(0.37, 0.71), 2.0 + 0.5*log2(max(fp/70.0, 1.0))).b;
-  float cov = smoothstep(0.15, 0.85, m + 0.6*uAlto - 0.4)*min(1.0, uAlto*1.3);
+  /* where the sheet lies: broad patches, more of the sky the more there is of it; and within them it breaks up again
+     into rafts and bands with blue between (a sheet of cloudlets the same everywhere read as a net laid over the sky) */
+  vec2 wq = vec2(wf.x - uAltoD.y, wf.y);
+  float m = textureLod(uWeather, wq*(1.0/WT) + vec2(0.37, 0.71), 2.0 + 0.5*log2(max(fp/70.0, 1.0))).b;
+  float pch = textureLod(uWeather, wq*(6.0/WT) + vec2(0.29, 0.83), 1.5 + 0.5*log2(max(fp/140.0, 1.0))).r;
+  float cov = smoothstep(0.15, 0.85, m + 0.6*uAlto - 0.4)*min(1.0, uAlto*1.3)*smoothstep(0.3, 0.7, pch + 0.08*uAlto);
   if (cov <= 0.002) return 0.0;
   /* flat-bottomed, rounded on top */
   float prof = smoothstep(0.0, 0.2, hf)*(1.0 - smoothstep(0.5, 1.0, hf));
-  /* the cloudlets: the heaps' billowy noise at 70% of its size, drawn out a little across the wind, on a sheet slowly
-     warped so the rows wander and its repeat never lines up. (They were cut from a small Worley noise that repeated
-     every kilometre, which showed as a net.) */
-  vec2 warp = (textureLod(uWeather, vec2(wf.x - uAltoD.y, wf.y)*(3.0/WT) + vec2(0.11, 0.53), 1.0).gb - 0.5)*1000.0;
-  vec3 q = vec3((wf.x - uAltoD.x + warp.x)*(SHR*1.4), (P.y - uAltoD.z)*(SHR*1.4), (wf.y + warp.y)*(SHR*1.05));
-  float lodB = log2(max(fp/18.4, 1.0));    /* (a texel of these billows is 18.4 m) */
-  /* the noise runs from about 0.65 to 0.91 (5% to 95%): spread over 0 to 1, a threshold at 1 - f leaves about f of the
-     sheet cloud; half of it at most, less toward the top and the bottom, so the cloudlets are rounded with blue between */
-  float nn = clamp((textureLod(uShape, q, lodB).r - 0.65)/0.26, 0.0, 1.0), f = 0.5*cov*prof;
+  /* the cloudlets: the heaps' billowy noise at 70% of its size, drawn out a little across the wind, on a sheet warped
+     twice over so the rows wander; and a second, smaller set turned across the first, the two mixed: two lattices that
+     never line up, so the cloudlets come in all sizes and no row runs on. (Cut from one noise, however warped, its
+     repeat still showed as a web.) */
+  vec2 warp = (textureLod(uWeather, wq*(3.0/WT) + vec2(0.11, 0.53), 1.0).gb - 0.5)*1000.0
+            + (textureLod(uWeather, wq*(11.0/WT) + vec2(0.71, 0.27), 1.0).gb - 0.5)*380.0;
+  float ax = wf.x - uAltoD.x;
+  vec3 q = vec3((ax + warp.x)*(SHR*1.4), (P.y - uAltoD.z)*(SHR*1.4), (wf.y + warp.y)*(SHR*1.05));
+  /* (scaled so that when the drift wraps round the first set's repeat, the second has gone round a whole number of its
+     own: no jump) */
+  vec2 r2 = vec2(0.8*ax - 0.6*wf.y, 0.6*ax + 0.8*wf.y) + warp.yx*0.7;
+  vec3 q2 = vec3(r2.x*(SHR*1.75) + 0.37, (P.y - uAltoD.z)*(SHR*2.8) + 0.11, r2.y*(SHR*2.3333333) + 0.53);
+  float lodB = log2(max(fp/18.4, 1.0)), lodB2 = log2(max(fp/12.5, 1.0));    /* (a texel of these billows is 18.4 m, of the smaller about 12.5) */
+  /* each noise runs from about 0.65 to 0.91 (5% to 95%); their mix, narrower, from about 0.685 to 0.875: spread over 0 to
+     1, a threshold at 1 - f leaves about f of the sheet cloud; half of it at most, less toward the top and the bottom,
+     so the cloudlets are rounded with blue between */
+  float n = 0.62*textureLod(uShape, q, lodB).r + 0.38*textureLod(uShape, q2, lodB2).r;
+  float nn = clamp((n - 0.685)/0.19, 0.0, 1.0), f = 0.5*cov*prof;
   float dn = remapC(nn, 1.0 - f - 0.05, 1.0 - f + 0.16);
   /* frayed edges, near enough to see: finer Worley noise eats at them */
   if (lodB < 2.5){ float de = textureLod(uDetail, vec3(wf.x - uAltoD.w, P.y, wf.y)*(1.0/240.0), lodB + 1.3).r; dn = mix(remapC(dn, 0.45*de, 1.0), dn, smoothstep(1.0, 2.5, lodB)); }
@@ -553,8 +565,9 @@ float cloudShadow(vec2 p){
   }
   if (uAlto > 0.002){
     vec2 q = p + L.xz/L.y*5400.0, wn = normalize(uWind + vec2(1e-5)), wf = vec2(dot(q, wn), dot(q, vec2(-wn.y, wn.x)));
-    float m = textureLod(uWeather, vec2(wf.x - uAltoD.y, wf.y)*(1.0/36000.0) + vec2(0.37, 0.71), 3.0).b;
-    sh *= 1.0 - 0.3*smoothstep(0.15, 0.85, m + 0.6*uAlto - 0.4)*min(1.0, uAlto*1.3);
+    vec2 wq = vec2(wf.x - uAltoD.y, wf.y);
+    float m = textureLod(uWeather, wq*(1.0/36000.0) + vec2(0.37, 0.71), 3.0).b, pch = textureLod(uWeather, wq*(6.0/36000.0) + vec2(0.29, 0.83), 2.5).r;
+    sh *= 1.0 - 0.3*smoothstep(0.15, 0.85, m + 0.6*uAlto - 0.4)*min(1.0, uAlto*1.3)*smoothstep(0.3, 0.7, pch + 0.08*uAlto);
   }
   return mix(1.0, sh, k);
 }`;

@@ -502,7 +502,7 @@ void main(){
     const nf = 13 + Math.floor(r() * 10);
     /* far away: every other frond, a little wider, in fewer segments, all on one texture (same draws, so it matches up close) */
     for (let i = 0; i < nf; i++) {
-      const az = i * 2.39996 + r() * 0.2, age = i / nf, rise = 1.6 - age * 1.7, droop = (0.18 + age * 0.85 + r() * 0.15) * droopK;
+      const az = i * 2.39996 + r() * 0.2, age = i / nf, rise = 1.1 - age * 1.3, droop = (0.38 + age * 0.7 + r() * 0.15) * droopK;   /* (arching out and over, as the camp's do) */
       const len = cr * (0.72 + 0.32 * Math.sin(Math.PI * Math.min(1, age * 1.2 + 0.15)));
       const side = r() < 0.5 ? fA : fB, wd = 1.35 + r() * 0.35, m = M(lx, h + 0.05 - age * 0.25, lz, (r() - 0.5) * 0.5, az, 0);
       if (!lite) side.push({ g: Nature.frondGeo(len, wd, rise, droop, 7), m });

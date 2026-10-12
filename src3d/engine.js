@@ -56,8 +56,8 @@ const Engine = (() => {
     if (al > 0.002) {
       const w = su.uWind.value, wn = Math.hypot(w.x, w.y) || 1, wx = w.x / wn, wz = w.y / wn;
       const qx = x + lx / ll / Ly * 5400, qz = z + lz / ll / Ly * 5400, fx = qx * wx + qz * wz, fz = -qx * wz + qz * wx;
-      const m = read((fx - su.uAltoD.value.y) / WT + 0.37, fz / WT + 0.71, 2, 2.4);
-      sh *= 1 - 0.3 * smJ(0.15, 0.85, m + 0.6 * al - 0.4) * Math.min(1, al * 1.3);
+      const m = read((fx - su.uAltoD.value.y) / WT + 0.37, fz / WT + 0.71, 2, 2.4), pch = read((fx - su.uAltoD.value.y) * 6 / WT + 0.29, fz * 6 / WT + 0.83, 0, 1.6);
+      sh *= 1 - 0.3 * smJ(0.15, 0.85, m + 0.6 * al - 0.4) * Math.min(1, al * 1.3) * smJ(0.3, 0.7, pch + 0.08 * al);
     }
     return 1 + (sh - 1) * k;
   }

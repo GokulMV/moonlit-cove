@@ -115,16 +115,19 @@ const Paint = (() => {
       a.strokeStyle = dry ? 'rgba(230,210,150,0.3)' : 'rgba(205,220,140,0.32)'; a.lineWidth = Math.max(0.6, w0 * 0.22);
       a.beginPath(); a.moveTo(x0, y0); a.quadraticCurveTo(cx, cy, x0 + (x1 - x0) * 0.85, y0 + (y1 - y0) * 0.85); a.stroke();
     };
+    /* (spaced so the light shows between them, as it does through a real frond: packed edge to edge, they made a solid
+       serrated blade, and the crowns read as green stars) */
     for (let layer = 0; layer < 2; layer++) {
-      for (let i = 0; i < 92; i++) {
-        const t = 0.04 + i / 92 * 0.94 + (r() - 0.5) * 0.006, y = 1024 * (1 - t);
+      for (let i = 0; i < 68; i++) {
+        if (layer && r() > 0.4) continue;
+        const t = 0.04 + (i + layer * 0.5) / 68 * 0.94 + (r() - 0.5) * 0.006, y = 1024 * (1 - t);
         const len = (1 - Math.pow(t, 1.45)) * 124 + 10;
         for (const side of [-1, 1]) {
           const ang = 0.55 + t * 0.4 + (r() - 0.5) * 0.14 + layer * 0.08;
           const x1 = 128 + side * Math.cos(ang) * len, y1 = y - Math.sin(ang) * len * 0.85 + len * 0.12;
           const cx = (128 + x1) / 2 + side * len * 0.06, cy = (y + y1) / 2 - len * 0.18;
           const col = greens[Math.floor(r() * greens.length)];
-          a.fillStyle = col; blade(128 + side * 3, y, x1, y1, cx, cy, (6.5 - t * 3.5) * (layer ? 0.85 : 1));
+          a.fillStyle = col; blade(128 + side * 3, y, x1, y1, cx, cy, (5.4 - t * 2.9) * (layer ? 0.85 : 1));
           if (!dry && r() < 0.12) { a.fillStyle = 'rgba(160,140,70,0.75)'; blade(x1 - side * len * 0.18, y1 + len * 0.05, x1, y1, x1 - side * len * 0.08, y1, 2.5, true); }
         }
       }
