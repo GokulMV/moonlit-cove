@@ -645,6 +645,8 @@
     orb.fly = null; orb.keys.clear(); orb.pz = lo + s[U] * (hi - lo); orb.Fs = elFloor();
   }
   const orbNearCamp = () => Math.hypot(orb.v[X] - P0[0], orb.pz - P0[2]) < 40;
+  /* a pin on a thing shows when the camera is round the camp, or, walking, when you have come up to it */
+  const pinNear = a => wk.on ? Math.hypot((a.x ?? a[0]) - wk.x, (a.z ?? a[2]) - wk.z) < 6.5 : orbNearCamp();
 
   /* the hand on it: pointers, the wheel, the keys */
   const ex = { ptrs: new Map(), kind: 'turn', dragged: false, multi: false, two: null, ax: 0, ay: 0, wheelT: -1e9 };
@@ -744,6 +746,7 @@
     else { const going = ex.dragged; ex.multi = ex.dragged = true; if (ex.ptrs.size === 2 && canExplore()) twoStart(going, e.timeStamp); }
   });
   cv.addEventListener('pointermove', e => {
+    if (wk.on && e.pointerType === 'mouse' && !e.buttons) hoverAt(e);
     const p = ex.ptrs.get(e.pointerId); if (!p) return;
     if (e.pointerType === 'mouse' && !e.buttons) { exUp(e); return; }
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -1109,6 +1112,20 @@
   }
   /* the head's tilt and turn come from the hand, or (on Auto) from the gaze; a drag turns the whole body when
      walking by hand, and only the head on Auto, which turns back to its own gaze a few seconds after letting go */
+  /* walking with a mouse, the view turns without a button held: rest the pointer toward a side of the screen and you
+     turn that way, faster the nearer the edge; toward the top or the bottom you look up or down. The middle of the
+     screen stays still, so what is there can be clicked */
+  const hov = { x: 0, y: 0 };
+  function hoverAt(e) {
+    const fx = ((e.clientX - view.x) / view.w) * 2 - 1, fy = ((e.clientY - view.y) / view.h) * 2 - 1, zone = (f, a) => Math.sign(f) * Math.max(0, (Math.abs(f) - a) / (1 - a)) ** 1.6;
+    hov.x = zone(fx, 0.55); hov.y = zone(fy, 0.6);
+  }
+  cv.addEventListener('pointerleave', () => { hov.x = hov.y = 0; });
+  addEventListener('blur', () => { hov.x = hov.y = 0; });
+  function hoverLook(dt) {
+    if (!hov.x && !hov.y) return;
+    walkLook(-hov.x * 1.0 * dt * Math.max(320, view.w) / 2.2, -hov.y * 0.7 * dt * Math.max(320, view.h) / 1.4);
+  }
   function walkLook(dx, dy) {
     const gy = dx * 2.2 / Math.max(320, view.w), gp = dy * 1.4 / Math.max(320, view.h);
     if (wk.auto) { wk.my += gy; wk.mp = clamp(wk.mp + gp, -1.0, 0.9); wk.mT = performance.now(); }
@@ -1430,7 +1447,7 @@
     } else car.camP = null;
     /* walking: the steps, and the eyes they carry */
     wk.camK = clamp(wk.camK + (wk.on ? dtR / 1.4 : -dtR / 1.6), 0, 1);
-    if (wk.on) stepWalk(dtR);
+    if (wk.on) { hoverLook(dtR); stepWalk(dtR); } else hov.x = hov.y = 0;
     if (wk.camK > 0) { const e = ease(wk.camK); cam = e >= 1 ? wk.cam : lerpCam(cam, wk.cam, e); }
     if (window.__coveCamFix) cam = window.__coveCamFix;     /* (the test bench can put the camera anywhere) */
     st.camFinal = cam;
@@ -1475,7 +1492,7 @@
     anchors = Engine.anchors();
     /* pins: a glint on each object, hidden while something is open */
     Content.chapters.forEach(c => { const a = c.anchor === 'clipboard' ? (Engine.anchorNow('clipboard') || anchors.clipboard) : anchors[c.anchor];
-      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && !Engine.pitching && !Engine.knocked(c.id) && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && pinNear(a) && !Engine.pitching && !Engine.knocked(c.id) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     extras(dtR);
@@ -2044,7 +2061,7 @@
       if (!A[x.key]) { x.el.style.visibility = 'hidden'; continue; }
       const atTable = seat.on && seat.pose && seat.pose.near === 'table', p = Engine.project(A[x.key]);
       const want = !sketch.on && !tbox.on && (x.key === 'radio' ? seat.on && !atTable : x.key === 'sketch' || x.key === 'toolbox' ? !st.chapter && (!seat.on || atTable) : !seat.on && !st.chapter);
-      const vis = want && !rd.on && !car.on && !wk.on && !Engine.pitching && !Engine.knocked(x.key) && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const vis = want && !rd.on && !car.on && pinNear(A[x.key]) && !Engine.pitching && !Engine.knocked(x.key) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
     }
   }

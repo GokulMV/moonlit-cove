@@ -18,22 +18,31 @@ const Camp = (() => {
     return o;
   };
 
+  /* a bulb is clear glass round a filament: lit, the filament burns bright in the middle and the glass glows softer
+     round it, brightest where it is seen through most glass; unlit, the glass shows the sky's sheen at its rim and a
+     glint, the dark filament inside */
   const BULB_VS = `
-attribute float aOrder; varying float vOrder;
+attribute float aOrder; varying float vOrder; varying vec3 vN; varying vec3 vW;
 void main(){
   vOrder = aOrder;
   vec4 p = vec4(position, 1.0);
   #ifdef USE_INSTANCING
     p = instanceMatrix*p;
   #endif
-  gl_Position = projectionMatrix*modelViewMatrix*p;
+  vec4 w = modelMatrix*p; vW = w.xyz; vN = normalize(mat3(modelMatrix)*normal);
+  gl_Position = projectionMatrix*viewMatrix*w;
 }`;
   const BULB_FS = `
-uniform float uProg, uTime, uI, uTw; uniform vec3 uOff, uCol; varying float vOrder;
+uniform float uProg, uTime, uI, uTw; uniform vec3 uOff, uCol; varying float vOrder; varying vec3 vN; varying vec3 vW;
 void main(){
   float on = smoothstep(vOrder - 0.012, vOrder + 0.012, uProg*1.03 - 0.015);
   float tw = 1.0 - uTw + uTw*(0.5 + 0.5*sin(uTime*(2.0 + vOrder*5.0) + vOrder*91.0)*sin(uTime*1.3 + vOrder*37.0));
-  gl_FragColor = vec4(mix(uOff, uCol*uI*tw, on), 1.0);
+  vec3 V = normalize(cameraPosition - vW), n = normalize(vN);
+  float c = max(dot(n, V), 0.0), rim = pow(1.0 - c, 2.5);
+  vec3 lit = uCol*uI*tw*(0.16 + 2.3*pow(c, 10.0) + 0.3*rim);
+  float glint = pow(max(dot(reflect(-V, n), normalize(vec3(0.3, 1.0, 0.25))), 0.0), 70.0);
+  vec3 off = uOff*(0.35 + 1.3*rim)*(1.0 - 0.5*pow(c, 12.0)) + vec3(1.0, 0.98, 0.94)*glint*(0.5 + uOff.g*6.0);
+  gl_FragColor = vec4(mix(off, lit, on), 1.0);
 }`;
 
   /* the van's open side door looks into a lit room: the plane ray-traces a box behind itself
@@ -90,7 +99,7 @@ void main(){
 }`;
 
   function instancedLights(points, radius, uniforms) {
-    const geo = new T.SphereGeometry(radius, 10, 8);
+    const geo = new T.SphereGeometry(radius, 14, 10);
     geo.setAttribute('aOrder', new T.InstancedBufferAttribute(new Float32Array(points.map(p => p.order)), 1));
     const mat = new T.ShaderMaterial({ uniforms, vertexShader: BULB_VS, fragmentShader: BULB_FS });
     const inst = new T.InstancedMesh(geo, mat, points.length);
@@ -200,7 +209,7 @@ void main(){
       for (let i = 1; i < n; i++) { const t = i / n, p = P(t); p.y -= 0.075; bulbs.push({ p, order: (acc + t * s.len) / total, strand: si, t }); }
       acc += s.len;
     }
-    const inst = instancedLights(bulbs, 0.05, U.bulb);
+    const inst = instancedLights(bulbs, 0.032, U.bulb);
     root.add(inst); refs.bulbMesh = inst;
     refs.bulbs = bulbs;
   }
