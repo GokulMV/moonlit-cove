@@ -813,7 +813,7 @@ const Engine = (() => {
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;
       const sc = o.shadowC || (away ? [Math.round(lk[0]), Math.round(lk[2])] : [Layout.camp.x, Layout.camp.z]);
-      keyLight.target.position.set(sc[0], 0, sc[1]); keyLight.target.updateMatrixWorld(); gU.uShC.value.set(sc[0], sc[1], 24); }
+      keyLight.target.position.set(sc[0], 0, sc[1]); keyLight.target.updateMatrixWorld(); gU.uShC.value.set(sc[0], sc[1], 24); Mats.U.uLeafShA.value.set(sc[0], sc[1], 24, Mats.U.uLeafShA.value.w); }
     /* the shore's small lives: leaping fish (each leap and landing leaves a splash) and shoals in the shallows */
     let splashes = [];
     if (life) {
@@ -909,6 +909,7 @@ const Engine = (() => {
 
     if (!shadowReady && keyLight.shadow.map) {
       gU.uShadowMap.value = keyLight.shadow.map.texture; gU.uShadowMatrix.value = keyLight.shadow.matrix; gU.uShadowOn.value = 1; shadowReady = true;
+      Mats.U.uLeafShM.value = keyLight.shadow.map.texture; Mats.U.uLeafShX.value = keyLight.shadow.matrix; Mats.U.uLeafShS.value.copy(gU.uShadowSize.value); Mats.U.uLeafShA.value.w = 1;
     }
     const soft = o.soft ?? 0.55, cam = o.cam || Layout.cameras.wide;
     const volFire = o.volFire !== false;

@@ -12,22 +12,28 @@ const Flora = (() => {
   const T = THREE, TAU = Math.PI * 2, rng = Textures.rng;
 
   /* ── shapes ── */
-  /* a tuft of grass: five blades from one root, each a curved, tapering strip of two segments, darker at its foot */
+  /* a tuft of grass: a dozen blades from one root, each a narrow strip tapering to a point and arching out as it
+     goes, dark at its foot; some long and some short, a few gone dry and straw-coloured at the tips. Each vertex
+     carries how far up its blade it is */
   function tuftGeo(seed) {
-    const r = rng(seed), P = [], C = [], I = [], dark = [0.22, 0.34, 0.12], tip = [0.62, 0.74, 0.32];
-    for (let b = 0; b < 5; b++) {
-      const a = b / 5 * TAU + r() * 0.9, lean = 0.25 + r() * 0.45, h = 0.32 + r() * 0.3, w = 0.022 + r() * 0.012, base = P.length / 3;
-      const ox = Math.cos(a) * 0.04 * r(), oz = Math.sin(a) * 0.04 * r(), dx = Math.cos(a), dz = Math.sin(a), px = -dz, pz = dx;
-      for (let k = 0; k <= 2; k++) {
-        const t = k / 2, y = h * t, out = lean * h * t * t, ww = w * (1 - t * 0.85);
-        const cx = ox + dx * out, cz = oz + dz * out;
+    const r = rng(seed), P = [], C = [], H = [], I = [];
+    const foot = [0.02, 0.036, 0.01], mid = [0.05, 0.088, 0.022], tip = [0.095, 0.13, 0.034], dryM = [0.085, 0.075, 0.032], dryT = [0.2, 0.16, 0.07];
+    const nb = 10 + Math.floor(r() * 4);
+    for (let b = 0; b < nb; b++) {
+      const a = r() * TAU, lean = 0.15 + r() * 0.8, h = 0.16 + r() * r() * 0.5 + 0.06, w = 0.005 + r() * 0.007, base = P.length / 3, dry = r() < 0.18, segs = 3;
+      const rr = 0.05 * Math.sqrt(r()), ox = Math.cos(a) * rr, oz = Math.sin(a) * rr, dx = Math.cos(a + (r() - 0.5) * 0.8), dz = Math.sin(a + (r() - 0.5) * 0.8), tw = (r() - 0.5) * 1.2;
+      const k0 = 0.75 + 0.5 * r();
+      for (let k = 0; k <= segs; k++) {
+        const t = k / segs, y = h * t * (1 - 0.35 * lean * t * t), out = lean * h * t * t, ww = w * (1 - t * 0.92);
+        const cx = ox + dx * out, cz = oz + dz * out, an = a + tw * t, px = -Math.sin(an), pz = Math.cos(an);
         P.push(cx - px * ww, y, cz - pz * ww, cx + px * ww, y, cz + pz * ww);
-        const c = [0, 1, 2].map(i => dark[i] + (tip[i] - dark[i]) * t); C.push(...c, ...c);
+        const c0 = t < 0.5 ? foot.map((f, i) => f + (mid[i] - f) * t * 2) : (dry ? dryM : mid).map((m, i) => m + ((dry ? dryT : tip)[i] - m) * (t - 0.5) * 2);
+        const c = c0.map(v => v * k0); C.push(...c, ...c); H.push(t, t);
       }
-      for (let k = 0; k < 2; k++) { const i0 = base + k * 2; I.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2); }
+      for (let k = 0; k < segs; k++) { const i0 = base + k * 2; I.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2); }
     }
     const g = new T.BufferGeometry();
-    g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.setAttribute('color', new T.Float32BufferAttribute(C, 3)); g.setIndex(I);
+    g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.setAttribute('color', new T.Float32BufferAttribute(C, 3)); g.setAttribute('aH', new T.Float32BufferAttribute(H, 1)); g.setIndex(I);
     g.computeVertexNormals(); return g;
   }
   /* geometry pieces for flowers, merged into one with vertex colours */
@@ -103,28 +109,43 @@ const Flora = (() => {
      the edge of the ground it is laid on, so a chunk's grass never pops in or out ── */
   const GRASS_VS = `
 uniform float uTime; uniform vec3 uCamF;
-attribute vec3 color;
-varying vec3 vC; varying vec3 vN; varying vec3 vWPos;
+attribute vec3 color; attribute float aH;
+varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vH;
 void main(){
-  vec4 p = vec4(position, 1.0); vec3 o = vec3(0.0);
+  vec4 p = vec4(position, 1.0); vec3 o = vec3(0.0), n = normal;
   #ifdef USE_INSTANCING
-    o = (modelMatrix*instanceMatrix*vec4(0.0, 0.0, 0.0, 1.0)).xyz; p = instanceMatrix*p;
+    o = (modelMatrix*instanceMatrix*vec4(0.0, 0.0, 0.0, 1.0)).xyz; p = instanceMatrix*p; n = mat3(instanceMatrix)*n;
   #endif
   float fade = 1.0 - smoothstep(28.0, 40.0, distance(o.xz, uCamF.xz));
   vec4 wp = modelMatrix*p; wp.xyz = o + (wp.xyz - o)*fade;
   float h = max(position.y, 0.0), ph = o.x*0.37 + o.z*0.29;
   wp.xz += vec2(0.55, -0.83)*(sin(uTime*1.7 + ph) + 0.5*sin(uTime*3.1 + ph*1.9))*0.09*h*h*fade;
-  vC = color*(0.82 + 0.36*fract(sin(dot(o.xz, vec2(12.9898, 78.233)))*43758.5453)); vN = vec3(0.0, 1.0, 0.0); vWPos = wp.xyz;
+  vC = color*(0.8 + 0.4*fract(sin(dot(o.xz, vec2(12.9898, 78.233)))*43758.5453)); vN = normalize(mat3(modelMatrix)*n); vWPos = wp.xyz; vH = aH;
   gl_Position = projectionMatrix*viewMatrix*wp;
 }`;
+  /* lit as a thin blade: its own face toward the eye, the light through it from behind, dark down among the stems, and
+     in the shade where the trees' shadows fall */
   const GRASS_FS = `
+#include <packing>
 ${GLSL.COMMON}
 ${GLSL.ART}
 uniform vec3 uAmbF, uKeyDirT, uKeyColT; uniform vec4 uFog;
-varying vec3 vC; varying vec3 vN; varying vec3 vWPos;
+uniform sampler2D uLeafShM; uniform mat4 uLeafShX; uniform vec4 uLeafShA; uniform vec2 uLeafShS;
+varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vH;
+float shadowHere(vec3 wp){
+  if (uLeafShA.w < 0.5 || length(wp.xz - uLeafShA.xy) > uLeafShA.z) return 1.0;
+  vec4 sc = uLeafShX*vec4(wp, 1.0); sc.xyz /= sc.w;
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+  vec2 tx = 1.5/uLeafShS; float z = sc.z - 0.002;
+  return 0.25*(step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, -tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, -tx.y))))
+             + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, tx.y)))));
+}
 void main(){
-  vec3 L = uAmbF*0.95 + uKeyColT*(0.55*max(uKeyDirT.y, 0.0) + 0.3);
-  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0) L += artLight(vWPos, vec3(0.0, 1.0, 0.0));
+  vec3 V = normalize(cameraPosition - vWPos), n = normalize(vN); if (dot(n, V) < 0.0) n = -n;
+  float ndl = dot(n, uKeyDirT), sh = shadowHere(vWPos), ao = 0.35 + 0.65*smoothstep(0.0, 0.7, vH);
+  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0))*ao + uKeyColT*sh*(max(ndl, 0.0)*0.85 + max(-ndl, 0.0)*0.45*vec3(0.95, 1.05, 0.5))*(0.45 + 0.55*ao);
+  L += uKeyColT*sh*0.25*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 24.0)*ao;
+  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0) L += artLight(vWPos, n)*ao;
   vec3 c = vC*L; float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
   gl_FragColor = vec4(c, 1.0);
