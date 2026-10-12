@@ -88,7 +88,10 @@ const Sky = (() => {
     const moonGlit = moonCol.map(v => v * 0.018 * Math.pow(Math.max(il.fraction, 0.08), 0.7) * moonUp * dayWash);
     const sunGlit = sunCol.map(v => v * 1.1 * sm(-1.2, 1.5, sAlt));
     const stars = (1 - sm(-15, -6, sAlt)) * (1 - 0.55 * Math.min(1, moonI / 0.024));
-    const cloudLit = sunCol.map((v, i) => v * sunI * 0.2 + moonCol[i] * moonI * 0.6);
+    /* the clouds, a mile or two up, still see the sun a little after it has set for the beach, and catch it fully well
+       before it is high: at sunset they glow orange and pink rather than going grey */
+    const cloudSun = 3.0 * sm(-0.045, 0.08, Math.sin(sun.alt)), cloudCol = mix([1.0, 0.36, 0.16], sunCol, sm(0.0, 0.3, Math.sin(sun.alt)));
+    const cloudLit = cloudCol.map((v, i) => v * cloudSun * 0.2 + moonCol[i] * moonI * 0.6);
 
     return {
       sun, moon, illum: il, sAlt, mAlt, zen, hor, glow, haze: hor,

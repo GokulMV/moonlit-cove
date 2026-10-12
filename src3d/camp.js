@@ -619,15 +619,11 @@ void main(){
     const dwg = grp(D.x, 0, D.z, D.rot); root.add(dwg); dw.position.set(0, 0, 0); dw.rotation.y = 0; dwg.add(dw);
     stub.position.set(0, 0, 0); stub.rotation.y = 0; dwg.add(stub);
     refs.dyn.push({ o: dwg, kind: 'slide', half: 1.2, tip: 0.0, heavy: true }); refs.driftwood = dwg;
-    const B = Layout.bottle, bg = grp(B.x, 0.085, B.z, B.rot); bg.scale.setScalar(2.3); bg.rotation.z = 0.08; root.add(bg);
-    const gl = new T.MeshStandardMaterial({ color: C('#3d7350'), roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.82 });
-    const body = mesh(new T.CylinderGeometry(0.045, 0.045, 0.2, 14), gl); body.rotation.z = Math.PI / 2; bg.add(body);
-    const neck = mesh(new T.CylinderGeometry(0.017, 0.03, 0.09, 10), gl); neck.rotation.z = -Math.PI / 2; at(neck, 0.14, 0, 0); bg.add(neck);
-    const cork = mesh(new T.CylinderGeometry(0.016, 0.016, 0.03, 8), L('#8b6541')); cork.rotation.z = Math.PI / 2; at(cork, 0.195, 0, 0); bg.add(cork); refs.cork = cork;
-    const paper = mesh(new T.CylinderGeometry(0.022, 0.022, 0.15, 12), L('#f1e4c6', { emissive: C('#ffcf8a'), emissiveIntensity: 0.05 }), false); paper.rotation.z = Math.PI / 2; bg.add(paper);
-    const twine = mesh(new T.TorusGeometry(0.023, 0.003, 5, 14), L('#9a4b1c')); twine.rotation.y = Math.PI / 2; bg.add(twine);
-    refs.letterProp = [paper, twine];
-    refs.bottle = bg;
+    /* the message in a bottle (models/beach/bottle.js), lying on the sand a little sunk into it, half as big again as
+       life so it can be seen from the camp; uncork.js picks it up and opens it */
+    const B = Layout.bottle, bg = grp(B.x, 0.046, B.z, B.rot); bg.scale.setScalar(1.6); bg.rotation.z = 0.06; root.add(bg);
+    const bm = Models.make('beach/bottle'); bg.add(bm);
+    refs.bottle = bg; refs.bottleModel = bm; refs.cork = bm.userData.cork; refs.letterProp = bm.userData.letter;
     refs.dyn.push({ o: bg, kind: 'float', half: 0.1, tip: 0.0, seaward: true });
   }
 

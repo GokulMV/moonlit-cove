@@ -33,7 +33,7 @@
     basket: { pos: [3.15, 1.45, -1.95], look: [1.95, 0.22, -3.78], fov: 42, focus: 2.5 },
     lights: { pos: [4.4, 3.5, 3.9], look: [0.6, 1.8, -3.3], fov: 52, focus: 8.0 },
     van: { pos: [-11.2, 2.1, 1.6], look: [-7.9, 1.2, -3.2], fov: 44, focus: 6.0 },
-    bottle: { pos: [-2.25, 1.0, -3.5], look: [-3.3, 0.12, -5.2], fov: 38, focus: 2.1 }
+    bottle: { pos: [-2.75, 1.0, -3.55], look: [-3.3, 0.12, -5.2], fov: 38, focus: 1.95 }
   };
   let anchors = null;
   /* the view of the van is kept relative to the van, so the clipboard reads well wherever it was parked */
@@ -108,7 +108,7 @@
     notes: { kind: 'book', book: 'journal', doc: 'notes', tilt: 0.42 },
     plans: { kind: 'paper', doc: 'plans', origin: 'roll', view: 'basket', W: 0.46, H: 0.325, R0: 0.013, rolled: true, back: '#2a5a95', links: ['source'] },
     stack: { kind: 'paper', doc: 'stack', origin: 'clipboard', view: 'van', W: 0.24, H: 0.336, rolled: false, board: true, back: '#f2eee4' },
-    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.24, H: 0.341, R0: 0.011, rolled: true, back: '#e6d4ad', links: ['email', 'linkedin', 'github'] }
+    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.2, H: 0.284, R0: 0.0095, rolled: true, back: '#e6d4ad', links: ['email', 'linkedin', 'github'] }
   };
   const rd = { on: false, id: null, cfg: null, docs: {}, s: 1, cam: null, pending: null, held: null, zoom: 1, zoomT: 1, pan: [0, 0], panT: [0, 0], drag: null };
   const single = () => view.w < 720 || view.w / view.h < 1.0;
@@ -145,14 +145,18 @@
     } else if (cfg.kind === 'paper') {
       const r = doc(cfg.doc), v = V[cfg.view], c0 = r.canvases[0], W = cfg.W, H = W * c0.height / c0.width;
       rd.held = heldPose(v, W, H); rd.paperWH = [W, H];
-      st.to = Object.assign({}, v, { focus: rd.held.d });
-      const go = () => {
-        Engine.prop(cfg.origin, false);
-        Engine.paper.open({ W: rd.paperWH[0], H: rd.paperWH[1], R0: cfg.R0, rolled: cfg.rolled, board: cfg.board, backColor: cfg.back, pages: r.canvases, origin: Engine.origin(cfg.origin), held: rd.held, fly: cfg.board ? 1.25 : 1.5, lift: cfg.board ? 1 : 0 });
+      /* (the bottle is looked at where it lies first, and focused on as it is brought up) */
+      st.to = Object.assign({}, v, { focus: cfg.origin === 'bottle' ? v.focus : rd.held.d }); rd.focus = null;
+      /* o: where the sheet starts (the letter as it leaves the bottle in your hands), else where it lies */
+      const go = o => {
+        const inHand = !!(o && o.s === 1 && cfg.origin === 'bottle');
+        if (cfg.origin !== 'bottle') Engine.prop(cfg.origin, false);
+        Engine.paper.open({ W: rd.paperWH[0], H: rd.paperWH[1], R0: cfg.R0, rolled: cfg.rolled, board: cfg.board, backColor: cfg.back, pages: r.canvases, origin: o || Engine.origin(cfg.origin), held: rd.held,
+          fly: inHand ? 1.0 : cfg.board ? 1.25 : 1.5, arc: inHand ? 0.03 : undefined, lift: cfg.board ? 1 : 0 });
         syncReader();
       };
-      /* the bottle: the cork pops first, and the letter slides out once it is clear */
-      arrive(cfg.origin === 'bottle' ? () => { Engine.corkOut(true); setTimeout(() => { if (rd.on && rd.id === id) go(); }, 520); } : go);
+      /* the bottle: picked up, uncorked and shaken until the letter slides out of its neck; then it is read */
+      arrive(cfg.origin === 'bottle' ? () => Engine.bottle.open(o => { if (rd.on && rd.id === id) go(o); }, { quick: reduced }) : () => go(null));
     }
     st.camDur = camDur(st.from, st.to);
     /* how to turn the pages: said once as it opens, then it fades */
@@ -165,10 +169,18 @@
   const camDur = (a, b) => { const d = a && b ? Math.hypot(...a.pos.map((v, i) => v - b.pos[i])) : 20; return Math.max(1.1, Math.min(2.2, 0.8 + d / 14)); };
   function stopReading(goingElsewhere) {
     if (!rd.on) return;
-    const cfg = rd.cfg, opened = !rd.pending; rd.on = false; rd.pending = null; endPageDrag(false);
+    const cfg = rd.cfg; rd.on = false; rd.pending = null; endPageDrag(false);
     if (cfg.kind === 'book') Engine.books[cfg.book].go(0, false);
-    if (cfg.kind === 'paper') { const o = cfg.origin; if (Engine.paper.mode === 'hidden') { Engine.prop(o, true); Engine.corkOut(false); } else Engine.paper.close(() => { Engine.prop(o, true); if (o === 'bottle') Engine.corkOut(false); }); }
-    if (!opened && cfg.origin === 'bottle') Engine.corkOut(false);
+    if (cfg.kind === 'paper') {
+      const o = cfg.origin;
+      if (o === 'bottle') {
+        /* the bottle goes back to its place (straight from your hands if the letter never came out); a letter being read
+           rolls up and goes back into it there, and the cork hops back in after it */
+        Engine.bottle.abort();
+        if (Engine.paper.mode !== 'hidden') { const h = Engine.bottle.letterRest(); Engine.paper.setOrigin(h.p, h.q, h.s); Engine.paper.close(() => Engine.bottle.letterBack()); }
+      } else if (Engine.paper.mode === 'hidden') Engine.prop(o, true);
+      else Engine.paper.close(() => Engine.prop(o, true));
+    }
     rd.id = null; rd.cfg = null;
     document.body.classList.remove('reading-book'); $('reader').hidden = true;
     if (!goingElsewhere) { st.chapter = null; dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false')); Content.chapters.forEach(x => x.spot.classList.remove('on', 'dim')); goView('wide'); }
@@ -188,6 +200,18 @@
     syncReader();
   }
   const pageSound = () => { if (sound.on && sound.amb && sound.amb.page) sound.amb.page(); };
+  /* a cork coming out of a bottle: a soft hollow pop (a quick falling tone in a puff of noise), then the letter's paper */
+  function popSound() {
+    const ctx = sound.on && sound.ctx; if (!ctx) return;
+    const t = ctx.currentTime, v = 0.32 * sound.vol, out = ctx.createGain(); out.gain.value = v; out.connect(ctx.destination);
+    const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(820, t); o.frequency.exponentialRampToValueAtTime(190, t + 0.07);
+    og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.9, t + 0.004); og.gain.exponentialRampToValueAtTime(0.001, t + 0.11); o.connect(og); og.connect(out); o.start(t); o.stop(t + 0.13);
+    const n = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.06), ctx.sampleRate), d = n.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.008));
+    const ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain(); ns.buffer = n; bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 0.9; ng.gain.value = 0.5;
+    ns.connect(bp); bp.connect(ng); ng.connect(out); ns.start(t);
+    setTimeout(pageSound, 2500);
+  }
+  Engine.onBottlePop = popSound;
   function syncReader() {
     const cfg = rd.cfg; if (!cfg) return;
     let txt = '', canP = false, canN = false;
@@ -1376,6 +1400,12 @@
     if (rd.on) {
       const a = 1 - Math.exp(-dtR * 6); rd.zoom += (rd.zoomT - rd.zoom) * a; rd.pan[0] += (rd.panT[0] - rd.pan[0]) * a; rd.pan[1] += (rd.panT[1] - rd.pan[1]) * a;
       if (rd.cfg.kind === 'paper' && rd.paperWH && Engine.paper.mode !== 'hidden' && Engine.paper.mode !== 'closing') { const v = V[rd.cfg.view], hp = heldPose(v, rd.paperWH[0], rd.paperWH[1], rd.zoom, rd.pan); Engine.paper.setHeld(hp.p, hp.q); st.to = Object.assign({}, v, { focus: hp.d }); }
+      /* the bottle in your hands: focus follows it as it comes up, then eases on to the letter */
+      if (rd.cfg.origin === 'bottle' && st.to) {
+        const bd = Engine.bottle.dist(), want = bd != null ? bd : st.to.focus;
+        rd.focus = rd.focus == null ? (bd != null ? want : st.to.focus) : rd.focus + (want - rd.focus) * (1 - Math.exp(-dtR * 5));
+        st.to = Object.assign({}, st.to, { focus: rd.focus });
+      }
     }
     if (rd.on && rd.cfg.kind === 'book') {
       const tv = bookView(), a = rd.cam ? 1 - Math.exp(-dtR * 4) : 1;

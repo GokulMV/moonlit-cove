@@ -21,7 +21,7 @@ const MODELS = (() => {
   };
   walk('models'); return ['models/models.js', ...out];
 })();
-export const ENGINE = ['astro.js', 'textures.js', 'layout.js', 'sky.js', 'glsl.js', 'paint.js', 'mats.js', 'cloth.js', 'book.js', 'paper.js', ...MODELS, 'camp.js', 'nature.js', 'world.js', 'shacks.js', 'marks.js', 'life.js', 'fauna.js', 'fx.js', 'engine.js', 'audio.js'];
+export const ENGINE = ['astro.js', 'textures.js', 'layout.js', 'sky.js', 'glsl.js', 'paint.js', 'mats.js', 'cloth.js', 'book.js', 'paper.js', ...MODELS, 'camp.js', 'nature.js', 'world.js', 'shacks.js', 'marks.js', 'life.js', 'fauna.js', 'fx.js', 'cloudnoise.js', 'uncork.js', 'engine.js', 'audio.js'];
 const nm = path.join(root, 'node_modules');
 const THREE_VERSION = JSON.parse(fs.readFileSync(path.join(nm, 'three/package.json'), 'utf8')).version;
 const LOCAL_THREE = 'file://' + path.join(nm, 'three/build/three.min.js');

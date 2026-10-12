@@ -205,13 +205,14 @@ const Paper = (() => {
 
     function setPage(s, tex) { s.mf.map = tex; s.mf.emissiveMap = tex; s.mf.needsUpdate = true; }
     function showCloth(on) { cs.meshes.forEach(m => { m.visible = on; }); sheets[0].pivot.visible = !on; }
-    /* open: o = { W, H, R0, rolled, board, pages: [canvas], origin: {p, q}, held: {p, q}, start } */
+    /* open: o = { W, H, R0, rolled, board, pages: [canvas], origin: {p, q, s}, held: {p, q}, fly, arc, lift }. origin.s is how
+       much bigger the thing it comes out of is drawn than life (the bottle on the sand), arc how high it rises on the way */
     function open(o) {
       st.pages = o.pages.map(c => { const t = Mats.tex(c, { aniso: 8 }); t.generateMipmaps = true; return t; });
       shape(o.W, o.H, o.R0 || 0.011, o.rolled !== false, o.board); st.lift = o.lift || 0;
       st.idx = 0; setPage(sheets[0], st.pages[0]);
       sheets.forEach(s => { s.mb.color.set(o.backColor || '#e8dcc2'); s.mb.emissive.set(o.backColor || '#e8dcc2'); });
-      st.origin.p.fromArray(o.origin.p); st.origin.q.fromArray(o.origin.q);
+      st.origin.p.fromArray(o.origin.p); st.origin.q.fromArray(o.origin.q); st.oS = o.origin.s || 1; st.arc = o.arc ?? (st.lift ? 0.06 : 0.35);
       st.held.p.fromArray(o.held.p); st.held.q.fromArray(o.held.q);
       const now = performance.now() / 1000, t0 = now + (o.delay || 0);
       st.fly = { t0, dur: o.fly || 1.4, back: false };
@@ -321,7 +322,8 @@ const Paper = (() => {
       _o.copy(rolledOff).applyQuaternion(st.origin.q);
       const from = _p.copy(st.origin.p).sub(_o);
       root.position.lerpVectors(from, st.held.p, e);
-      root.position.y += Math.sin(Math.PI * e) * (st.lift ? 0.06 : 0.35);
+      root.position.y += Math.sin(Math.PI * e) * (st.arc ?? 0.35);
+      root.scale.setScalar((st.oS || 1) + (1 - (st.oS || 1)) * Math.min(1, e * 1.4));
       /* a clipboard comes up off its hook and out from the wall before it travels */
       if (st.lift) { const k = Math.min(1, e / 0.22), off = (1 - e) * Math.sin(Math.PI / 2 * k);
         root.position.addScaledVector(_up.set(0, 1, 0).applyQuaternion(st.origin.q), 0.045 * off).addScaledVector(_out.set(0, 0, 1).applyQuaternion(st.origin.q), 0.07 * off); }
@@ -342,9 +344,11 @@ const Paper = (() => {
     }
     function setReadLight(k) { sheets.forEach(s => { s.mf.emissiveIntensity = k; s.mb.emissiveIntensity = k * 0.6; }); boardM.emissiveIntensity = k * 0.5; clipM.emissiveIntensity = k * 0.5; }
     function setHeld(p, q) { st.held.p.fromArray(p); st.held.q.fromArray(q); }
+    /* where it goes back to (the letter goes home into the bottle on the sand, not into the hand it came from) */
+    function setOrigin(p, q, s = 1) { st.origin.p.fromArray(p); st.origin.q.fromArray(q); st.oS = s; st.arc = st.lift ? 0.06 : 0.35; }
     /* the page being read: where the sheet in motion (and any tap waiting behind it) is headed, not the one it left */
     const target = () => { const tu = st.turn; if (!tu || tu.drag) return st.idx; return Math.max(0, Math.min(st.pages.length - 1, tu.land + (st.queued || 0))); };
-    return { open, close, turn, dragStart, dragTo, dragEnd, update, setReadLight, setHeld, state: st, cloth: cs, get idx() { return st.idx; }, get target() { return target(); }, get count() { return st.pages.length; }, get mode() { return st.mode; }, get dragging() { return !!(st.turn && st.turn.drag); }, busy: () => !!st.turn || st.mode === 'opening' || st.mode === 'closing' };
+    return { open, close, turn, dragStart, dragTo, dragEnd, update, setReadLight, setHeld, setOrigin, state: st, cloth: cs, get idx() { return st.idx; }, get target() { return target(); }, get count() { return st.pages.length; }, get mode() { return st.mode; }, get dragging() { return !!(st.turn && st.turn.drag); }, busy: () => !!st.turn || st.mode === 'opening' || st.mode === 'closing' };
   }
   return { build };
 })();

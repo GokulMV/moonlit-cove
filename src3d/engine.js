@@ -7,10 +7,10 @@ const Engine = (() => {
   /* the public face of the engine. Features add to it right where they are written, with
      Object.assign(api, { … }), rather than all through one long return line */
   const api = {};
-  let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas;
+  let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas, cloudNoiseMs = 0;
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
   let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = 0, skyMesh = null, groundMesh = null;
-  const cork = { k: 0, to: 0, t0: 0, p0: null, r0: null };
+  let uncork = null;
   let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
@@ -47,21 +47,23 @@ const Engine = (() => {
     const fire = mk(GLSL.FIRE_FS, { uDepth: { value: null }, uN3: { value: null }, uInvProj: { value: new T.Matrix4() }, uCamW: { value: new T.Matrix4() }, uCamP: { value: new T.Vector3() }, uFC: { value: new T.Vector3() }, uT: { value: 0 }, uI: { value: 1 }, uFlick: { value: 0.5 }, uDbgF: { value: 0 } });
     Object.assign(fin.uniforms, { uAO: { value: null }, uFire: { value: null }, uAOk: { value: 0 }, uFireOn: { value: 0 }, uHaze: { value: new T.Vector4() }, uNoiseT: { value: null }, uRain: { value: 0 }, uRainT: { value: 0 }, uRainSlant: { value: 0.12 } });
     Object.assign(down.uniforms, { uFire: { value: null }, uFireOn: { value: 0 } });
-    fin.uniforms.uSunScr = { value: new T.Vector4() };
+    fin.uniforms.uSunScr = { value: new T.Vector4() }; fin.uniforms.uCloudB = { value: null }; fin.uniforms.uCloudBOn = { value: 0 };
     /* the clouds: marched at half size before the scene, each frame blended into the last (turned to where it now lies on
        screen), so the grain of a few dozen steps smooths away; the sky draws them from it */
-    const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uPrevVP: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uPrev: { value: null }, uBlend: { value: 0.15 }, uHasPrev: { value: 0 }, uFrame: { value: 0 }, uEnv: { value: 0 } };
-    for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uN3', 'uCD', 'uCO', 'uCQ']) cloudU[k] = su0[k];
+    const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uFrame: { value: 0 }, uEnv: { value: 0 }, uPxA: { value: 0.004 } };
+    for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uCO', 'uCQ', 'uShape', 'uDetail', 'uWeather', 'uLdM']) cloudU[k] = su0[k];
     const cloudM = mk(GLSL.CLOUD_FS, cloudU);
-    let clRT = [], ci = 0, clPrev = false, clFrame = 0, clCam = new T.Vector3(1e9, 0, 0), clT = -1e9;
+    const cloudR = mk(GLSL.CLOUD_RES_FS, { uCur: { value: null }, uHist: { value: null }, uPrevVP: { value: new T.Matrix4() }, uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uHasPrev: { value: 0 }, uAlpha: { value: 0.12 }, uTexel: { value: new T.Vector2() } });
+    let clRT = [], clCur = null, ci = 0, clPrev = false, clFrame = 0, clCam = new T.Vector3(1e9, 0, 0), clT = -1e9;
     const _vr = new T.Matrix4();
     let rt = null, bl = [], dofRT = null, aoRT = null, aoBRT = null, fireRT = null, W = 0, H = 0, S = 0;
     function resize(w, h, samples) {
       if (w === W && h === H && samples === S) return;
       W = w; H = h; S = samples;
-      if (rt) { rt.dispose(); rt.depthTexture.dispose(); bl.forEach(b => b.dispose()); dofRT.dispose(); aoRT.dispose(); aoBRT.dispose(); fireRT.dispose(); clRT.forEach(c => c.dispose()); }
+      if (rt) { rt.dispose(); rt.depthTexture.dispose(); bl.forEach(b => b.dispose()); dofRT.dispose(); aoRT.dispose(); aoBRT.dispose(); fireRT.dispose(); clRT.forEach(c => c.dispose()); clCur.dispose(); }
       const hw = Math.max(1, w >> 1), hh = Math.max(1, h >> 1);
       clRT = [0, 1].map(() => new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter })); clPrev = false;
+      clCur = new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter });
       aoRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false }); aoBRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false });
       fireRT = new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false });
       rt = new T.WebGLRenderTarget(w, h, { type: T.HalfFloatType, samples, depthBuffer: true });
@@ -78,13 +80,16 @@ const Engine = (() => {
         if (camera.position.distanceTo(clCam) > 40 || Math.abs(p.cloudT - clT) > 20) clPrev = false;
         clCam.copy(camera.position); clT = p.cloudT;
         const c = cloudM.uniforms; c.uInvProj.value.copy(camera.projectionMatrixInverse); c.uCamRot.value.setFromMatrix4(camera.matrixWorld);
-        c.uPrev.value = clRT[1 - ci].texture; c.uHasPrev.value = clPrev ? 1 : 0; c.uBlend.value = p.cloudBlend; c.uFrame.value = (clFrame++) % 997;
-        quad.material = cloudM; R.setRenderTarget(clRT[ci]); R.render(qs, qc);
-        su0.uCB.value = clRT[ci].texture; su0.uCBOn.value = 1; su0.uCBInv.value.set(1 / rt.width, 1 / rt.height);
+        c.uFrame.value = (clFrame++) % 997; c.uPxA.value = 2 * Math.tan(camera.fov * Math.PI / 360) / clCur.height;
+        quad.material = cloudM; R.setRenderTarget(clCur); R.render(qs, qc);
+        const r = cloudR.uniforms; r.uCur.value = clCur.texture; r.uHist.value = clRT[1 - ci].texture; r.uHasPrev.value = clPrev ? 1 : 0; r.uAlpha.value = p.cloudBlend;
+        r.uInvProj.value.copy(camera.projectionMatrixInverse); r.uCamRot.value.copy(c.uCamRot.value); r.uTexel.value.set(1 / clCur.width, 1 / clCur.height);
+        quad.material = cloudR; R.setRenderTarget(clRT[ci]); R.render(qs, qc);
+        su0.uCB.value = clRT[ci].texture; su0.uCBOn.value = 1; su0.uCBInv.value.set(1 / rt.width, 1 / rt.height); fin.uniforms.uCloudB.value = clRT[ci].texture; fin.uniforms.uCloudBOn.value = 1;
         /* (for the next frame: where a direction lay on this frame's screen) */
-        _vr.copy(camera.matrixWorldInverse).setPosition(0, 0, 0); c.uPrevVP.value.copy(camera.projectionMatrix).multiply(_vr);
+        _vr.copy(camera.matrixWorldInverse).setPosition(0, 0, 0); r.uPrevVP.value.copy(camera.projectionMatrix).multiply(_vr);
         ci = 1 - ci; clPrev = true;
-      } else su0.uCBOn.value = 0;
+      } else { su0.uCBOn.value = 0; fin.uniforms.uCloudBOn.value = 0; }
       R.setRenderTarget(rt); R.clear(); R.render(scene, camera);
       if (p.ao > 0.01) {
         const a = ssao.uniforms; a.uDepth.value = rt.depthTexture; a.uTexel.value.set(1 / rt.width, 1 / rt.height);
@@ -127,7 +132,7 @@ const Engine = (() => {
     }
     /* for warming up: every pass's material, and a way to compile one */
     const compile = m => { quad.material = m; R.compile(qs, qc); };
-    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM], compile };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR], compile };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -556,21 +561,20 @@ const Engine = (() => {
     skyMat = new T.ShaderMaterial({
       uniforms: Object.assign({}, skyU, { uEnv: { value: 0 }, uCloudLit: { value: new T.Vector3() }, uStars: { value: 1 }, uTime: { value: 0 }, uPhaseC: { value: 1 }, uPhaseSign: { value: 1 }, uCloud: { value: 0.85 }, uMoonR: { value: 0.0175 }, uSunR: { value: 0.016 }, uNoise: { value: noiseTex },
         uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.55, -0.83) }, uCloudT: { value: 0 },
-        uN3: { value: null }, uCD: { value: null }, uCO: { value: new T.Vector3() }, uCQ: { value: 1 }, uCB: { value: null }, uCBOn: { value: 0 }, uCBInv: { value: new T.Vector2(1, 1) } }),
+        uCO: { value: new T.Vector3() }, uCQ: { value: 1 }, uCB: { value: null }, uCBOn: { value: 0 }, uCBInv: { value: new T.Vector2(1, 1) },
+        uShape: { value: null }, uDetail: { value: null }, uWeather: { value: null }, uLdM: { value: new T.Vector3(0, 1, 0) }, uPxA: { value: 0.004 } }),
       vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false
     });
     const sky = new T.Mesh(new T.SphereGeometry(5000, 48, 24), skyMat); sky.renderOrder = 1000; sky.frustumCulled = false; scene.add(sky); skyMesh = sky;
     /* environment: the same sky, rendered into a prefiltered cube map so every glossy surface reflects it */
-    envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 }, uCQ: { value: 0.4 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
+    envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 }, uCQ: { value: 0.4 }, uPxA: { value: 0.03 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
     envScene = new T.Scene(); { const m = new T.Mesh(new T.SphereGeometry(400, 64, 32), envSkyMat); m.frustumCulled = false; envScene.add(m); }
     pmrem = new T.PMREMGenerator(R);
     envInit();
     { const n3 = Textures.noise3(); n3Tex = new T.Data3DTexture(n3.data, n3.size, n3.size, n3.size); n3Tex.format = T.RedFormat; n3Tex.type = T.UnsignedByteType;
       n3Tex.minFilter = n3Tex.magFilter = T.LinearFilter; n3Tex.wrapS = n3Tex.wrapT = n3Tex.wrapR = T.RepeatWrapping; n3Tex.unpackAlignment = 1; n3Tex.needsUpdate = true; }
-    /* the clouds' billows and the fine detail that erodes their edges */
-    { const cd = Textures.cloudDetail(), cdTex = new T.Data3DTexture(cd.data, cd.size, cd.size, cd.size); cdTex.format = T.RedFormat; cdTex.type = T.UnsignedByteType;
-      cdTex.minFilter = cdTex.magFilter = T.LinearFilter; cdTex.wrapS = cdTex.wrapT = cdTex.wrapR = T.RepeatWrapping; cdTex.unpackAlignment = 1; cdTex.needsUpdate = true;
-      skyMat.uniforms.uN3.value = n3Tex; skyMat.uniforms.uCD.value = cdTex; }
+    /* the clouds' billows, the fine detail that erodes their edges, and the weather that says where they grow (baked on the GPU) */
+    { const cn = CloudNoise.make(R), su = skyMat.uniforms; su.uShape.value = cn.shape; su.uDetail.value = cn.detail; su.uWeather.value = cn.weather; cloudNoiseMs = cn.ms; }
     noiseT = noiseTex;
 
     uBulb = { uProg: { value: 1 }, uTime: Mats.U.uTime, uI: { value: 0.6 }, uTw: { value: 0.14 }, uOff: { value: V3() }, uCol: { value: new T.Vector3(1.0, 0.7, 0.38) } };
@@ -585,7 +589,7 @@ const Engine = (() => {
     Mats.U.uVanPos.value.copy(camp.vanLightPos); Mats.U.uVanDir.value.copy(camp.vanLightDir);
     nature = Nature.build(natG);
     paper = Paper.build(scene);
-    if (camp.cork) { camp.cork.updateMatrixWorld(true); cork.p0 = camp.cork.position.clone(); cork.r0 = camp.cork.rotation.clone(); }
+    if (camp.bottleModel) uncork = Uncork.make({ scene, camera, bottle: camp.bottle, model: camp.bottleModel, ground: 0, onPop: () => { if (api.onBottlePop) api.onBottlePop(); } });
     surge.rng = Textures.rng(4242); registerDyn(camp.dyn);
     scene.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = o.material.metalness > 0.5 ? 1.8 : 1.45; });
     fx = FX.build(fxG, camp, nature, noiseTex);
@@ -688,6 +692,7 @@ const Engine = (() => {
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
+    V(skyMat.uniforms.uLdM, S.keyDir);
     const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; su.uCO.value.copy(camera.position); su.uCQ.value = o.cloudQ ?? 1; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
     if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }
     /* under a deck of cloud the sun and moon no longer glitter on the sea */
@@ -733,9 +738,8 @@ const Engine = (() => {
     { const rk = (o.read || 0) * 0.36 * (1 - 0.9 * S.day) / Math.max(0.05, S.exposure * (o.expMul || 1));
       for (const b of [camp.book, camp.journal]) if (b) { b.update(); b.setReadLight(rk); }
       if (paper) { paper.update(); paper.setReadLight(rk * 1.45); }
-      /* the cork pops out of the bottle and lands on the sand; it goes back when the letter does */
-      if (camp.cork && cork.p0) { const now = performance.now() / 1000, u = Math.min(1, Math.max(0, (now - cork.t0) / 0.7)), k = cork.to ? u : 1 - u;
-        if (k !== cork.k) { cork.k = k; const c = camp.cork; c.position.set(cork.p0.x + 0.16 * k, cork.p0.y + 0.09 * Math.sin(Math.PI * Math.min(1, k * 1.3)) - 0.02 * k, cork.p0.z + 0.05 * k); c.rotation.set(cork.r0.x + 2.4 * k, cork.r0.y, cork.r0.z + 5.5 * k); } } }
+      /* the message in a bottle, in your hands (uncork.js) */
+      if (uncork) uncork.update(); }
     /* the wish board: a lamp under its eave, and paper that reads after dark (brighter while you are at it) */
     if (camp.board) camp.board.light((0.12 * L.lantern + 0.3 * boardLook) * (1 - 0.9 * S.day) / Math.max(0.05, S.exposure * (o.expMul || 1)), 0.42 * L.lantern * candleFlicker(t, 7), S.amb);
     /* the flame's light centre wanders a little, so the fire's shadows breathe */
@@ -810,18 +814,22 @@ const Engine = (() => {
   const book = bookApi('journal', () => camp.journal), books = { journal: book };
   /* where each loose paper starts: the letter in the bottle, a blueprint in the basket, the clipboard on the van */
   function origin(name) {
-    const o = name === 'bottle' ? camp.letterProp[0] : name === 'roll' ? camp.planRoll : camp.clipboard;
+    if (name === 'bottle' && uncork) return uncork.letterRest();
+    const o = name === 'roll' ? camp.planRoll : camp.clipboard;
     o.updateMatrixWorld(true);
     const p = o.getWorldPosition(new T.Vector3()), q = o.getWorldQuaternion(new T.Quaternion());
-    if (name === 'bottle') q.copy(camp.bottle.getWorldQuaternion(new T.Quaternion()));
     if (name === 'roll') q.multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), Math.PI / 2));
     if (name === 'clipboard') p.add(new T.Vector3(0, -0.012, 0.002).applyQuaternion(q));
     return { p: p.toArray(), q: q.toArray() };
   }
-  /* the cork: out (it hops onto the sand) before the letter can come out; back in once the letter is home */
-  function corkOut(out) { if (cork.to === (out ? 1 : 0)) return; cork.to = out ? 1 : 0; cork.t0 = performance.now() / 1000; }
+  /* the message in a bottle: picked up, uncorked, shaken until the letter comes out (open, with what to do once the
+     letter is out); put back (abort), the letter home again (letterBack) */
+  const bottleApi = {
+    open: (cb, o) => { if (uncork) uncork.open(cb, o); else if (cb) cb(null); }, abort: () => { if (uncork) uncork.abort(); },
+    letterBack: () => { if (uncork) uncork.letterBack(); }, letterRest: () => (uncork ? uncork.letterRest() : origin('bottle')),
+    dist: () => (uncork ? uncork.dist() : null), get phase() { return uncork ? uncork.phase : 'rest'; }, get busy() { return !!uncork && uncork.busy; }
+  };
   function prop(name, visible) {
-    if (name === 'bottle') camp.letterProp.forEach(m => { m.visible = visible; });
     if (name === 'roll' && camp.planRoll) camp.planRoll.visible = visible;
     if (name === 'clipboard' && camp.clipboard) camp.clipboard.visible = visible;
   }
@@ -932,8 +940,8 @@ const Engine = (() => {
   }
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 
-  const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  Object.assign(api, { init, warm, render, project, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });
+  const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post, cloudNoiseMs: () => cloudNoiseMs, sky: () => skyMat, camp: () => camp };
+  Object.assign(api, { init, warm, render, project, book, books, origin, prop, bottle: bottleApi, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });
   Object.defineProperties(api, { world: { get: () => world }, life: { get: () => life }, paper: { get: () => paper }, camera: { get: () => camera }, renderer: { get: () => R }, scene: { get: () => scene } });
   return api;
 })();

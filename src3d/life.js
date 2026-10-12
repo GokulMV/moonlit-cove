@@ -161,7 +161,7 @@ void main(){
       { g: starGeo(3), n: 0, tone: starTone, s: [0.11, 0.2], kind: 'star' }, { g: starGeo(11), n: 0, tone: starTone, s: [0.1, 0.17], kind: 'star' },
       { g: scallopGeo(5), n: 0, tone: shellTone, s: [0.06, 0.11] }, { g: cowrieGeo(7), n: 0, tone: shellTone, s: [0.05, 0.08] },
       { g: conchGeo(9), n: 0, tone: shellTone, s: [0.07, 0.12] }, { g: scallopGeo(13), n: 0, tone: shellTone, s: [0.045, 0.08] }];
-    const clearOf = (x, z) => Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 4.4 && Math.hypot(x - Layout.fire.x, z - Layout.fire.z) > 1.6 && Math.hypot(x - Layout.van.x, z - Layout.van.z) > 3.2;
+    const clearOf = (x, z) => Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 4.4 && Math.hypot(x - Layout.fire.x, z - Layout.fire.z) > 1.6 && Math.hypot(x - Layout.van.x, z - Layout.van.z) > 3.2 && Math.hypot(x - Layout.bottle.x, z - Layout.bottle.z) > 0.8;
     const mat = Mats.lit({ vertexColors: true, roughness: 0.5 });
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), col = new T.Color();
     let count = 0, shellK = 1; const shellMeshes = [];
