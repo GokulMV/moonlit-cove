@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
-   nature.js — coconut palms (swaying crowns), broadleaf trees and
-   bushes built from leaf cards.
+   nature.js — the camp's own coconut palms (swaying crowns), and
+   its broadleaf trees and bushes, grown (trees.js).
    ───────────────────────────────────────────────────────────── */
 const Nature = (() => {
   const T = THREE, TAU = Math.PI * 2;
@@ -88,56 +88,25 @@ const Nature = (() => {
     }
   }
 
-  /* leaf-card canopies: trees get a trunk, branches and tiered leaf clusters; bushes are dense mounds */
-  function cards(root, list, refs, opts) {
-    const texs = [0, 1, 2].map(k => Mats.tex(Paint.leafCard(opts.seed + k * 7, k === 2 ? opts.palette : null)));
-    const mats = texs.map(t => Mats.foliage(t, 0.5));
-    const deps = texs.map(t => Mats.cutoutDepth(t, 0.5));
-    const barkM = Mats.lit({ color: new T.Color('#4a3a2d'), roughness: 0.95 });
-    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc3 = new T.Vector3(), p = new T.Vector3();
-    const per = [[], [], []];
+  /* the camp's own trees and bushes, grown as the forest's are (trees.js), each its species at the size its place in
+     the layout asks for; they cast shadows, their leaves cut out of their cards */
+  function grownAt(root, list, pickKind) {
     for (const [x, z, R, Hc, seed] of list) {
-      const r = Textures.rng(seed * 31 + 7);
-      const clusters = [];
-      if (opts.trunk) {
-        const top = new T.Vector3(x + (r() - 0.5) * 0.5, Hc * 0.62, z + (r() - 0.5) * 0.5);
-        const c = new T.CatmullRomCurve3([new T.Vector3(x, 0, z), new T.Vector3(x + (r() - 0.5) * 0.4, Hc * 0.3, z + (r() - 0.5) * 0.4), top]);
-        const tr = new T.Mesh(taperTube(c, 14, 8, t => 0.22 - 0.1 * t, 1), barkM); root.add(tr);
-        const nb = 5 + Math.floor(r() * 3);
-        for (let i = 0; i < nb; i++) {
-          const a = i / nb * TAU + r() * 0.6, rr = R * (0.45 + r() * 0.45), up = Hc * (0.62 + r() * 0.4);
-          const end = new T.Vector3(x + Math.cos(a) * rr, up, z + Math.sin(a) * rr * 0.85);
-          const bc = new T.CatmullRomCurve3([top.clone(), top.clone().lerp(end, 0.5).add(new T.Vector3(0, 0.3, 0)), end]);
-          const br = new T.Mesh(taperTube(bc, 8, 5, t => 0.1 - 0.06 * t, 1), barkM); root.add(br);
-          clusters.push([end, R * (0.42 + r() * 0.2), 0.36]);
-        }
-        clusters.push([new T.Vector3(x, Hc * 1.02, z), R * 0.55, 0.4]);
-      } else {
-        clusters.push([new T.Vector3(x, Hc * 0.55, z), R, Hc * 0.75 / R]);
-      }
-      for (const [cpos, cr, flat] of clusters) {
-        const n = Math.round(opts.density * cr * cr);
-        for (let i = 0; i < n; i++) {
-          let ux, uy, uz; do { ux = r() * 2 - 1; uy = r() * 2 - 1; uz = r() * 2 - 1; } while (ux * ux + uy * uy + uz * uz > 1);
-          p.set(cpos.x + ux * cr, Math.max(0.12, cpos.y + uy * cr * flat), cpos.z + uz * cr);
-          e.set(-Math.PI / 2 + (r() - 0.5) * 1.3 + uy * 0.4, r() * TAU, (r() - 0.5) * 0.9); q.setFromEuler(e);
-          const s = (0.7 + r() * 0.55) * opts.card; sc3.set(s, s, s);
-          m4.compose(p, q, sc3); per[Math.floor(r() * 3)].push(m4.clone());
-        }
-      }
+      const kind = pickKind(x, z, seed), g = Trees.grow(kind, seed * 31 + 7), m = Trees.materials(kind);
+      const top = g.crown.c.y + g.crown.ext.y - 0.6, s = Math.max(0.5, Math.min(1.6, Hc * 1.12 / Math.max(0.5, top)));
+      const grp = new T.Group(); grp.position.set(x, 0, z); grp.rotation.y = (seed * 2.39996) % TAU; grp.scale.setScalar(s);
+      if (!g.bark.empty) { const bark = new T.Mesh(g.bark, m.bark); bark.castShadow = bark.receiveShadow = true; grp.add(bark); }
+      ['c0', 'c1', 'c2'].forEach((k, i) => { if (!g[k].attributes.position.count) return; const lm = new T.Mesh(g[k], m.leaves[i]); lm.castShadow = true; lm.customDepthMaterial = m.depth[i]; grp.add(lm); });
+      root.add(grp);
     }
-    per.forEach((arr, k) => {
-      const inst = new T.InstancedMesh(new T.PlaneGeometry(1, 1), mats[k], arr.length);
-      arr.forEach((m, i) => inst.setMatrixAt(i, m));
-      root.add(inst);
-    });
   }
 
   function build(root) {
     const refs = {};
     palms(root, refs);
-    cards(root, Layout.trees, refs, { seed: 71, card: 1.22, density: 46, trunk: true, palette: ['#2b4a22', '#35592a', '#24401e', '#3f6530'] });
-    cards(root, Layout.bushes, refs, { seed: 83, card: 0.86, density: 44, trunk: false, palette: ['#3a5a2a', '#46682f', '#2f4a24', '#557a36'] });
+    /* (a beach hibiscus close round the camp, tropical almonds behind, casuarinas at the ends) */
+    grownAt(root, Layout.trees, (x, z, seed) => Math.abs(x) > 17 ? 'casuarina' : z > 14 ? 'almond' : 'hibiscus');
+    grownAt(root, Layout.bushes, () => 'grape');
     return refs;
   }
 

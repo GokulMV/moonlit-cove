@@ -96,15 +96,24 @@ const Paint = (() => {
   }
 
   /* palm frond: rachis up the middle (v = 0 base → 1 tip); dense, drooping leaflets */
+  const shade = (hex, k, yel = 0) => { const v = parseInt(hex.slice(1), 16), r0 = v >> 16, g0 = (v >> 8) & 255, b0 = v & 255, cl = x => Math.max(0, Math.min(255, Math.round(x)));
+    return `rgb(${cl(r0 * k + yel * 160)},${cl(g0 * k + yel * 120)},${cl(b0 * k)})`; };
   function frond(seed, dry = 0) {
     const c = cv(256, 1024), a = c.getContext('2d', RF), r = rng(seed);
     a.clearRect(0, 0, 256, 1024);
-    const greens = dry ? ['#7d6a3a', '#8e7746', '#6a5830', '#9a8350'] : ['#24461f', '#2e5526', '#3a6630', '#1f3d1b', '#456f33', '#335c2a'];
-    const blade = (x0, y0, x1, y1, cx, cy, w0) => {
+    const greens = dry ? ['#7d6a3a', '#8e7746', '#6a5830', '#9a8350'] : ['#27481d', '#2f5524', '#3a632b', '#22401a', '#44702f', '#335d27', '#4a7232'];
+    /* a leaflet: darker where it leaves the rib, lighter toward its tip, a pale midrib down it, a darker edge */
+    const blade = (x0, y0, x1, y1, cx, cy, w0, flat) => {
       const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L;
       a.beginPath(); a.moveTo(x0 + nx * w0, y0 + ny * w0);
       a.quadraticCurveTo(cx + nx * w0 * 0.7, cy + ny * w0 * 0.7, x1, y1);
-      a.quadraticCurveTo(cx - nx * w0 * 0.7, cy - ny * w0 * 0.7, x0 - nx * w0, y0 - ny * w0); a.closePath(); a.fill();
+      a.quadraticCurveTo(cx - nx * w0 * 0.7, cy - ny * w0 * 0.7, x0 - nx * w0, y0 - ny * w0); a.closePath();
+      if (flat) { a.fill(); return; }
+      const base = a.fillStyle, g = a.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, shade(base, 0.72)); g.addColorStop(0.45, base); g.addColorStop(1, shade(base, 1.18, 0.06)); a.fillStyle = g; a.fill();
+      a.strokeStyle = 'rgba(0,10,0,0.28)'; a.lineWidth = 0.7; a.stroke();
+      a.strokeStyle = dry ? 'rgba(230,210,150,0.3)' : 'rgba(205,220,140,0.32)'; a.lineWidth = Math.max(0.6, w0 * 0.22);
+      a.beginPath(); a.moveTo(x0, y0); a.quadraticCurveTo(cx, cy, x0 + (x1 - x0) * 0.85, y0 + (y1 - y0) * 0.85); a.stroke();
     };
     for (let layer = 0; layer < 2; layer++) {
       for (let i = 0; i < 92; i++) {
@@ -116,7 +125,7 @@ const Paint = (() => {
           const cx = (128 + x1) / 2 + side * len * 0.06, cy = (y + y1) / 2 - len * 0.18;
           const col = greens[Math.floor(r() * greens.length)];
           a.fillStyle = col; blade(128 + side * 3, y, x1, y1, cx, cy, (6.5 - t * 3.5) * (layer ? 0.85 : 1));
-          if (!dry && r() < 0.12) { a.fillStyle = 'rgba(160,140,70,0.75)'; blade(x1 - side * len * 0.18, y1 + len * 0.05, x1, y1, x1 - side * len * 0.08, y1, 2.5); }
+          if (!dry && r() < 0.12) { a.fillStyle = 'rgba(160,140,70,0.75)'; blade(x1 - side * len * 0.18, y1 + len * 0.05, x1, y1, x1 - side * len * 0.08, y1, 2.5, true); }
         }
       }
     }
@@ -126,24 +135,6 @@ const Paint = (() => {
     a.globalCompositeOperation = 'source-over';
     a.strokeStyle = dry ? '#8d7a4c' : '#617a3c'; a.lineWidth = 8; a.lineCap = 'round';
     a.beginPath(); a.moveTo(128, 1024); a.quadraticCurveTo(131, 520, 128, 14); a.stroke();
-    return c;
-  }
-
-  /* broadleaf cluster card (sea almond / tropical), dense */
-  function leafCard(seed, palette) {
-    const c = cv(256, 256), a = c.getContext('2d', RF), r = rng(seed);
-    const cols = palette || ['#24411f', '#2d4f26', '#203a1c', '#38602c', '#2a4a23', '#456b31'];
-    for (let i = 0; i < 46; i++) {
-      const ang0 = r() * TAU, rad0 = Math.sqrt(r()) * 88;
-      const x = 128 + Math.cos(ang0) * rad0, y = 128 + Math.sin(ang0) * rad0, ang = ang0 + (r() - 0.5) * 1.2;
-      const L = 40 + r() * 34, W = L * (0.4 + r() * 0.14);
-      a.save(); a.translate(x, y); a.rotate(ang);
-      a.fillStyle = cols[Math.floor(r() * cols.length)];
-      a.beginPath(); a.moveTo(-L / 2, 0); a.quadraticCurveTo(-L * 0.1, -W, L / 2, 0); a.quadraticCurveTo(-L * 0.1, W, -L / 2, 0); a.fill();
-      a.fillStyle = 'rgba(255,255,220,0.07)'; a.beginPath(); a.moveTo(-L / 2, 0); a.quadraticCurveTo(-L * 0.1, -W, L / 2, 0); a.closePath(); a.fill();
-      a.strokeStyle = 'rgba(190,220,160,0.22)'; a.lineWidth = 1.2; a.beginPath(); a.moveTo(-L / 2, 0); a.lineTo(L / 2, 0); a.stroke();
-      a.restore();
-    }
     return c;
   }
 
@@ -436,5 +427,5 @@ const Paint = (() => {
     if (!shown.length) note(a, W / 2, top + (H - top) / 2 - 12, 560, 250, { id: 'empty', text: 'No wishes yet. Let a lantern go, and pin the first one here.', name: 'the cove', when: '' });
     return c;
   }
-  return { journalCover, wishBoard, rug, wood, stripes, wicker, bark, frond, leafCard, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
+  return { journalCover, wishBoard, rug, wood, stripes, wicker, bark, frond, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
 })();

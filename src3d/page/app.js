@@ -1306,7 +1306,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1353,6 +1353,7 @@
   const loaderOff = () => setTimeout(() => { if (typeof Loader !== 'undefined') Loader.stop(); }, 1400);
   function introReady() {
     st.shown = true; skyTick = 0;
+    try { syncBouquet(false); } catch (e) { /* (the bouquet waits for the next pick) */ }
     $('enterSound').disabled = false; $('enterQuiet').disabled = false;
     $('intro').classList.add('ready'); loaderOff();
   }
@@ -1462,7 +1463,7 @@
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const fade = stepPitch();
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
@@ -1967,7 +1968,13 @@
   addEventListener('pointerup', e => {
     const d = pdown; pdown = null;
     if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || sketch.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
-    const hit = pickAt(e); if (!hit) return;
+    const hit = pickAt(e);
+    if (!hit) {
+      /* a wild flower near where it was touched: picked into the bouquet */
+      const r = cv.getBoundingClientRect(), f = Engine.pickFlower((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+      if (f) { down = null; pickFlower(f); }
+      return;
+    }
     down = null;                    /* (the sea's click handler, next in line, now has nothing to do) */
     if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (hit === 'sketch') openSketch(); else if (hit === 'toolbox') openToolbox(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
   }, true);
@@ -1977,6 +1984,51 @@
     const hit = ready && st.entered && !rd.on && !car.on ? pickAt(e) : null;
     document.body.classList.toggle('pick-hover', !!hit && hit !== (seat.on && seat.pose ? seat.pose.id : ''));
   });
+  /* ── the bouquet: wild flowers picked at the forest's edge, kept in this browser; put in a jar on the picnic table,
+     or let go ── */
+  const bouquet = { list: store.get('bouquet', []), jar: store.get('bouquetJar', false) };
+  const FL = { daisy: { name: 'beach daisy', many: 'beach daisies' }, glory: { name: 'morning glory', many: 'morning glories' }, frangi: { name: 'frangipani', many: 'frangipani' } };
+  /* the bunch, drawn: stems gathered at a ribbon, each flower fanned out at the end of its own */
+  function drawBouquet(cv2, list, small) {
+    const x = cv2.getContext('2d'), W = cv2.width, H = cv2.height; x.clearRect(0, 0, W, H);
+    const n = Math.min(list.length, small ? 9 : 24), bx = W / 2, by = H * (small ? 0.92 : 0.9), R = H * (small ? 0.62 : 0.6);
+    if (!n) return;
+    const tip = i => { const f = n === 1 ? 0.5 : i / (n - 1), a = -Math.PI / 2 + (f - 0.5) * (small ? 1.5 : 1.7) * Math.min(1, 0.45 + n / 10), L = R * (0.78 + 0.22 * ((i * 0.618) % 1)) * (1 - 0.2 * Math.abs(f - 0.5)); return [bx + Math.cos(a) * L, by + Math.sin(a) * L]; };
+    x.lineCap = 'round';
+    for (let i = 0; i < n; i++) { const [tx, ty] = tip(i); x.strokeStyle = i % 2 ? '#4f7f31' : '#5c8c3a'; x.lineWidth = small ? 2 : 3.2; x.beginPath(); x.moveTo(bx, by); x.quadraticCurveTo((bx + tx) / 2, (by + ty) / 2 + H * 0.04, tx, ty); x.stroke(); }
+    const s = small ? 0.5 : 1;
+    for (let i = 0; i < n; i++) {
+      const [tx, ty] = tip(i), k = list[i];
+      if (k === 'daisy') { x.fillStyle = '#f5cd32'; for (let p = 0; p < 11; p++) { const a = p / 11 * Math.PI * 2; x.beginPath(); x.ellipse(tx + Math.cos(a) * 12 * s, ty + Math.sin(a) * 12 * s, 9 * s, 4 * s, a, 0, Math.PI * 2); x.fill(); } x.fillStyle = '#a8621c'; x.beginPath(); x.arc(tx, ty, 6 * s, 0, Math.PI * 2); x.fill(); }
+      else if (k === 'glory') { x.fillStyle = '#d94f9c'; x.beginPath(); x.moveTo(tx - 3 * s, ty + 10 * s); x.lineTo(tx - 16 * s, ty - 12 * s); x.quadraticCurveTo(tx, ty - 22 * s, tx + 16 * s, ty - 12 * s); x.lineTo(tx + 3 * s, ty + 10 * s); x.fill(); x.fillStyle = '#7a1f52'; x.beginPath(); x.ellipse(tx, ty - 12 * s, 6 * s, 3 * s, 0, 0, Math.PI * 2); x.fill(); }
+      else { x.fillStyle = '#fbf5ea'; for (let p = 0; p < 5; p++) { const a = p / 5 * Math.PI * 2 - Math.PI / 2; x.beginPath(); x.ellipse(tx + Math.cos(a) * 9 * s, ty + Math.sin(a) * 9 * s, 10 * s, 6 * s, a, 0, Math.PI * 2); x.fill(); } x.fillStyle = '#f2c23a'; x.beginPath(); x.arc(tx, ty, 5 * s, 0, Math.PI * 2); x.fill(); }
+    }
+    /* the ribbon */
+    x.fillStyle = '#e86f4a'; x.beginPath(); x.ellipse(bx, by - H * 0.05, (small ? 6 : 13), (small ? 4 : 8), 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#e86f4a'; x.lineWidth = small ? 2 : 3; x.beginPath(); x.moveTo(bx, by - H * 0.05); x.lineTo(bx - (small ? 8 : 18), by + (small ? 2 : 6)); x.moveTo(bx, by - H * 0.05); x.lineTo(bx + (small ? 8 : 18), by + (small ? 2 : 6)); x.stroke();
+  }
+  const bqWords = list => { const c = {}; for (const k of list) c[k] = (c[k] || 0) + 1; const parts = Object.keys(c).map(k => `${c[k]} ${c[k] === 1 ? FL[k].name : FL[k].many}`); return parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0] || ''; };
+  function syncBouquet(pop) {
+    const b = $('bouquet'), n = bouquet.list.length;
+    b.hidden = !n; $('bqN').textContent = String(n); drawBouquet($('bqIcon'), bouquet.list, true);
+    if (pop) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
+    if (!$('bqPanel').hidden) { drawBouquet($('bqArt'), bouquet.list, false); $('bqText').textContent = n ? `${bqWords(bouquet.list)}${bouquet.jar ? ', in a jar on the picnic table.' : '.'}` : ''; $('bqJar').textContent = bouquet.jar ? 'Take them out of the jar' : 'Put them in a jar on the table'; }
+    if (!n) $('bqPanel').hidden = true;
+    Engine.setBouquetJar(bouquet.jar ? bouquet.list : []);
+  }
+  function pickFlower(f) {
+    const p = Engine.pluckFlower(f, st.t); if (!p) return;
+    bouquet.list.push(p.kind); store.set('bouquet', bouquet.list.slice(-60));
+    if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
+    toast(bouquet.list.length === 1 ? `You picked a ${p.name}. It's the start of a bouquet.` : `A ${p.name} for the bouquet: ${bqWords(bouquet.list)}.`, false, 2600);
+    if (bouquet.list.length >= 12) unlock('bouquet');
+    syncBouquet(true);
+  }
+  $('bouquet').addEventListener('click', () => { const p = $('bqPanel'); p.hidden = !p.hidden; $('bouquet').setAttribute('aria-expanded', String(!p.hidden)); syncBouquet(false); });
+  $('bqClose').addEventListener('click', () => { $('bqPanel').hidden = true; $('bouquet').setAttribute('aria-expanded', 'false'); });
+  $('bqJar').addEventListener('click', () => { bouquet.jar = !bouquet.jar; store.set('bouquetJar', bouquet.jar); syncBouquet(false); if (bouquet.jar) toast('In a jar on the picnic table.', false, 2400); });
+  $('bqFree').addEventListener('click', () => { bouquet.list = []; bouquet.jar = false; store.set('bouquet', []); store.set('bouquetJar', false); syncBouquet(false); toast('You let them go. They drift back into the grass.', false, 2400); });
+
   /* the van drives round the board, as it does round everything else at the camp */
   campObs.push([Layout.board.x, Layout.board.z, 0.9, 'board']);
 

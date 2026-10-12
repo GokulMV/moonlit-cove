@@ -11,7 +11,10 @@ const Mats = (() => {
     uLant: { value: [V4(), V4(), V4()] }, uVanPos: { value: V3() }, uVanDir: { value: V3(1, 0, 0) },
     uTime: { value: 0 }, uKeyDirT: { value: V3(0, 1, 0) }, uKeyColT: { value: V3() },
     uVanInv: { value: new THREE.Matrix4() }, uHead: { value: V4() }, uHeadDir: { value: V3(1, 0, 0) }, uFireSh: { value: null }, uCanSh: { value: null }, uFireShM: { value: new THREE.Matrix4() }, uCanShM: { value: new THREE.Matrix4() }, uShOn: { value: 0 },
-    uFog: { value: V4(0, 0, 0, 1) }
+    uFog: { value: V4(0, 0, 0, 1) },
+    /* the key light's shadow map, for shaders of our own that take shadows (the grown trees' leaves): the map, its matrix,
+       where it is centred (x, z) and how far it reaches, whether it is ready; its size */
+    uLeafShM: { value: null }, uLeafShX: { value: new THREE.Matrix4() }, uLeafShA: { value: V4() }, uLeafShS: { value: new THREE.Vector2(2048, 2048) }
   };
   /* the shoreline the shaders draw (glsl.js), kept up to date by the engine as the camera moves along the coast;
      shaders built without U take these on their own */
@@ -141,9 +144,14 @@ vec3 fogIt(vec3 c, vec3 wp){
   /* lightweight foliage shader: lambert + moon translucency + camp lights, alpha cut-out, no shadow receive */
   const FOL_VS = `
 uniform float uTime;
-varying vec2 vUv; varying vec3 vN; varying vec3 vWPos;
+varying vec2 vUv; varying vec3 vN; varying vec3 vWPos; varying vec3 vTint;
 void main(){
   vUv = uv;
+  #ifdef USE_INSTANCING_COLOR
+    vTint = instanceColor;
+  #else
+    vTint = vec3(1.0);
+  #endif
   vec4 p = vec4(position, 1.0); vec3 n = normal;
   #ifdef SWAY
     float hy = max(position.y, 0.0);
@@ -166,16 +174,20 @@ ${GLSL.COMMON}
 ${GLSL.ART}
 ${FOG}
 uniform sampler2D map; uniform vec3 uAmbF, uKeyDirT, uKeyColT, uTint; uniform float uCut;
-varying vec2 vUv; varying vec3 vN; varying vec3 vWPos;
+varying vec2 vUv; varying vec3 vN; varying vec3 vWPos; varying vec3 vTint;
 void main(){
   vec4 tx = texture2D(map, vUv);
   if (tx.a < uCut) discard;
-  vec3 a = tx.rgb*uTint;
-  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0);
+  vec3 a = tx.rgb*uTint*vTint;
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vWPos);
   float ndl = dot(n, uKeyDirT);
-  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + uKeyColT*(max(ndl, 0.0) + max(-ndl, 0.0)*0.5 + 0.06);
+  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + uKeyColT*(max(ndl, 0.0) + 0.06);
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) L += artLight(vWPos, n);
-  gl_FragColor = vec4(fogIt(a*L, vWPos), 1.0);
+  /* light through the leaflets from behind, yellower, strongest looking toward the sun; the waxy shine of their tops */
+  float thru = max(-ndl, 0.0)*(0.3 + 0.7*pow(max(dot(-V, uKeyDirT), 0.0), 2.0));
+  vec3 c = a*L + a*vec3(0.95, 1.08, 0.45)*uKeyColT*thru*0.85;
+  c += uKeyColT*0.16*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 36.0)*step(0.0, ndl);
+  gl_FragColor = vec4(fogIt(c, vWPos), 1.0);
 }`;
   U.uAmbF = { value: V3() };
   function foliage(map, cut = 0.45, tint = [1, 1, 1], sway = false) {
