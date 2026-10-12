@@ -58,17 +58,25 @@ const Life = (() => {
     });
   }
 
-  /* fish: a slim silver body with a forked tail (length 1, nose toward +x) */
+  /* fish: a slim, laterally flattened body, dark blue-green along the back shading to silver flanks and a white belly,
+     a dark eye either side, a dorsal fin and a smaller one beneath, pectoral fins, a deeply forked tail (length 1,
+     nose toward +x) */
   function fishGeo() {
-    const body = sheet(14, 10, (u, v) => {
-      const a = u * TAU, x = v - 0.5, w = Math.sin(Math.PI * Math.min(1, v * 1.08)) * (v < 0.85 ? 1 : 0.6), ry = 0.12 * w, rz = 0.05 * w;
-      const k = 0.55 + 0.45 * Math.max(0, Math.sin(a));
-      return [[x, Math.sin(a) * ry, Math.cos(a) * rz], [k, k, k * 1.05]];
+    const body = sheet(16, 12, (u, v) => {
+      const a = u * TAU, x = v - 0.5, w = Math.sin(Math.PI * Math.min(1, v * 1.06)) * (v < 0.86 ? 1 : 0.55), ry = 0.115 * w, rz = 0.045 * w;
+      const up = Math.sin(a), back = Math.max(0, up), belly = Math.max(0, -up);
+      let c = [0.7 + 0.08 * Math.cos(a * 3), 0.74, 0.78].map((k, i) => k * (1 - back * 0.85) + [0.07, 0.14, 0.17][i] * back * 0.85);
+      c = c.map(k => k + belly * belly * 0.18);
+      /* the eye */
+      const ex = x - 0.36, ey = Math.sin(a) * ry - 0.012; if (Math.abs(Math.cos(a)) > 0.6 && ex * ex + ey * ey < 0.0006) c = [0.03, 0.03, 0.03];
+      return [[x, Math.sin(a) * ry, Math.cos(a) * rz], c];
     });
-    const tail = new T.BufferGeometry();
-    tail.setAttribute('position', new T.Float32BufferAttribute([-0.46, 0, 0, -0.66, 0.13, 0, -0.62, 0, 0, -0.46, 0, 0, -0.62, 0, 0, -0.66, -0.13, 0], 3));
-    tail.setAttribute('color', new T.Float32BufferAttribute(new Array(18).fill(0.7), 3)); tail.computeVertexNormals();
-    return { body, tail };
+    const F = [0.35, 0.42, 0.46], tris = list => { const P = [], C = []; for (const [a, b, c, col = F] of list) { P.push(...a, ...b, ...c); C.push(...col, ...col, ...col); }
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.setAttribute('color', new T.Float32BufferAttribute(C, 3)); g.computeVertexNormals(); return g; };
+    const tail = tris([[[-0.46, 0, 0], [-0.68, 0.15, 0], [-0.6, 0, 0]], [[-0.46, 0, 0], [-0.6, 0, 0], [-0.68, -0.15, 0]]]);
+    const fins = tris([[[0.06, 0.1, 0], [-0.08, 0.17, 0], [-0.12, 0.085, 0], [0.12, 0.2, 0.24]], [[-0.12, -0.075, 0], [-0.2, -0.12, 0], [-0.24, -0.06, 0]],
+      ...[-1, 1].map(sd => [[0.24, -0.04, sd * 0.04], [0.14, -0.07, sd * 0.1], [0.16, -0.03, sd * 0.05]])]);
+    return { body, tail, fins };
   }
 
   /* shadows of small fish in the shallows, drawn on the water's surface */
@@ -232,8 +240,10 @@ void main(){
     }, 'tiny');
 
     /* ── leaping fish ── */
-    const fg = fishGeo(), fishM = Mats.lit({ vertexColors: true, color: new T.Color('#b9c6cf'), metalness: 0.55, roughness: 0.28 });
-    const jumps = [0, 1, 2].map(() => { const g = new T.Group(); g.add(new T.Mesh(fg.body, fishM)); const tl = new T.Mesh(fg.tail, Mats.lit({ vertexColors: true, color: new T.Color('#9aa8b2'), metalness: 0.4, roughness: 0.35, side: T.DoubleSide })); g.add(tl); g.visible = false; root.add(g); return { g, tail: tl, on: false }; });
+    const fg = fishGeo(), fishM = Mats.lit({ vertexColors: true, metalness: 0.5, roughness: 0.25 });
+    const finM = Mats.lit({ vertexColors: true, metalness: 0.3, roughness: 0.4, side: T.DoubleSide });
+    fg.tail.translate(0.46, 0, 0);     /* (hinged where it meets the body) */
+    const jumps = [0, 1, 2].map(() => { const g = new T.Group(); g.add(new T.Mesh(fg.body, fishM), new T.Mesh(fg.fins, finM)); const tl = new T.Mesh(fg.tail, finM); tl.position.x = -0.46; g.add(tl); g.visible = false; root.add(g); return { g, tail: tl, on: false }; });
     let nextJump = 0;
 
     /* ── shoals in the shallows ── */
