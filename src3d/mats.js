@@ -186,5 +186,45 @@ void main(){
     });
     return m;
   }
-  return { U, coastU, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
+  /* stylized crowns: clean low-poly lumps in place of clouds of leaf cards, each face shaded on its own (the geometry's
+     own face normals); lighter toward the top of the crown and the light, darker and cooler in under it; each tree a
+     shade of its own; swaying on the same slow breeze as the leaves */
+  const CROWN_VS = `
+uniform float uTime;
+varying vec3 vN; varying vec3 vWPos; varying float vH; varying float vTint;
+void main(){
+  vec4 p = vec4(position, 1.0); vec3 n = normal, o = vec3(0.0);
+  float hy = max(position.y, 0.0);
+  #ifdef USE_INSTANCING
+    p = instanceMatrix*p; n = mat3(instanceMatrix)*n; o = instanceMatrix[3].xyz;
+  #else
+    o = vec3(floor(p.x/7.0)*7.0, 0.0, floor(p.z/7.0)*7.0);   /* (one mesh of many trees: each few metres its own) */
+  #endif
+  vec4 wp = modelMatrix*p; o = (modelMatrix*vec4(o, 1.0)).xyz;
+  float ph = o.x*0.21 + o.z*0.17;
+  wp.xz += vec2(0.55, -0.83)*(sin(uTime*0.62 + ph) + 0.4*sin(uTime*1.37 + ph*1.7))*0.0016*hy*hy;
+  vWPos = wp.xyz; vN = normalize(mat3(modelMatrix)*n); vH = position.y;
+  vTint = fract(sin(dot(o.xz, vec2(12.9898, 78.233)))*43758.5453);
+  gl_Position = projectionMatrix*viewMatrix*wp;
+}`;
+  const CROWN_FS = `
+${GLSL.COMMON}
+${GLSL.ART}
+${FOG}
+uniform vec3 uAmbF, uKeyDirT, uKeyColT, uCol; uniform float uTop;
+varying vec3 vN; varying vec3 vWPos; varying float vH; varying float vTint;
+void main(){
+  vec3 n = normalize(vN), V = normalize(cameraPosition - vWPos);
+  vec3 a = uCol*(0.86 + 0.28*vTint)*mix(vec3(1.0), vec3(1.07, 1.02, 0.84), step(0.6, fract(vTint*7.31)));
+  a *= mix(0.5, 1.06, smoothstep(0.25*uTop, 1.05*uTop, vH));
+  /* soft: the light wraps round each ball, its edge to the dark a broad band; a rim of sky light round the outline */
+  float ndl = dot(n, uKeyDirT), w = smoothstep(-0.35, 0.75, ndl);
+  vec3 L = uAmbF*(0.6 + 0.4*n.y) + uKeyColT*(w*0.95 + 0.05) + uAmbF*pow(1.0 - max(dot(n, V), 0.0), 3.0)*0.35;
+  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) L += artLight(vWPos, n);
+  gl_FragColor = vec4(fogIt(a*L, vWPos), 1.0);
+}`;
+  function crown(hex, top) {
+    return new THREE.ShaderMaterial({ uniforms: Object.assign({}, U, { uCol: { value: new THREE.Color(hex) }, uTop: { value: top } }), vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
+  }
+  return { U, coastU, lit, litP, tex, dataTex, cutoutDepth, foliage, crown, V3, V4 };
 })();

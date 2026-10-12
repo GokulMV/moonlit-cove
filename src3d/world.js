@@ -431,35 +431,34 @@ void main(){
     if (!lite) for (let i = 0; i < 3; i++) dry.push({ g: Nature.frondGeo(cr * 0.75, 1.0, -0.5, 1.1, 6), m: M(lx, h - 0.4, lz, 0, r() * TAU, 0) });
     return lite ? { bark: merge(bark), fA: merge(fA) } : { bark: merge(bark), fA: merge(fA), fB: merge(fB), dry: merge(dry) };
   }
-  function cardCloud(clusters, density, card, r) {
-    const sets = [[], [], []], q = new T.Quaternion(), e = new T.Euler(), base = new T.PlaneGeometry(1, 1);
-    for (const [c, cr, flat] of clusters) {
-      const n = Math.max(3, Math.round(density * cr * cr));
-      for (let i = 0; i < n; i++) {
-        let ux, uy, uz; do { ux = r() * 2 - 1; uy = r() * 2 - 1; uz = r() * 2 - 1; } while (ux * ux + uy * uy + uz * uz > 1);
-        e.set(-Math.PI / 2 + (r() - 0.5) * 1.3 + uy * 0.4, r() * TAU, (r() - 0.5) * 0.9); q.setFromEuler(e);
-        const s = (0.7 + r() * 0.55) * card;
-        sets[Math.floor(r() * 3)].push({ g: base, m: new T.Matrix4().compose(new T.Vector3(c.x + ux * cr, Math.max(0.12, c.y + uy * cr * flat), c.z + uz * cr), q.clone(), new T.Vector3(s, s, s)) });
-      }
-    }
-    return sets.map(merge);
-  }
+  /* ── stylized trees and bushes: crowns of a few low-poly lumps, each an icosahedron dented a little so no two faces
+     lie alike and squashed a little, shaded face by face (Mats.crown): clean shapes in place of clouds of leaf cards.
+     Far off, the same lumps in fewer faces ── */
+  const lumpGeo = (R, sy, detail, r) => Nature.lumpGeo(R, sy, detail, r);
   function treeProto(seed, lite) {
-    const r = rng(seed), R = 2.5 + r() * 1.3, Hc = 4.4 + r() * 2.8, bark = [], clusters = [];
-    const top = new T.Vector3((r() - 0.5) * 0.5, Hc * 0.62, (r() - 0.5) * 0.5);
-    bark.push({ g: Nature.taperTube(new T.CatmullRomCurve3([new T.Vector3(0, -0.3, 0), new T.Vector3((r() - 0.5) * 0.4, Hc * 0.3, (r() - 0.5) * 0.4), top]), 8, 6, t => 0.26 - 0.12 * t, 1), m: M() });
-    const nb = 5 + Math.floor(r() * 3);
-    for (let i = 0; i < nb; i++) {
-      const a = i / nb * TAU + r() * 0.6, rr = R * (0.45 + r() * 0.45), up = Hc * (0.62 + r() * 0.4), end = new T.Vector3(Math.cos(a) * rr, up, Math.sin(a) * rr * 0.85);
-      if (!lite) bark.push({ g: Nature.taperTube(new T.CatmullRomCurve3([top.clone(), top.clone().lerp(end, 0.5).add(new T.Vector3(0, 0.3, 0)), end]), 5, 4, t => 0.1 - 0.06 * t, 1), m: M() });
-      clusters.push([end, R * (0.46 + r() * 0.2), 0.4]);
+    const r = rng(seed), R = 2.2 + r() * 1.2, Hc = 4.6 + r() * 2.6, bark = [], c = [[], [], []], det = lite ? 0 : 1;
+    const top = new T.Vector3((r() - 0.5) * 0.4, Hc * 0.6, (r() - 0.5) * 0.4);
+    bark.push({ g: Nature.taperTube(new T.CatmullRomCurve3([new T.Vector3(0, -0.3, 0), new T.Vector3((r() - 0.5) * 0.3, Hc * 0.3, (r() - 0.5) * 0.3), top]), lite ? 3 : 6, lite ? 5 : 6, t => 0.3 - 0.14 * t, 1), m: M() });
+    /* a big lump on top, a ring of smaller ones round it and a little below */
+    c[0].push({ g: lumpGeo(R * 0.92, 0.86, det, r), m: M(top.x, Hc * 0.98, top.z, 0, r() * TAU, 0) });
+    const n = lite ? 3 : 4 + Math.floor(r() * 3);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + r() * 0.5, d = R * (0.55 + r() * 0.3), y = Hc * (0.7 + r() * 0.28), s = R * (0.5 + r() * 0.24);
+      c[1 + (i % 2)].push({ g: lumpGeo(s, 0.84, det, r), m: M(top.x + Math.cos(a) * d, y, top.z + Math.sin(a) * d * 0.9, 0, r() * TAU, 0) });
     }
-    clusters.push([new T.Vector3(0, Hc * 1.02, 0), R * 0.6, 0.42]);
-    /* far away a tree needs far fewer, bigger leaf cards to read as the same crown */
-    const [c0, c1, c2] = lite ? cardCloud(clusters, 5.5, 3.1, r) : cardCloud(clusters, 17, 1.9, r);
-    return { bark: merge(bark), c0, c1, c2 };
+    return { bark: merge(bark), c0: merge(c[0]), c1: merge(c[1]), c2: merge(c[2]) };
   }
-  function bushProto(seed, R, Hc, density = 22, card = 1.15) { const r = rng(seed); const [c0, c1, c2] = cardCloud([[new T.Vector3(0, Hc * 0.55, 0), R, Hc * 0.75 / R]], density, card, r); return { c0, c1, c2 }; }
+  function bushProto(seed, R, Hc, det = 1) {
+    const r = rng(seed), c = [[], [], []];
+    c[0].push({ g: lumpGeo(R * 0.62, Hc / R * 0.9, det, r), m: M(0, Hc * 0.48, 0, 0, r() * TAU, 0) });
+    const n = det ? 5 : 3;
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + r() * 0.7, d = R * (0.42 + r() * 0.2);
+      c[1 + (i % 2)].push({ g: lumpGeo(R * (0.36 + r() * 0.14), Hc / R * 0.85, det, r), m: M(Math.cos(a) * d, Hc * (0.3 + r() * 0.2), Math.sin(a) * d, 0, r() * TAU, 0) });
+    }
+    return { c0: merge(c[0]), c1: merge(c[1]), c2: merge(c[2]) };
+  }
+
 
   /* ── the forest's front rows, scattered on a jittered grid a cell at a time from hashes of the cell, so a chunk's
      trees never depend on what was built before it. Each kind keeps its spacing: of two neighbours of a kind that
@@ -521,12 +520,12 @@ void main(){
     const ring = new T.PlaneGeometry(1, 1); ring.rotateX(-Math.PI / 2);
     const quad = new T.PlaneGeometry(1, 1), NP = 48;
     /* the forest: shapes near and far, and their materials */
-    const fol = (seed, pal, cut = 0.5) => [0, 1, 2].map(k => Mats.foliage(Mats.tex(Paint.leafCard(seed + k * 7, k === 2 ? pal : null)), cut, [1, 1, 1], true));
     const frondT = [Mats.tex(Paint.frond(31)), Mats.tex(Paint.frond(47)), Mats.tex(Paint.frond(59, 1))].map(t => Mats.foliage(t, 0.4, [1, 1, 1], true));
     const barkP = Mats.lit({ map: Mats.tex(Paint.bark(5), { repeat: true }), roughness: 0.95 }), barkT = Mats.lit({ color: new T.Color('#4a3a2d'), roughness: 0.95 });
-    const treeM = fol(71, ['#2b4a22', '#35592a', '#24401e', '#3f6530']), bushM = fol(83, ['#3a5a2a', '#46682f', '#2f4a24', '#557a36']), fernM = fol(97, ['#2f5226', '#3b6a2c', '#294a20', '#4a7a33']);
+    /* the crowns' greens: a lighter top, two in the ring round it; the bushes' and the low scrub's their own */
+    const treeM = [['#4f8c3b', 8], ['#3c7432', 8], ['#46813a', 8]].map(([c, h]) => Mats.crown(c, h)), bushM = [['#427d37', 1.6], ['#356c30', 1.6], ['#4b8a3d', 1.6]].map(([c, h]) => Mats.crown(c, h)), fernM = [['#4d8c3c', 0.6], ['#3e7a34', 0.6], ['#589643', 0.6]].map(([c, h]) => Mats.crown(c, h));
     const Pr = { palm: [11, 23, 37].map(s => palmProto(s)), tall: [43, 61].map(s => palmProto(s, true)), tree: [51, 67, 89].map(s => treeProto(s)),
-      bush: [[13, 1.6, 1.3], [29, 1.9, 1.6], [41, 1.3, 1.0]].map(a => bushProto(...a)), fern: [[5, 0.55, 0.5, 30, 0.8], [7, 0.7, 0.6, 30, 0.8]].map(a => bushProto(...a)) };
+      bush: [[13, 1.6, 1.3], [29, 1.9, 1.6], [41, 1.3, 1.0]].map(a => bushProto(...a)), fern: [[5, 0.55, 0.5, 0], [7, 0.7, 0.6, 0]].map(a => bushProto(...a)) };
     const lite = { tree: [51, 67, 89].map(s => treeProto(s, true)), palm: [11, 23, 37].map(s => palmProto(s, false, true)), tall: [43, 61].map(s => palmProto(s, true, true)) };
     const parts = { palm: [['bark', barkP], ['fA', frondT[0]], ['fB', frondT[1]], ['dry', frondT[2]]], tree: [['bark', barkT], ['c0', treeM[0]], ['c1', treeM[1]], ['c2', treeM[2]]], bush: [['c0', bushM[0]], ['c1', bushM[1]], ['c2', bushM[2]]], fern: [['c0', fernM[0]], ['c1', fernM[1]], ['c2', fernM[2]]] };
     parts.tall = parts.palm;
