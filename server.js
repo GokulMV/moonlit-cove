@@ -1,6 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    server.js — serves the built cove from public/, and keeps the
-   wish board. No dependencies.
+   wish board and the toolbox of drawings. One dependency: the
+   Postgres client (pg), loaded only when there is a database.
 
    Everything is read into memory once at start-up, with gzip and brotli
    copies of what compresses. The page itself is revalidated on every
@@ -10,18 +11,19 @@
 
    The wish board, under /api/wishes:
      GET    /api/wishes?limit=n   the newest wishes first: { wishes: [{ id, text, name, at }], total, kept }
-                                  (kept is false on Railway with no volume attached: the board empties on each deploy)
+                                  (kept is false on Railway with neither a database nor a volume: the board empties on each deploy)
      POST   /api/wishes           { text, name } → { wish, total }, or { error } in plain words
      DELETE /api/wishes/<id>      with the header X-Admin-Key: $WISH_ADMIN_KEY (switched off when unset)
-   Wishes live in $DATA_DIR/wishes.json (./data by default; a Railway volume at /data in production, or wherever
-   RAILWAY_VOLUME_MOUNT_PATH says the attached volume is).
+   With DATABASE_URL set, wishes and drawings live in Postgres (tables cove_wishes and cove_drawings, made on first
+   start; anything already kept in files moves in then). Without it, wishes live in $DATA_DIR/wishes.json (./data by
+   default, /data in the image, or wherever RAILWAY_VOLUME_MOUNT_PATH says an attached volume is).
 
    The drawing board, under /api/drawings (pictures drawn at the picnic table, kept in the toolbox):
      GET    /api/drawings?limit=n     the newest first: { drawings: [{ id, name, at, w, h, url }], total, kept }
      GET    /api/drawings/<id>.png    the picture itself (PNG or WebP; never changes, so cached for a year)
      POST   /api/drawings             { image: a PNG or WebP data: URL, name } → { drawing, total }, or { error }
      DELETE /api/drawings/<id>        with the header X-Admin-Key: $WISH_ADMIN_KEY
-   They live in $DATA_DIR/drawings/ with an index in $DATA_DIR/drawings.json.
+   Without a database, they live in $DATA_DIR/drawings/ with an index in $DATA_DIR/drawings.json.
    ───────────────────────────────────────────────────────────── */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -67,18 +69,23 @@ function load() {
 }
 const files = load();
 
-/* ── the wish board ── */
+/* ── where the wishes and the drawings are kept ──
+   In Postgres when DATABASE_URL is set, so they outlive every deploy (on Railway: add a PostgreSQL database to the
+   project, then give this service the variable DATABASE_URL = ${{Postgres.DATABASE_URL}}). Otherwise in files under
+   DATA_DIR: Railway's volume mount path when one is attached, else $DATA_DIR (the image sets /data), else ./data.
+   On Railway with neither, every deploy starts on a fresh disk and the board comes back empty, so it says so */
 const WISH = { keep: 2000, text: 160, name: 32, body: 4096, gap: 20e3, perHour: 8 };
-/* Railway names the volume's mount path when one is attached; otherwise DATA_DIR (the image sets /data), else ./data.
-   On Railway without a volume, every deploy starts on a fresh disk and the board comes back empty, so it says so */
+const DRAW = { keep: 600, body: 1100 * 1024, bytes: 700 * 1024, maxW: 1600, maxH: 1200, minW: 64, minH: 48, gap: 30e3, perHour: 10, name: 32 };
 const ON_RAILWAY = !!(process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID);
 const VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || '';
 const DATA_DIR = path.resolve(HERE, VOLUME || process.env.DATA_DIR || 'data'), WISH_FILE = path.join(DATA_DIR, 'wishes.json');
-const KEPT = !ON_RAILWAY || !!VOLUME;
-if (!KEPT) console.warn('Wishes: NO VOLUME IS ATTACHED. Wishes are written to the container’s own disk and will be gone after the next deploy.\n' +
-  '  Fix: in Railway, add a Volume (right-click the project canvas, or ⌘K → Volume), attach it to this service, mount path /data.');
+const DRAW_DIR = path.join(DATA_DIR, 'drawings'), DRAW_FILE = path.join(DATA_DIR, 'drawings.json');
+const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_KEY = process.env.WISH_ADMIN_KEY || '';
-let wishes = [];                 /* newest first */
+let wishes = [];                 /* newest first: { id, text, name, at } */
+let drawings = [];               /* newest first: { id, name, at, w, h, ext } */
+
+/* ── in files ── */
 function loadWishes() {
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { console.warn(`Wishes: could not make ${DATA_DIR} (${e.code}), so new ones will not be kept.`); }
   try {
@@ -92,7 +99,6 @@ function loadWishes() {
     else console.warn(`Wishes: could not read ${WISH_FILE} (${e.code || e.message}).`);
   }
 }
-loadWishes();
 /* written whole to a temporary file, flushed to disk, then renamed over the old one, so a crash never leaves half a file.
    Writes queue one behind another; wishes that arrive while one waits go out together in it */
 let writing = Promise.resolve(), queued = null;
@@ -108,10 +114,6 @@ function saveWishes() {
   return queued;
 }
 
-/* ── the drawing board ── */
-const DRAW = { keep: 600, body: 1100 * 1024, bytes: 700 * 1024, maxW: 1600, maxH: 1200, minW: 64, minH: 48, gap: 30e3, perHour: 10, name: 32 };
-const DRAW_DIR = path.join(DATA_DIR, 'drawings'), DRAW_FILE = path.join(DATA_DIR, 'drawings.json');
-let drawings = [];               /* newest first: { id, name, at, w, h, ext } */
 function loadDrawings() {
   try { fs.mkdirSync(DRAW_DIR, { recursive: true }); } catch (e) { console.warn(`Drawings: could not make ${DRAW_DIR} (${e.code}).`); }
   try {
@@ -120,7 +122,6 @@ function loadDrawings() {
       .map(d => ({ id: d.id, name: typeof d.name === 'string' ? d.name : '', at: String(d.at), w: d.w | 0, h: d.h | 0, ext: d.ext })).slice(0, DRAW.keep);
   } catch (e) { if (e.code !== 'ENOENT') console.warn(`Drawings: could not read ${DRAW_FILE} (${e.code || e.message}); starting afresh.`); }
 }
-loadDrawings();
 let drawWriting = Promise.resolve(), drawQueued = null;
 function saveDrawings() {
   if (drawQueued) return drawQueued;
@@ -133,6 +134,143 @@ function saveDrawings() {
   drawQueued = drawWriting = drawWriting.then(run, run);
   return drawQueued;
 }
+const newestFirst = (a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
+const fileStore = {
+  kind: 'files', kept: !ON_RAILWAY || !!VOLUME, where: DATA_DIR,
+  async init() { loadWishes(); loadDrawings(); },
+  async addWish(w) {
+    wishes.unshift(w); if (wishes.length > WISH.keep) wishes.length = WISH.keep;
+    try { await saveWishes(); } catch (e) { wishes = wishes.filter(x => x.id !== w.id); throw e; }
+  },
+  async removeWish(id) {
+    const i = wishes.findIndex(w => w.id === id); if (i < 0) return false;
+    const [gone] = wishes.splice(i, 1);
+    try { await saveWishes(); } catch (e) { wishes.splice(i, 0, gone); throw e; }
+    return true;
+  },
+  async addDrawing(d, buf) {
+    const file = path.join(DRAW_DIR, `${d.id}.${d.ext}`), tmp = `${file}.${process.pid}.tmp`;
+    try {
+      await fsp.mkdir(DRAW_DIR, { recursive: true });
+      const fh = await fsp.open(tmp, 'w'); try { await fh.writeFile(buf); await fh.sync(); } finally { await fh.close(); }
+      await fsp.rename(tmp, file);
+      drawings.unshift(d);
+      const gone = drawings.length > DRAW.keep ? drawings.splice(DRAW.keep) : [];
+      await saveDrawings();
+      for (const g of gone) fsp.unlink(path.join(DRAW_DIR, `${g.id}.${g.ext}`)).catch(() => {});
+    } catch (e) { drawings = drawings.filter(x => x.id !== d.id); fsp.unlink(file).catch(() => {}); fsp.unlink(tmp).catch(() => {}); throw e; }
+  },
+  async drawingImage(id, ext) {
+    const d = drawings.find(x => x.id === id); if (!d || d.ext !== ext) return null;
+    try { return await fsp.readFile(path.join(DRAW_DIR, `${d.id}.${d.ext}`)); } catch (e) { return null; }
+  },
+  async removeDrawing(id) {
+    const d = drawings.find(x => x.id === id); if (!d) return false;
+    drawings = drawings.filter(x => x !== d);
+    try { await saveDrawings(); } catch (e) { drawings.push(d); drawings.sort(newestFirst); throw e; }
+    fsp.unlink(path.join(DRAW_DIR, `${d.id}.${d.ext}`)).catch(() => {});
+    return true;
+  },
+  refresh() {},
+  async close() { await Promise.all([writing.catch(() => {}), drawWriting.catch(() => {})]); }
+};
+
+/* ── in Postgres: two tables, made on first start. Everything is read into memory then (two thousand wishes and six
+   hundred drawings' names are small; the pictures stay in the database, with the most recently looked at kept in
+   memory too), and read again every so often, in case another copy of the server added something ── */
+function pgStore(pg) {
+  const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 4, idleTimeoutMillis: 30e3, connectionTimeoutMillis: 10e3 });
+  /* (a connection the database closes while idle is reported here: unheard, it would bring the server down) */
+  pool.on('error', e => console.warn('Store: the database closed a connection:', e.message));
+  const q = (text, params) => pool.query(text, params), iso = t => new Date(t).toISOString();
+  let ready = false, loadedAt = 0, loading = null, writes = 0;
+  /* pictures lately looked at, up to 48 MB */
+  const pics = new Map(), PICS = 48 * 1024 * 1024; let picBytes = 0;
+  const uncache = id => { const c = pics.get(id); if (c) { pics.delete(id); picBytes -= c.b.length; } };
+  const cache = (id, b, ext) => { uncache(id); if (b.length > PICS / 16) return; pics.set(id, { b, ext }); picBytes += b.length; for (const [k] of pics) { if (picBytes <= PICS) break; uncache(k); } };
+  async function load() {
+    const w0 = writes;
+    const [w, d] = await Promise.all([
+      q('SELECT id, text, name, at FROM cove_wishes ORDER BY at DESC, id DESC LIMIT $1', [WISH.keep]),
+      q('SELECT id, name, at, w, h, ext FROM cove_drawings ORDER BY at DESC, id DESC LIMIT $1', [DRAW.keep])]);
+    /* (something was written while this was being read: keep what is in hand; the next look will have it all) */
+    if (writes !== w0) return;
+    wishes = w.rows.map(r => ({ id: r.id, text: r.text, name: r.name, at: iso(r.at) }));
+    drawings = d.rows.map(r => ({ id: r.id, name: r.name, at: iso(r.at), w: r.w, h: r.h, ext: r.ext }));
+    loadedAt = Date.now();
+  }
+  /* wishes and drawings kept in files before there was a database (on a volume, or this machine's own disk) move in, once */
+  async function adopt() {
+    const n = (await q('SELECT (SELECT count(*) FROM cove_wishes)::int AS w, (SELECT count(*) FROM cove_drawings)::int AS d')).rows[0];
+    if (!n.w && fs.existsSync(WISH_FILE)) {
+      loadWishes();
+      for (const x of wishes) await q('INSERT INTO cove_wishes (id, text, name, at) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING', [x.id, x.text, x.name, x.at]);
+      if (wishes.length) console.log(`Store: moved ${wishes.length} wishes from ${WISH_FILE} into the database.`);
+    }
+    if (!n.d && fs.existsSync(DRAW_FILE)) {
+      loadDrawings(); let k = 0;
+      for (const x of drawings) {
+        let b; try { b = fs.readFileSync(path.join(DRAW_DIR, `${x.id}.${x.ext}`)); } catch (e) { continue; }
+        await q('INSERT INTO cove_drawings (id, name, at, w, h, ext, img) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING', [x.id, x.name, x.at, x.w, x.h, x.ext, b]); k++;
+      }
+      if (k) console.log(`Store: moved ${k} drawings from ${DRAW_DIR} into the database.`);
+    }
+  }
+  async function setup() {
+    await q("CREATE TABLE IF NOT EXISTS cove_wishes (id text PRIMARY KEY, text text NOT NULL, name text NOT NULL DEFAULT '', at timestamptz NOT NULL)");
+    await q('CREATE INDEX IF NOT EXISTS cove_wishes_at ON cove_wishes (at DESC)');
+    await q("CREATE TABLE IF NOT EXISTS cove_drawings (id text PRIMARY KEY, name text NOT NULL DEFAULT '', at timestamptz NOT NULL, w integer NOT NULL, h integer NOT NULL, ext text NOT NULL CHECK (ext IN ('png', 'webp')), img bytea NOT NULL)");
+    await q('CREATE INDEX IF NOT EXISTS cove_drawings_at ON cove_drawings (at DESC)');
+    await adopt(); await load(); ready = true;
+  }
+  const trim = (table, keep) => q(`DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} ORDER BY at DESC, id DESC OFFSET $1)`, [keep]).catch(e => console.warn(`Store: could not clear out the oldest in ${table}:`, e.message));
+  let where = 'Postgres';
+  try { const u = new URL(DATABASE_URL); where = `Postgres at ${u.hostname}${u.port ? ':' + u.port : ''}${u.pathname}`; } catch (e) { /* not a URL pg can't read either: it will say so */ }
+  return {
+    kind: 'postgres', kept: true, where,
+    /* the database can take a moment to come up beside the server: a few tries, then carry on and keep trying */
+    async init() {
+      for (let i = 1; ; i++) {
+        try { await setup(); return; } catch (e) {
+          console.warn(`Store: the database isn't answering (${e.code || e.message})${i < 6 ? ', trying again' : ''}.`);
+          if (i < 6) { await new Promise(r => setTimeout(r, 2500)); continue; }
+          const again = setInterval(() => setup().then(() => { clearInterval(again); console.log(`Store: the database answered: ${wishes.length} wishes, ${drawings.length} drawings.`); }, () => {}), 30e3);
+          again.unref(); return;
+        }
+      }
+    },
+    async addWish(w) {
+      await q('INSERT INTO cove_wishes (id, text, name, at) VALUES ($1, $2, $3, $4)', [w.id, w.text, w.name, w.at]); writes++;
+      wishes = [w, ...wishes.filter(x => x.id !== w.id)].slice(0, WISH.keep);
+      trim('cove_wishes', WISH.keep);
+    },
+    async removeWish(id) { const r = await q('DELETE FROM cove_wishes WHERE id = $1', [id]); writes++; wishes = wishes.filter(w => w.id !== id); return r.rowCount > 0; },
+    async addDrawing(d, buf) {
+      await q('INSERT INTO cove_drawings (id, name, at, w, h, ext, img) VALUES ($1, $2, $3, $4, $5, $6, $7)', [d.id, d.name, d.at, d.w, d.h, d.ext, buf]); writes++;
+      drawings = [d, ...drawings.filter(x => x.id !== d.id)];
+      for (const g of drawings.splice(DRAW.keep)) uncache(g.id);
+      cache(d.id, buf, d.ext); trim('cove_drawings', DRAW.keep);
+    },
+    async drawingImage(id, ext) {
+      const c = pics.get(id); if (c) { pics.delete(id); pics.set(id, c); return c.ext === ext ? c.b : null; }
+      const row = (await q('SELECT ext, img FROM cove_drawings WHERE id = $1', [id])).rows[0];
+      if (!row) return null;
+      cache(id, row.img, row.ext); return row.ext === ext ? row.img : null;
+    },
+    async removeDrawing(id) { const r = await q('DELETE FROM cove_drawings WHERE id = $1', [id]); writes++; drawings = drawings.filter(x => x.id !== id); uncache(id); return r.rowCount > 0; },
+    /* (a look at the database at most every fifteen seconds, never holding up the answer) */
+    refresh() { if (!ready || loading || Date.now() - loadedAt < 15e3) return; loading = load().catch(e => console.warn('Store: could not read the database:', e.code || e.message)).finally(() => { loading = null; }); },
+    async close() { await pool.end().catch(() => {}); }
+  };
+}
+
+let pgModule = null;
+if (DATABASE_URL) { try { pgModule = (await import('pg')).default; } catch (e) { console.error('Store: DATABASE_URL is set, but the pg package isn’t installed (npm install). Keeping things in files instead.'); } }
+const store = pgModule ? pgStore(pgModule) : fileStore;
+await store.init();
+if (!store.kept) console.warn('Wishes and drawings: NOTHING IS KEPT ACROSS DEPLOYS. They are written to the container’s own disk, which every deploy replaces.\n' +
+  '  Fix: in Railway, add a PostgreSQL database to the project (⌘K → Database → PostgreSQL), then in this service’s Variables\n' +
+  '  add DATABASE_URL with the value ${{Postgres.DATABASE_URL}}. (A volume mounted at /data works too.)');
 /* what a picture is and how big, from its own header: PNG or WebP only (nothing else is taken, SVG least of all) */
 function imageInfo(b) {
   if (b.length > 33 && b.readUInt32BE(0) === 0x89504e47 && b.readUInt32BE(4) === 0x0d0a1a0a && b.toString('ascii', 12, 16) === 'IHDR')
@@ -277,10 +415,8 @@ async function postWish(req, res) {
   const text = tidy(j.text), name = tidy(j.name || ''), why = refusal(text, name);
   if (why) return sendJSON(req, res, 400, { error: why });
   const wish = { id: crypto.randomBytes(9).toString('base64url'), text, name, at: new Date(now).toISOString() };
-  wishes.unshift(wish); if (wishes.length > WISH.keep) wishes.length = WISH.keep;
-  try { await saveWishes(); }
+  try { await store.addWish(wish); }
   catch (e) {
-    wishes = wishes.filter(w => w.id !== wish.id);
     console.error('Wishes: could not save:', e.message);
     return sendJSON(req, res, 503, { error: 'The board couldn’t keep your wish just now. Try again in a moment.' });
   }
@@ -291,11 +427,10 @@ async function postWish(req, res) {
 async function deleteWish(req, res, id) {
   if (!ADMIN_KEY) return sendJSON(req, res, 403, { error: 'Taking wishes down is switched off: set WISH_ADMIN_KEY on the server to allow it.' });
   if (!isAdmin(req)) { console.warn(`Wishes: a delete without the right key, from ${clientIp(req)}`); return sendJSON(req, res, 403, { error: 'That key doesn’t open the board.' }); }
-  const i = wishes.findIndex(w => w.id === id);
-  if (i < 0) return sendJSON(req, res, 404, { error: 'No wish with that id.' });
-  const [gone] = wishes.splice(i, 1);
-  try { await saveWishes(); }
-  catch (e) { wishes.splice(i, 0, gone); console.error('Wishes: could not save:', e.message); return sendJSON(req, res, 503, { error: 'Could not save the board just now.' }); }
+  let gone;
+  try { gone = await store.removeWish(id); }
+  catch (e) { console.error('Wishes: could not save:', e.message); return sendJSON(req, res, 503, { error: 'Could not save the board just now.' }); }
+  if (!gone) return sendJSON(req, res, 404, { error: 'No wish with that id.' });
   console.log(`Wishes: ${id} taken down (${wishes.length} left)`);
   sendJSON(req, res, 200, { deleted: id, total: wishes.length });
 }
@@ -303,7 +438,8 @@ async function wishApi(req, res, url) {
   if (url.pathname === '/api/wishes') {
     if (req.method === 'GET' || req.method === 'HEAD') {
       const n = Math.max(1, Math.min(WISH.keep, parseInt(url.searchParams.get('limit'), 10) || 100));
-      return sendJSON(req, res, 200, { wishes: wishes.slice(0, n), total: wishes.length, kept: KEPT });
+      store.refresh();
+      return sendJSON(req, res, 200, { wishes: wishes.slice(0, n), total: wishes.length, kept: store.kept });
     }
     if (req.method === 'POST') return postWish(req, res);
     return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: 'GET, HEAD, POST' });
@@ -333,17 +469,8 @@ async function postDrawing(req, res) {
   const name = tidy(j.name || ''), why = nameRefusal(name);
   if (why) return sendJSON(req, res, 400, { error: why });
   const d = { id: crypto.randomBytes(9).toString('base64url'), name, at: new Date(now).toISOString(), w: info.w, h: info.h, ext: info.ext };
-  const file = path.join(DRAW_DIR, `${d.id}.${d.ext}`), tmp = `${file}.${process.pid}.tmp`;
-  try {
-    await fsp.mkdir(DRAW_DIR, { recursive: true });
-    const fh = await fsp.open(tmp, 'w'); try { await fh.writeFile(buf); await fh.sync(); } finally { await fh.close(); }
-    await fsp.rename(tmp, file);
-    drawings.unshift(d);
-    const gone = drawings.length > DRAW.keep ? drawings.splice(DRAW.keep) : [];
-    await saveDrawings();
-    for (const g of gone) fsp.unlink(path.join(DRAW_DIR, `${g.id}.${g.ext}`)).catch(() => {});
-  } catch (e) {
-    drawings = drawings.filter(x => x.id !== d.id); fsp.unlink(file).catch(() => {}); fsp.unlink(tmp).catch(() => {});
+  try { await store.addDrawing(d, buf); }
+  catch (e) {
     console.error('Drawings: could not keep one:', e.message);
     return sendJSON(req, res, 503, { error: 'The toolbox couldn’t keep your drawing just now. Try again in a moment.' });
   }
@@ -355,28 +482,27 @@ async function drawApi(req, res, url) {
   if (url.pathname === '/api/drawings') {
     if (req.method === 'GET' || req.method === 'HEAD') {
       const n = Math.max(1, Math.min(DRAW.keep, parseInt(url.searchParams.get('limit'), 10) || 60));
-      return sendJSON(req, res, 200, { drawings: drawings.slice(0, n).map(drawingOut), total: drawings.length, kept: KEPT });
+      store.refresh();
+      return sendJSON(req, res, 200, { drawings: drawings.slice(0, n).map(drawingOut), total: drawings.length, kept: store.kept });
     }
     if (req.method === 'POST') return postDrawing(req, res);
     return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: 'GET, HEAD, POST' });
   }
   const rest = url.pathname.slice('/api/drawings/'.length), m = /^([A-Za-z0-9_-]{6,40})(?:\.(png|webp))?$/.exec(rest);
   if (!m) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
-  const d = drawings.find(x => x.id === m[1]);
   if (req.method === 'DELETE' && !m[2]) {
     if (!ADMIN_KEY) return sendJSON(req, res, 403, { error: 'Taking drawings out is switched off: set WISH_ADMIN_KEY on the server to allow it.' });
     if (!isAdmin(req)) { console.warn(`Drawings: a delete without the right key, from ${clientIp(req)}`); return sendJSON(req, res, 403, { error: 'That key doesn’t open the toolbox.' }); }
-    if (!d) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
-    drawings = drawings.filter(x => x !== d);
-    try { await saveDrawings(); } catch (e) { drawings.unshift(d); return sendJSON(req, res, 503, { error: 'Could not save the toolbox just now.' }); }
-    fsp.unlink(path.join(DRAW_DIR, `${d.id}.${d.ext}`)).catch(() => {});
-    console.log(`Drawings: ${d.id} taken out (${drawings.length} left)`);
-    return sendJSON(req, res, 200, { deleted: d.id, total: drawings.length });
+    let gone;
+    try { gone = await store.removeDrawing(m[1]); } catch (e) { console.error('Drawings: could not take one out:', e.message); return sendJSON(req, res, 503, { error: 'Could not save the toolbox just now.' }); }
+    if (!gone) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
+    console.log(`Drawings: ${m[1]} taken out (${drawings.length} left)`);
+    return sendJSON(req, res, 200, { deleted: m[1], total: drawings.length });
   }
   if ((req.method === 'GET' || req.method === 'HEAD') && m[2]) {
-    if (!d || d.ext !== m[2]) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
-    let body; try { body = await fsp.readFile(path.join(DRAW_DIR, `${d.id}.${d.ext}`)); } catch (e) { return sendJSON(req, res, 404, { error: 'That drawing has gone.' }); }
-    res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': d.ext === 'png' ? 'image/png' : 'image/webp', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Disposition': 'inline' });
+    let body; try { body = await store.drawingImage(m[1], m[2]); } catch (e) { console.error('Drawings: could not fetch one:', e.message); return sendJSON(req, res, 503, { error: 'The toolbox is stuck just now. Try again in a moment.' }); }
+    if (!body) return sendJSON(req, res, 404, { error: 'No drawing with that id.' });
+    res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': m[2] === 'png' ? 'image/png' : 'image/webp', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Disposition': 'inline' });
     res.end(req.method === 'HEAD' ? undefined : body); return;
   }
   return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: m[2] ? 'GET, HEAD' : 'DELETE' });
@@ -411,6 +537,6 @@ const server = http.createServer((req, res) => {
 });
 /* a slow sender can't hold a connection open for long */
 server.headersTimeout = 15000; server.requestTimeout = 20000;
-server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes, ${drawings.length} drawings in ${DATA_DIR}${KEPT ? '' : ' (NOT KEPT: no volume)'}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
+server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes, ${drawings.length} drawings in ${store.where}${store.kept ? '' : ' (NOT KEPT across deploys)'}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
 /* on the way down, let a wish that is being written finish first */
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { Promise.all([writing.catch(() => {}), drawWriting.catch(() => {})]).then(() => server.close(() => process.exit(0))); setTimeout(() => process.exit(0), 3000).unref(); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { server.close(); store.close().then(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });

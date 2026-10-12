@@ -7,9 +7,18 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const PORT = +(process.argv[2] || 8851), BASE = `http://127.0.0.1:${PORT}`, KEY = 'a-long-test-key-for-the-board';
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'cove-wishes-'));
 let fails = 0, srv = null, ipN = 0;
+/* COVE_TEST_PG=postgres://user:password@host:port runs the same checks against a throwaway Postgres database */
+const PG = process.env.COVE_TEST_PG || '';
+let DB_URL = '', pgAdmin = null, dbName = '';
+if (PG) {
+  const { default: pg } = await import('pg');
+  dbName = 'cove_test_' + Date.now().toString(36); pgAdmin = new pg.Client({ connectionString: PG + '/postgres' });
+  await pgAdmin.connect(); await pgAdmin.query(`CREATE DATABASE ${dbName}`); DB_URL = `${PG}/${dbName}`;
+  console.log('  (in Postgres: ' + dbName + ')');
+}
 const ok = (cond, what) => { console.log((cond ? '  ok   ' : '  FAIL ') + what); if (!cond) fails++; };
 async function start(env = {}) {
-  srv = spawn(process.execPath, ['server.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, WISH_ADMIN_KEY: KEY, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  srv = spawn(process.execPath, ['server.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, WISH_ADMIN_KEY: KEY, DATABASE_URL: DB_URL, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   srv.stdout.on('data', d => process.stdout.write('  [server] ' + d)); srv.stderr.on('data', d => process.stdout.write('  [server] ' + d));
   for (let i = 0; i < 50; i++) { try { if ((await fetch(BASE + '/healthz')).ok) return; } catch (e) { /* not up yet */ } await new Promise(r => setTimeout(r, 100)); }
   throw new Error('server did not start');
@@ -63,8 +72,14 @@ try {
   r = await del(last, 'wrong'); ok(r.status === 403, 'delete with the wrong key');
   r = await del(last, KEY); ok(r.status === 200 && r.j.total === total - 1, 'delete with the key');
   r = await del(last, KEY); ok(r.status === 404, 'that wish is gone');
-  const file = path.join(DATA, 'wishes.json'), saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  ok(saved.wishes.length === total - 1 && !fs.readdirSync(DATA).some(f => f.endsWith('.tmp')), 'written whole to ' + file);
+  if (PG) {
+    const n = new (await import("pg")).default.Client({ connectionString: DB_URL });
+    await n.connect(); const c = (await n.query('SELECT count(*)::int AS c FROM cove_wishes')).rows[0].c; await n.end();
+    ok(c === total - 1 && !fs.existsSync(path.join(DATA, 'wishes.json')), `kept in the database (${c} rows), not in a file`);
+  } else {
+    const file = path.join(DATA, 'wishes.json'), saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    ok(saved.wishes.length === total - 1 && !fs.readdirSync(DATA).some(f => f.endsWith('.tmp')), 'written whole to ' + file);
+  }
 
   await stop(); await start();
   r = await get('?limit=2000');
@@ -72,6 +87,6 @@ try {
   await stop(); await start({ WISH_ADMIN_KEY: '' });
   r = await del(first, KEY); ok(r.status === 403 && /switched off/.test(r.j.error), 'no admin key, no deleting: ' + r.j.error);
 } catch (e) { console.error(e); fails++; }
-finally { if (srv && srv.exitCode === null) await stop(); fs.rmSync(DATA, { recursive: true, force: true }); }
+finally { if (srv && srv.exitCode === null) await stop(); fs.rmSync(DATA, { recursive: true, force: true }); if (pgAdmin) { await pgAdmin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(e => console.warn(e.message)); await pgAdmin.end(); } }
 console.log(fails ? `${fails} failed` : 'all good');
 process.exit(fails ? 1 : 0);
