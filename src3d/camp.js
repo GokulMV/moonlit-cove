@@ -139,8 +139,6 @@ void main(){
     g.add(at(mesh(new T.CylinderGeometry(0.014, 0.02, 0.1, 8), L('#1f3a2a', { roughness: 0.2 })), -0.14, 0.72, -0.27));
     const jar = mesh(new T.CylinderGeometry(0.05, 0.05, 0.1, 14), glow(1.0, 0.62, 0.3)); at(jar, 0.17, 0.475, -0.24); g.add(jar);
     refs.candles.push(jar.material);
-    /* the menu: the whole résumé, bound in linen, lying closed by the reader's seat */
-    { const bg = grp(0, 0.4283, 0.1, 0); g.add(bg); refs.book = Book.build(bg, { W: 0.2, H: 0.28, cloth: '#22392f', ribbon: '#b0832f', T: 0.011 }); refs.bookGroup = bg; }
     refs.table = tg;
     }
     refs.dyn.push({ o: tg, kind: 'slide', half: 0.42, tip: 0.22, candle: true });

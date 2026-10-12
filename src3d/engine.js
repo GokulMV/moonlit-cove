@@ -487,7 +487,7 @@ const Engine = (() => {
     return { fire: [F.x, 0.5, F.z], lights: [bulb.p.x, bulb.p.y, bulb.p.z], table: [Tb.x, 0.47, Tb.z], van: [camp.vanDoor.x, camp.vanDoor.y, camp.vanDoor.z],
       journal: camp.journalGroup ? (() => { const v = camp.journalGroup.localToWorld(new T.Vector3(camp.journal.W / 2, 0.02, 0)); return [v.x, v.y, v.z]; })() : [F.x - 0.6, 0.45, F.z + 1.7],
       clipboard: camp.clipboard ? wp(camp.clipboard, 0) : [Layout.van.x, 1.2, Layout.van.z],
-      bottle: camp.bottle ? wp(camp.bottle, 0.03) : [B.x, 0.08, B.z], menu: camp.bookGroup ? (() => { const v = camp.bookGroup.localToWorld(new T.Vector3(camp.book.W / 2, 0.016, 0)); return [v.x, v.y, v.z]; })() : [Tb.x, 0.47, Tb.z], basket: camp.basket ? wp(camp.basket, 0.2) : [Tb.x + 1.4, 0.3, Tb.z - 1] };
+      bottle: camp.bottle ? wp(camp.bottle, 0.03) : [B.x, 0.08, B.z], basket: camp.basket ? wp(camp.basket, 0.2) : [Tb.x + 1.4, 0.3, Tb.z - 1] };
   }
   /* anchors on things that move: the clipboard rides on the van */
   function anchorNow(name) {
@@ -695,7 +695,7 @@ const Engine = (() => {
     Nature.sway(nature, t, o.wind ?? 1);
     /* the camp's cloth (the van's valance, the towel on the chair) flaps on the scene's own clock */
     { const dt = fabT === null ? 0 : Math.max(0, Math.min(0.25, t - fabT)); fabT = t; Camp.flutter(camp, dt, o.wind ?? 1, camera); }
-    /* the menu: turn pages, and keep it readable after dark (its paper carries a little light of its own) */
+    /* the journal: turn pages, and keep it readable after dark (its paper carries a little light of its own) */
     { const rk = (o.read || 0) * 0.36 * (1 - 0.9 * S.day) / Math.max(0.05, S.exposure * (o.expMul || 1));
       for (const b of [camp.book, camp.journal]) if (b) { b.update(); b.setReadLight(rk); }
       if (paper) { paper.update(); paper.setReadLight(rk * 1.45); }
@@ -755,11 +755,9 @@ const Engine = (() => {
     return S;
   }
 
-  /* reprint the menu card with the page's own text (once the web fonts are in) */
-  function paintMenu(info) { if (camp && camp.book) camp.book.paintCover(c => Paint.menuCover(c, info)); }
-  /* the menu on the table: where it lies (for the reading camera) and its page turns */
-  function bookFrame(which = 'menu') {
-    const g = which === 'journal' ? camp.journalGroup : camp.bookGroup, bk = which === 'journal' ? camp.journal : camp.book; g.updateMatrixWorld(true);
+  /* the journal by the fire: where it lies (for the reading camera) and its page turns */
+  function bookFrame() {
+    const g = camp.journalGroup, bk = camp.journal; g.updateMatrixWorld(true);
     const q = g.getWorldQuaternion(new T.Quaternion()), o = new T.Vector3().setFromMatrixPosition(g.matrixWorld);
     const r = new T.Vector3(1, 0, 0).applyQuaternion(q), top = new T.Vector3(0, 0, -1).applyQuaternion(q), up = new T.Vector3(0, 1, 0).applyQuaternion(q);
     return { o: o.toArray(), right: r.toArray(), top: top.toArray(), up: up.toArray(), W: bk.W, H: bk.H };
@@ -769,7 +767,7 @@ const Engine = (() => {
     dragStart: d => get().dragStart(d), dragTo: f => get().dragTo(f), dragEnd: c => get().dragEnd(c), get dragging() { return get().dragging; },
     busy: () => get().busy(), get spread() { return get().state.spread; }, get maxSpread() { return get().state.maxSpread; }, get open() { return get().state.open; }
   });
-  const book = bookApi('menu', () => camp.book), books = { menu: book, journal: bookApi('journal', () => camp.journal) };
+  const book = bookApi('journal', () => camp.journal), books = { journal: book };
   /* where each loose paper starts: the letter in the bottle, a blueprint in the basket, the clipboard on the van */
   function origin(name) {
     const o = name === 'bottle' ? camp.letterProp[0] : name === 'roll' ? camp.planRoll : camp.clipboard;
@@ -838,7 +836,7 @@ const Engine = (() => {
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  Object.assign(api, { init, warm, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });
+  Object.assign(api, { init, warm, render, project, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });
   Object.defineProperties(api, { world: { get: () => world }, life: { get: () => life }, paper: { get: () => paper }, camera: { get: () => camera }, renderer: { get: () => R }, scene: { get: () => scene } });
   return api;
 })();

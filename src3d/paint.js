@@ -342,30 +342,7 @@ const Paint = (() => {
     a.fillStyle = '#e8e0cc'; a.fillRect(100, 414, 56, 3);
     return c;
   }
-  /* the menu's linen cover: deep green cloth, gold-foil frame and title. info = { name, kicker, sub } */
-  function menuCover(c, info = {}) {
-    const W = c.width, H = c.height, a = c.getContext('2d', RF);
-    a.setTransform(1, 0, 0, 1, 0, 0);
-    a.fillStyle = '#1f3a2f'; a.fillRect(0, 0, W, H);
-    /* linen weave */
-    const r = rng(41);
-    for (let y = 0; y < H; y += 2) { a.fillStyle = `rgba(255,255,255,${0.018 + r() * 0.02})`; a.fillRect(0, y, W, 1); }
-    for (let x = 0; x < W; x += 2) { a.fillStyle = `rgba(0,0,0,${0.03 + r() * 0.03})`; a.fillRect(x, 0, 1, H); }
-    a.fillStyle = rad(a, W / 2, H * 0.42, W * 0.95, [[0, 'rgba(255,255,255,0.05)'], [1, 'rgba(0,0,0,0.35)']]); a.fillRect(0, 0, W, H);
-    const gold = lin(a, 0, 0, W, H, [[0, '#c9a35a'], [0.45, '#f1d48f'], [0.6, '#b98c3e'], [1, '#e6c27a']]);
-    a.strokeStyle = gold; a.lineWidth = 3; a.strokeRect(26, 26, W - 52, H - 52); a.lineWidth = 1.2; a.strokeRect(36, 36, W - 72, H - 72);
-    const serif = f => `${f} Fraunces, 'Iowan Old Style', Georgia, serif`, mono = f => `${f} 'JetBrains Mono', Menlo, monospace`;
-    const spaced = (t, x, y, sp) => { const ws = [...t].map(ch => a.measureText(ch).width); const tw = ws.reduce((p, q) => p + q, 0) + sp * (ws.length - 1); let cx = x - tw / 2; a.textAlign = 'left'; [...t].forEach((ch, i) => { a.fillText(ch, cx, y); cx += ws[i] + sp; }); a.textAlign = 'center'; };
-    const diamond = (x, y, s) => { a.beginPath(); a.moveTo(x, y - s); a.lineTo(x + s, y); a.lineTo(x, y + s); a.lineTo(x - s, y); a.closePath(); a.fill(); };
-    a.textAlign = 'center'; a.fillStyle = gold;
-    a.font = mono('500 20px'); spaced((info.kicker || 'The Moonlit Cove').toUpperCase(), W / 2, 150, 6);
-    a.font = serif('500 104px'); a.shadowColor = 'rgba(0,0,0,0.35)'; a.shadowOffsetY = 2; spaced('MENU', W / 2, 330, 14); a.shadowColor = 'transparent';
-    a.strokeStyle = gold; a.lineWidth = 1.5; a.beginPath(); a.moveTo(W / 2 - 120, 384); a.lineTo(W / 2 - 18, 384); a.moveTo(W / 2 + 18, 384); a.lineTo(W / 2 + 120, 384); a.stroke(); diamond(W / 2, 384, 8);
-    a.font = serif('italic 400 44px'); a.fillText(info.name || '', W / 2, 462);
-    a.font = mono('400 17px'); spaced((info.sub || '').toUpperCase(), W / 2, 506, 3);
-    diamond(W / 2, H - 120, 6);
-    return c;
-  }
+
   /* the journal's leather cover: worn brown hide, saddle stitching, a strap, the title pressed in gold */
   function journalCover(c, info = {}) {
     const W = c.width, H = c.height, a = c.getContext('2d', RF);
@@ -461,5 +438,5 @@ const Paint = (() => {
     if (!shown.length) note(a, W / 2, top + (H - top) / 2 - 12, 560, 250, { id: 'empty', text: 'No wishes yet. Let a lantern go, and pin the first one here.', name: 'the cove', when: '' });
     return c;
   }
-  return { menuCover, journalCover, wishBoard, rug, wood, stripes, wicker, bark, frond, leafCard, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
+  return { journalCover, wishBoard, rug, wood, stripes, wicker, bark, frond, leafCard, butterfly, puff, decals, driftwood, logBark, enamel, plank, plaid, canvasCloth, curtain, guitarTop };
 })();

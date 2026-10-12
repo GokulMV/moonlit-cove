@@ -1,7 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    pages.js — typesets what the cove says onto the paper objects
    in it, each in its own hand:
-     making   how the cove is made, a menu on the picnic table
      notes    stories from the build, a journal by the fire
      plans    the architecture, drawn on blueprints in the basket
      stack    what it is built with, a checklist on the clipboard
@@ -100,9 +99,6 @@ const Pages = (() => {
 
   /* ── paper stocks ── */
   function grain(a, W, H, seed, n, dark, light) { const r = rnd(seed); for (let i = 0; i < n; i++) { a.fillStyle = `rgba(${r() < 0.5 ? dark : light},${0.03 + r() * 0.05})`; a.fillRect(r() * W, r() * H, 1 + r() * 2, 1); } }
-  const MENU = { PW: 1000, PH: 1400, M: { l: 96, r: 96, t: 112, b: 126 }, ink: '#2a2017', accent: '#99481b', muted: '#6b5844',
-    paper(a, i) { const W = this.PW, H = this.PH; a.fillStyle = '#f3e9d6'; a.fillRect(0, 0, W, H); const g = a.createRadialGradient(W / 2, H * 0.45, 100, W / 2, H / 2, W * 0.95); g.addColorStop(0, 'rgba(255,251,240,0.35)'); g.addColorStop(1, 'rgba(150,110,60,0.16)'); a.fillStyle = g; a.fillRect(0, 0, W, H);
-      grain(a, W, H, i + 3, 2600, '90,64,30', '255,250,235'); a.strokeStyle = 'rgba(153,72,27,0.55)'; a.lineWidth = 1.5; a.strokeRect(40, 40, W - 80, H - 80); } };
   const JOURNAL = { PW: 1000, PH: 1400, M: { l: 150, r: 84, t: 92, b: 110 }, ink: '#1f2a3d', accent: '#7a2f1f', muted: '#4c5568',
     paper(a, i) { const W = this.PW, H = this.PH; a.fillStyle = '#f4eedf'; a.fillRect(0, 0, W, H); grain(a, W, H, i + 31, 2200, '80,70,50', '255,255,245');
       a.strokeStyle = 'rgba(70,110,170,0.22)'; a.lineWidth = 1.4; for (let y = 160; y < H - 60; y += 37) { a.beginPath(); a.moveTo(0, y); a.lineTo(W, y); a.stroke(); }
@@ -127,51 +123,6 @@ const Pages = (() => {
   /* phones read a narrower sheet: the same type on 760 px instead of 1000, so it lands bigger on screen */
   function compact(T, ratio) { const k = 760 / T.PW, M = {}; for (const [n, v] of Object.entries(T.M)) M[n] = Math.round(v * (n === 't' || n === 'b' ? 0.85 : 0.68));
     return Object.assign(Object.create(T), { PW: 760, PH: Math.round(760 * (ratio || T.PH / T.PW)), M }); }
-
-  /* ── the menu on the table: how the cove is made, course by course ── */
-  function making(C, o = {}) {
-    const T = o.compact ? compact(MENU) : MENU, K = kit(T), { kicker, title, orn, gap, para, center } = K;
-    gap(20); kicker('The Moonlit Cove', false);
-    center('How it’s made', FN.serif(500, o.compact ? 70 : 84), T.ink, 100, 82);
-    center('a menu of the build, course by course', FN.serif(400, 28, true), T.muted, 50, 34);
-    C.making.forEach((s, i) => {
-      if (i) orn(); else gap(10);
-      kicker(s.course); title(s.title, s.title);
-      para(s.lead, { size: 26, lh: 39, keep: true, after: 14 });
-      (s.points || []).forEach(p => para(p, { size: 24, lh: 35, indent: 32, bullet: true, after: 10 }));
-      (s.steps || []).forEach(([l, t], j) => para(`<b>${l}.</b> ${t}`, { size: 24, lh: 35, indent: 46, bullet: String(j + 1), after: 12 }));
-    });
-    gap(16); orn();
-    center('Thank you for reading.', FN.serif(400, 30, true), T.muted, 46, 32);
-    center('github.com/GokulMV/moonlit-cove', FN.mono(500, 19), T.accent, 36, 26);
-
-    const pages = flow(K.B, T.PH - T.M.t - T.M.b);
-    const out = render(T, K, pages, (a, i) => { a.textAlign = 'center'; a.fillStyle = T.accent; a.font = FN.mono(500, 18); a.fillText(`— ${i + 1} —`, T.PW / 2, T.PH - 70); });
-    const labels = pages.map(p => { const s = p.find(({ b }) => b.sec); return s ? s.b.sec : null; });
-    for (let i = 0; i < labels.length; i++) if (!labels[i]) labels[i] = labels[i - 1] || 'How it’s made';
-    const secs = []; pages.forEach((p, i) => p.forEach(({ b }) => { if (b.sec && !secs.find(s => s.name === b.sec)) secs.push({ name: b.sec, page: i + 1 }); }));
-    /* inside the cover: the contents */
-    const c0 = canvas(T.PW, T.PH), a = c0.getContext('2d'); T.paper(a, 0);
-    a.fillStyle = T.accent; a.font = FN.mono(500, 18); spaced(a, 'TONIGHT’S MENU', T.PW / 2, Math.round(T.PH * 0.13), 5);
-    a.fillStyle = T.ink; a.textAlign = 'center'; a.font = FN.serif(400, 60, true); a.fillText('Contents', T.PW / 2, Math.round(T.PH * 0.19));
-    const step = Math.min(T.PH * 0.074, (T.PH * 0.62) / Math.max(1, secs.length));
-    secs.forEach((s, i) => { const y = Math.round(T.PH * 0.27 + i * step), course = (C.making.find(m => m.title === s.name) || {}).course || '';
-      a.fillStyle = T.accent; a.font = FN.mono(500, 15); spaced(a, course.toUpperCase(), T.M.l + 20, y - 30, 3, 'left');
-      a.textAlign = 'left'; a.fillStyle = T.ink; a.font = FN.serif(600, 31); a.fillText(s.name, T.M.l + 20, y + 8, T.PW - T.M.l - T.M.r - 120); const lw = Math.min(T.PW - T.M.l - T.M.r - 120, a.measureText(s.name).width);
-      a.textAlign = 'right'; a.fillStyle = T.accent; a.font = FN.mono(500, 23); a.fillText(String(s.page), T.PW - T.M.r - 20, y + 6);
-      a.fillStyle = 'rgba(42,32,23,0.45)'; for (let x = T.M.l + 20 + lw + 16; x < T.PW - T.M.r - 56; x += 11) { a.beginPath(); a.arc(x, y - 2, 1.8, 0, Math.PI * 2); a.fill(); } });
-    a.textAlign = 'center'; a.fillStyle = T.muted; a.font = FN.serif(400, 23, true); a.fillText('Tap the right side of a page to turn it, or drag it.', T.PW / 2, T.PH - 150, T.PW - 160);
-    const canvases = [c0, ...out];
-    if (pages.length % 2 === 0) canvases.backInner = thanks(T, C);
-    return { canvases, labels: ['Contents', ...labels, 'Thank you'], pages: pages.length };
-  }
-  function thanks(T, C) {
-    const c = canvas(T.PW, T.PH), a = c.getContext('2d'); T.paper(a, 99);
-    a.fillStyle = T.accent; a.font = FN.mono(500, 18); spaced(a, 'THANK YOU', T.PW / 2, T.PH / 2 - 60, 6);
-    a.fillStyle = T.ink; a.textAlign = 'center'; a.font = FN.serif(400, 44, true); a.fillText('Find me on', T.PW / 2, T.PH / 2 + 10);
-    a.fillStyle = T.accent; a.font = FN.mono(400, 22); a.fillText(C.links.map(l => l[2]).join('   ·   '), T.PW / 2, T.PH / 2 + 70, T.PW - 120);
-    return c;
-  }
 
   /* ── the journal by the fire: stories from the build, in pen on ruled paper ── */
   function notes(C, o = {}) {
@@ -251,23 +202,6 @@ const Pages = (() => {
   }
   /* every sheet: [title, one line saying what it shows, the drawing, a few notes for the corner] */
   const SHEETS = [
-    ['The whole thing', 'One page in your browser, one small server, and Cloudflare in between.', d => {
-      d.group(86, 186, 470, 636, 'YOUR BROWSER');
-      d.box(116, 226, 410, 132, 'PAGE', ['app.js · camera, chapters, input', 'pages.js · typesets every page', 'content.js · the words you read']);
-      d.arrow([[321, 358], [321, 396]]);
-      d.box(116, 398, 410, 180, 'ENGINE', ['sky · sea · coast · camp · life', 'books, paper and cloth · sound', 'render loop + post-processing', 'about twenty modules, plain JS']);
-      d.arrow([[321, 578], [321, 616]]);
-      d.box(116, 618, 410, 172, 'BROWSER APIS', ['WebGL 2 · GLSL shaders', 'Web Audio · Canvas 2D', 'localStorage, for your settings']);
-      d.box(612, 400, 236, 170, 'CLOUDFLARE', ['DNS · TLS', 'caches hashed files', 'at the edge'], { center: true });
-      d.arrow([[556, 485], [612, 485]], { both: true, label: 'HTTPS', at: [584, 460] });
-      d.group(904, 186, 410, 636, 'RAILWAY');
-      d.box(934, 226, 350, 150, 'SERVER.JS', ['Node 22, no dependencies', 'brotli · ETag · CSP', '/healthz for the platform']);
-      d.box(934, 412, 350, 158, 'PUBLIC/', ['index.html, engine inside', 'vendor/three.<hash>.js', 'snd/*.<hash>.mp3']);
-      d.box(934, 606, 350, 184, '/DATA VOLUME', ['outlives every deploy', 'wishes.json', 'the shared wish board']);
-      d.arrow([[1109, 376], [1109, 412]], { soft: true });
-      d.arrow([[1284, 300], [1302, 300], [1302, 698], [1284, 698]], { soft: true });
-      d.arrow([[848, 485], [878, 485], [878, 300], [934, 300]], { both: true, label: 'origin', at: [878, 270] });
-    }, ['GET /  →  one HTML page, engine inside', 'three.js and sounds: cached for a year', 'sounds load only once you turn sound on', 'GET · POST /api/wishes  →  the wish board']],
     ['Engine modules', 'Each file does one thing. The page drives the engine; the engine draws the cove.', d => {
       const row = (y, label, items, h = 84) => { d.text(label, 86, y + h / 2 + 6, { font: FN.mono(500, 16), color: d.ACC }); const n = items.length, gap = 14, w = (1314 - 220 - gap * (n - 1)) / n;
         items.forEach(([t, l], i) => d.box(220 + i * (w + gap), y, w, h, t, l ? [l] : [], { center: true, ts: 19, ls: 14.5 })); };
@@ -329,20 +263,7 @@ const Pages = (() => {
       d.box(1114, 400, 200, 110, 'LIMITER', ['nothing clips'], { center: true });
       d.box(1114, 600, 200, 110, 'SPEAKERS', [], { center: true, middle: true, bold: true });
       d.arrow([[1070, 455], [1114, 455]]); d.arrow([[1214, 510], [1214, 600]]);
-    }, ['the surf swells as its wave reaches the sand', 'crickets after dark, birds at dawn', 'the mixer switches are the five buses', 'sounds load only when sound is on']],
-    ['Shipping', 'From a commit to your screen, and the same page as one file.', d => {
-      d.box(86, 206, 170, 130, 'GIT PUSH', [], { center: true, middle: true });
-      d.box(300, 206, 190, 130, 'GITHUB', ['main branch'], { center: true });
-      d.box(534, 206, 330, 130, 'BUILD', ['stage 1 · node:22-alpine', 'npm ci · npm run build']);
-      d.box(908, 206, 406, 150, 'RUN', ['stage 2 · node:22-alpine', 'server.js + public/, as user node', 'a volume at /data']);
-      d.arrow([[256, 271], [300, 271]]); d.arrow([[490, 271], [534, 271]]); d.arrow([[864, 271], [908, 271]]);
-      d.arrow([[1111, 356], [1111, 430]], { label: 'proxied', at: [1111, 398] });
-      d.box(908, 432, 406, 150, 'CLOUDFLARE', ['CNAME · SSL Full', 'caches what never changes']);
-      d.box(534, 432, 330, 150, 'YOU', ['the page first, then three.js,', 'then sounds if you want them']);
-      d.arrow([[908, 507], [864, 507]]);
-      d.box(86, 640, 560, 160, 'ONE FILE', ['npm run build:single', 'everything in one HTML file,', 'sounds inside, shareable anywhere'], { dash: true });
-      d.box(700, 640, 614, 160, 'TESTS', ['Playwright drives headless Chromium', 'with software graphics: every chapter,', 'the van, the waves, the wish board'], { dash: true });
-    }, ['every push to main redeploys', 'the page revalidates; hashed files never do', 'a health check at /healthz', 'wishes survive deploys on the volume']]
+    }, ['the surf swells as its wave reaches the sand', 'crickets after dark, birds at dawn', 'the mixer switches are the five buses', 'sounds load only when sound is on']]
   ];
   function plans(C, o = {}) {
     const T = PLANS, out = [], labels = [];
@@ -389,5 +310,5 @@ const Pages = (() => {
     });
     return { canvases: out, pages: out.length, title: 'Stack' };
   }
-  return { making, notes, letter, plans, stack, SHEETS, FN };
+  return { notes, letter, plans, stack, SHEETS, FN };
 })();

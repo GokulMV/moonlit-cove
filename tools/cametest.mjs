@@ -111,7 +111,7 @@ if (!only || only === 'orbit') {
   /* a chapter opens from wherever the camera is, and closing comes back there */
   await reset(page); await swipe(page, 480, 250, 150, 0, 5); await settle(page);
   const before = await orbState(page);
-  await page.evaluate(() => window.__cove.openChapter('making'));
+  await page.evaluate(() => window.__cove.openChapter('notes'));
   await until(page, () => !window.__cove.rd.pending, null, 90000);
   await page.evaluate(() => window.__cove.openChapter(null));
   await until(page, () => window.__cove.st.camT >= 1, null, 90000);

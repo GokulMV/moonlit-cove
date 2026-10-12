@@ -372,21 +372,6 @@ body.rd-hint-off .r-hint { opacity: 0; }
   .r-close kbd { display: none; }
 }
 
-/* the journey: paper tags hanging under the string lights */
-#tags { position: absolute; inset: 0; pointer-events: none; }
-.tag { position: absolute; left: 0; top: 0; width: 0; height: 0; }
-.tag .tstring { position: absolute; left: -0.5px; top: 6px; width: 1px; height: var(--drop, 40px); background: rgba(240, 230, 210, 0.7); transform-origin: top; transform: scaleY(0); transition: transform .5s ease; }
-.tag .tcard { position: absolute; left: var(--nudge, 0px); top: calc(var(--drop, 40px) + 4px); transform: translate(-50%, -6px) rotate(-1.5deg); opacity: 0; width: 190px; padding: 12px 14px 12px; border-radius: 6px; background: #f3ead6; color: #2a2017; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45); display: grid; gap: 3px; transition: opacity .5s ease .25s, transform .6s cubic-bezier(.2, .8, .2, 1.2) .25s; }
-.tag:nth-child(even) .tcard { transform: translate(-50%, -6px) rotate(1.8deg); }
-.tag .tcard::before { content: ''; position: absolute; left: 50%; top: 7px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: rgba(42, 32, 23, 0.25); box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
-.tag .twhen { margin-top: 6px; font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #99481b; }
-.tag b { font: 600 19px/1.15 var(--display); }
-.tag .ttext { font: 400 13px/1.35 var(--body); color: #5d4c3a; }
-.tag.on .tstring { transform: scaleY(1); }
-.tag.on .tcard { opacity: 1; transform: translate(-50%, 0) rotate(-1.5deg); }
-.tag.on:nth-child(even) .tcard { transform: translate(-50%, 0) rotate(1.8deg); }
-@media (max-width: 720px) { .tag .tcard { width: min(260px, 80vw); } .tag b { font-size: 21px; } .tag .ttext { font-size: 14px; } }
-
 /* sky and weather chips */
 .wx { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 4px; }
 .wx button { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); padding: 6px 10px; border-radius: 8px; font: 500 12px/1 var(--mono); color: var(--dim); }

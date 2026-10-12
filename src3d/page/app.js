@@ -30,10 +30,8 @@
     wide: Layout.cameras.wide,
     fire: { pos: [4.9, 1.95, -1.25], look: [7.0, 0.55, -4.5], fov: 40, focus: 4.0 },
     table: { pos: [-0.95, 2.9, 1.3], look: [0.6, 0.42, -2.7], fov: 44, focus: 4.4 },
-    menu: { pos: [0.7, 0.98, -1.66], look: [0.66, 0.5, -2.5], fov: 36, focus: 0.97 },
     basket: { pos: [3.15, 1.45, -1.95], look: [1.95, 0.22, -3.78], fov: 42, focus: 2.5 },
     lights: { pos: [4.4, 3.5, 3.9], look: [0.6, 1.8, -3.3], fov: 52, focus: 8.0 },
-    journey: { pos: [0.55, 1.62, 2.75], look: [0.5, 2.0, -0.62], fov: 52, focus: 3.4 },
     van: { pos: [-11.2, 2.1, 1.6], look: [-7.9, 1.2, -3.2], fov: 44, focus: 6.0 },
     bottle: { pos: [-2.25, 1.0, -3.5], look: [-3.3, 0.12, -5.2], fov: 38, focus: 2.1 }
   };
@@ -55,12 +53,10 @@
   /* the words of each chapter as plain HTML, for screen readers (the pages themselves are pictures on paper) */
   function docText(id) {
     const C = Content, li = a => `<ul>${a.map(t => `<li>${t}</li>`).join('')}</ul>`;
-    if (id === 'making') return C.making.map(s => `<h3>${esc(s.title)}</h3><p>${esc(s.lead)}</p>${s.points ? li(s.points) : ''}${s.steps ? li(s.steps.map(([l, t]) => `<b>${esc(l)}</b>: ${esc(t)}`)) : ''}`).join('');
     if (id === 'notes') return C.notes.map(n => `<h3>${esc(n.title)}</h3><p>${esc(n.problem)}</p><p>${esc(n.fix)}</p>`).join('');
     if (id === 'plans') return Pages.SHEETS.map(([t, sub, , notes]) => `<h3>${esc(t)}</h3><p>${esc(sub)}</p>${li(notes.map(esc))}`).join('');
     if (id === 'stack') return C.stack.map(g => `<h3>${esc(g.group)}</h3>${li(g.items.map(esc))}`).join('');
     if (id === 'contact') return `<p>${esc(C.letter.to)}</p>${C.letter.body.map(p => `<p>${esc(p)}</p>`).join('')}<p>${esc(C.letter.close)} ${esc(C.letter.sign)}</p><p>Email ${esc(C.contact.email)} · ${C.links.map(l => esc(l[2])).join(' · ')}</p>`;
-    if (id === 'milestones') return li(C.journey.map(j => `${esc(j.when)} · ${esc(j.title)}: ${esc(j.text)}`));
     return '';
   }
   const dock = $('dock'), spots = $('spots');
@@ -106,18 +102,15 @@
   }
 
   /* ── reading in the scene: every chapter is an object that opens where it lies ──
-     book   the menu on the table, the journal by the fire: the camera comes down and the pages turn
-     paper  the letter, the blueprints, the clipboard: picked up, unrolled, held in front of you
-     tags   the journey: the string lights flicker, then a paper tag hangs under a bulb for each stop */
+     book   the journal by the fire: the camera comes down and the pages turn
+     paper  the letter, the blueprints, the clipboard: picked up, unrolled, held in front of you */
   const RD = {
-    making: { kind: 'book', book: 'menu', doc: 'making', tilt: 0.2, links: ['source'] },
     notes: { kind: 'book', book: 'journal', doc: 'notes', tilt: 0.42 },
     plans: { kind: 'paper', doc: 'plans', origin: 'roll', view: 'basket', W: 0.46, H: 0.325, R0: 0.013, rolled: true, back: '#2a5a95', links: ['source'] },
     stack: { kind: 'paper', doc: 'stack', origin: 'clipboard', view: 'van', W: 0.24, H: 0.336, rolled: false, board: true, back: '#f2eee4' },
-    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.24, H: 0.341, R0: 0.011, rolled: true, back: '#e6d4ad', links: ['email', 'linkedin', 'github'] },
-    milestones: { kind: 'tags', view: 'journey' }
+    contact: { kind: 'paper', doc: 'letter', origin: 'bottle', view: 'bottle', W: 0.24, H: 0.341, R0: 0.011, rolled: true, back: '#e6d4ad', links: ['email', 'linkedin', 'github'] }
   };
-  const rd = { on: false, id: null, cfg: null, docs: {}, s: 1, cam: null, pending: null, held: null, tagT0: 0, tagIdx: 0, flick: 0, zoom: 1, zoomT: 1, pan: [0, 0], panT: [0, 0], drag: null };
+  const rd = { on: false, id: null, cfg: null, docs: {}, s: 1, cam: null, pending: null, held: null, zoom: 1, zoomT: 1, pan: [0, 0], panT: [0, 0], drag: null };
   const single = () => view.w < 720 || view.w / view.h < 1.0;
   /* documents are typeset once per layout (phones get narrower sheets with bigger type) */
   const bookKey = {};
@@ -160,11 +153,6 @@
       };
       /* the bottle: the cork pops first, and the letter slides out once it is clear */
       arrive(cfg.origin === 'bottle' ? () => { Engine.corkOut(true); setTimeout(() => { if (rd.on && rd.id === id) go(); }, 520); } : go);
-    } else if (cfg.kind === 'tags') {
-      st.to = V[cfg.view]; rd.tagT0 = 0; rd.flick = 0; rd.tagIdx = 0;
-      buildTags();
-      /* the lights flicker once the camera is under them, then the tags come down */
-      arrive(() => { rd.flick = performance.now(); rd.tagT0 = rd.flick + 1500; });
     }
     st.camDur = camDur(st.from, st.to);
     /* how to turn the pages: said once as it opens, then it fades */
@@ -181,7 +169,6 @@
     if (cfg.kind === 'book') Engine.books[cfg.book].go(0, false);
     if (cfg.kind === 'paper') { const o = cfg.origin; if (Engine.paper.mode === 'hidden') { Engine.prop(o, true); Engine.corkOut(false); } else Engine.paper.close(() => { Engine.prop(o, true); if (o === 'bottle') Engine.corkOut(false); }); }
     if (!opened && cfg.origin === 'bottle') Engine.corkOut(false);
-    if (cfg.kind === 'tags') { $('tags').hidden = true; $('tags').innerHTML = ''; }
     rd.id = null; rd.cfg = null;
     document.body.classList.remove('reading-book'); $('reader').hidden = true;
     if (!goingElsewhere) { st.chapter = null; dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false')); Content.chapters.forEach(x => x.spot.classList.remove('on', 'dim')); goView('wide'); }
@@ -198,7 +185,6 @@
       if (rd.s === s0) return;
       if (spreadOf(rd.s) !== spreadOf(s0)) { if (!rd.pending) bk.go(spreadOf(rd.s), true); pageSound(); }
     } else if (cfg.kind === 'paper') { if (Engine.paper.turn(dir)) pageSound(); }
-    else if (cfg.kind === 'tags') { rd.tagIdx = Math.max(0, Math.min(Content.journey.length - 1, rd.tagIdx + dir)); }
     syncReader();
   }
   const pageSound = () => { if (sound.on && sound.amb && sound.amb.page) sound.amb.page(); };
@@ -215,9 +201,9 @@
       const r = docOf(cfg), i = Engine.paper.count ? Engine.paper.target : 0;
       txt = cfg.doc === 'letter' ? 'A letter, from the bottle' : cfg.doc === 'plans' ? `Sheet ${i + 1} of ${r.pages} · ${r.labels[i] || ''}` : `${r.title || 'Page'} · ${i + 1} of ${r.pages}`;
       canP = i > 0; canN = i < r.pages - 1;
-    } else { const one = single(); txt = one ? `${Content.journey[rd.tagIdx].when} · ${Content.journey[rd.tagIdx].title}` : 'The journey so far'; canP = one && rd.tagIdx > 0; canN = one && rd.tagIdx < Content.journey.length - 1; }
+    }
     $('rPage').textContent = txt; $('rPrev').disabled = !canP; $('rNext').disabled = !canN;
-    $('rPrev').hidden = $('rNext').hidden = cfg.kind === 'tags' && !single() || cfg.doc === 'letter';
+    $('rPrev').hidden = $('rNext').hidden = cfg.doc === 'letter';
   }
   /* the camera over an open book, a little tilted toward the reader */
   function bookView() {
@@ -239,25 +225,6 @@
     c.addScaledVector(up, d * tf * 0.04 + pan[1] * H / 2 * k).addScaledVector(right, -pan[0] * W / 2 * k);
     const q = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().lookAt(P, c, new T.Vector3(0, 1, 0)));
     return { p: c.toArray(), q: q.toArray(), d };
-  }
-  /* the journey: a paper tag under a bulb for each stop */
-  let tagBulbs = null;
-  function buildTags() {
-    const el = $('tags'); el.hidden = false;
-    if (!tagBulbs) { const b = Engine.strandBulbs(1).sort((p, q) => p[0] - q[0]), n = Content.journey.length; tagBulbs = Content.journey.map((_, i) => b[Math.round(i * (b.length - 1) / (n - 1))]); }
-    el.innerHTML = Content.journey.map((j, i) => `<div class="tag" data-i="${i}"><i class="tstring"></i><div class="tcard"><span class="twhen">${esc(j.when)}</span><b>${esc(j.title)}</b><span class="ttext">${esc(j.text)}</span></div></div>`).join('');
-  }
-  function placeTags(now) {
-    if (!rd.on || !rd.cfg || rd.cfg.kind !== 'tags' || !tagBulbs) return;
-    const one = single(), shown = Math.floor((now - rd.tagT0) / 380) + 1;
-    $('tags').querySelectorAll('.tag').forEach((el, i) => {
-      const p = Engine.project(tagBulbs[i]), x = view.x + p[0] * view.w, y = view.y + p[1] * view.h;
-      const vis = rd.tagT0 > 0 && now >= rd.tagT0 && (one ? i === rd.tagIdx : i < shown) && p[2] < 1;
-      const drop = one ? 40 : 30 + (i % 2) * 150;
-      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`; el.style.setProperty('--drop', drop + 'px');
-      const cw = Math.min(260, view.w * 0.8) / 2 + 12; el.style.setProperty('--nudge', `${(Math.max(view.x + cw, Math.min(view.x + view.w - cw, x)) - x).toFixed(1)}px`);
-      el.classList.toggle('on', vis);
-    });
   }
   $('rPrev').addEventListener('click', () => readNav(-1));
   $('rNext').addEventListener('click', () => readNav(1));
@@ -451,7 +418,7 @@
   /* which half of the page the pointer is over, shown with the cursor */
   function readCursor(e) {
     let c = '';
-    if (rd.on && rd.cfg && rd.cfg.kind !== 'tags' && !rd.pending && !(rd.drag && rd.drag.live)) { const next = e.clientX - view.x >= view.w / 2; c = next ? ($('rNext').disabled ? '' : 'rd-next') : ($('rPrev').disabled ? '' : 'rd-prev'); }
+    if (rd.on && rd.cfg && !rd.pending && !(rd.drag && rd.drag.live)) { const next = e.clientX - view.x >= view.w / 2; c = next ? ($('rNext').disabled ? '' : 'rd-next') : ($('rPrev').disabled ? '' : 'rd-prev'); }
     document.body.classList.toggle('rd-next', c === 'rd-next'); document.body.classList.toggle('rd-prev', c === 'rd-prev');
   }
   cv.addEventListener('pointerdown', e => {
@@ -501,7 +468,7 @@
     toast(msg, false, 2600);
     if (info.amp >= 4) unlock('big_wave');
   });
-  const zoomable = () => rd.on && rd.cfg && rd.cfg.kind !== 'tags';
+  const zoomable = () => rd.on && !!rd.cfg;
   cv.addEventListener('wheel', e => {
     if (zoomable()) { e.preventDefault(); rd.zoomT = Math.max(1, Math.min(2.4, rd.zoomT * Math.exp(-e.deltaY * 0.0016))); return; }
     if (!canExplore()) return; e.preventDefault();
@@ -1348,8 +1315,7 @@
     try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40 }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
     catch (e) { introFailed(); console.error(e); return; }
     /* print the menu card with the résumé's own words once the page fonts are ready */
-    const coverInfo = { kicker: 'The Moonlit Cove', name: 'How it’s made', sub: 'a menu of the build' };
-    const printCovers = () => { Engine.paintMenu(coverInfo); Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
+    const printCovers = () => { Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
     printCovers();
     if (document.fonts && document.fonts.load) Promise.all(['500 70px Fraunces', 'italic 400 25px Fraunces', '600 25px Fraunces', '500 21px "JetBrains Mono"', '600 40px Caveat', '700 40px Caveat'].map(f => document.fonts.load(f))).then(() => { rd.docs = {}; printCovers(); }, () => {});
     /* (nothing may keep the door shut: a warm-up that never finishes, or frames that fail to draw, give way in time) */
@@ -1406,10 +1372,6 @@
       const tv = bookView(), a = rd.cam ? 1 - Math.exp(-dtR * 4) : 1;
       rd.cam = rd.cam ? lerpCam(rd.cam, tv, a) : tv; st.to = rd.cam;
     }
-    if (rd.on && rd.cfg.kind === 'tags' && single() && tagBulbs) {
-      const b = tagBulbs[rd.tagIdx], tv = { pos: [b[0], b[1] - 0.25, b[2] + 1.7], look: [b[0], b[1] - 0.3, b[2] - 0.4], fov: 50, focus: 1.8 }, a = rd.cam ? 1 - Math.exp(-dtR * 3) : 1;
-      rd.cam = rd.cam ? lerpCam(rd.cam, tv, a) : tv; st.to = rd.cam;
-    }
     let cam = !st.to || (st.to === orbC && st.camT >= 1) ? orbC : lerpCam(st.from, st.to, ease(st.camT));
     st.cur = cam;
     /* driving: physics, van pose, chase camera, sound */
@@ -1434,15 +1396,13 @@
 
     /* lights: auto by the sun, or forced */
     const wxf = stepWeather(dtR), W = st.wx;
-    const journey = rd.on && rd.cfg && rd.cfg.kind === 'tags';
-    const S0 = st.S, want = journey ? 1 : st.lightsMode === 'on' ? 1 : st.lightsMode === 'off' ? 0 : (S0 && S0.lightsAuto ? 1 : 0);
+    const S0 = st.S, want = st.lightsMode === 'on' ? 1 : st.lightsMode === 'off' ? 0 : (S0 && S0.lightsAuto ? 1 : 0);
     const towards = (v, tgt, rate) => v + Math.max(-rate, Math.min(rate, tgt - v));
     const q = st.lightsQuick ? 3.5 : 1;   /* switched by hand: answer within a moment, not over seconds */
     st.L.string = towards(st.L.string, want, dtR * q / 2.6); st.L.lantern = towards(st.L.lantern, want, dtR * q / 1.4);
     st.L.van = towards(st.L.van, want, dtR * q / 1.2); st.L.fairy = towards(st.L.fairy, want, dtR * q / 1.6);
     if (st.lightsQuick && Math.abs(st.L.string - want) < 0.01) st.lightsQuick = 0;
     const Ls = Object.assign({}, st.L);
-    if (journey) { const ft = (performance.now() - rd.flick) / 1000; if (ft < 1.5) { const h = Math.sin(Math.floor(ft * 14) * 91.7) * 43758.5; Ls.string = (h - Math.floor(h)) > 0.45 ? 1 : 0.08; } else Ls.string = 1; }
     const night = S0 ? S0.night : 1;
     /* the fire is lit from golden hour to sunrise and left to smoulder by day; crickets after dark, birds at dawn and by day */
     const sAlt = S0 ? S0.sAlt : -20, smf = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -1472,7 +1432,6 @@
       const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
-    placeTags(performance.now());
     extras(dtR);
     syncWalkBar();
     /* the sea's verdict */
