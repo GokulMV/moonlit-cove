@@ -262,10 +262,10 @@ if (parts.includes('grid')) {
   let lo = 15, hi = 21.5;
   for (let k = 0; k < 7; k++) { const mid = (lo + hi) / 2; await setHour(mid); await run(1, { motion: 0, grab: false }); const a = await page.evaluate(() => window.__cove.st.S.sAlt); if (a > 3) lo = mid; else hi = mid; }
   console.log(`    sunset (sun 3° up) at ${((lo + hi) / 2).toFixed(2)}h`);
-  const hours = [['noon', 13], ['sunset', (lo + hi) / 2], ['night', 23]];
+  const hours = [['noon', 13], ['sunset', (lo + hi) / 2], ['night', 23]].filter(h => !process.env.GRID_HOURS || process.env.GRID_HOURS.split(',').includes(h[0]));
   for (const [tn, hour] of hours) {
     await setHour(hour);
-    for (const wx of ['clear', 'puffy', 'wispy', 'mackerel', 'overcast', 'storm']) {
+    for (const wx of (process.env.GRID_WX || 'clear,puffy,wispy,mackerel,overcast,storm').split(',')) {
       await setWx(wx);
       for (const [vn, yaw, pitch] of [['out', 0.2, 0.3], ['sun', null, 0.25]]) {
         let cam;
