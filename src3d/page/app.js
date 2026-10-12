@@ -1035,7 +1035,10 @@
     car.trackOdo += dist;
     const wNow = wheelWorld(car.x, car.z, car.h);
     if (!car.wheels) car.wheels = wNow;
-    if (car.trackOdo > 0.12) { Engine.trackStamp(wNow.map((w, i) => [car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, inWater ? 0.15 : 0.55])); car.wheels = wNow; car.trackOdo = 0; }
+    if (car.trackOdo > 0.12) {
+      if (!inWater && Engine.marks) wNow.forEach((w, i) => Engine.marks.tyre(i, car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, 0.85 + 0.15 * Math.min(1, Math.abs(car.v) / 6), sandWet(w[0], w[1]), st.t));
+      car.wheels = wNow; car.trackOdo = 0;
+    }
     /* water splashes */
     if (inWater && Math.abs(car.v) > 1.2 && performance.now() - car.splashT > 260) {
       car.splashT = performance.now(); const ss = Engine.surgeState();
@@ -1223,7 +1226,6 @@
     /* a step every stride's half, left and right in turn */
     wk.phase += Math.PI * dist / (0.55 + 0.21 * Math.abs(wk.v));
     if (Math.floor(wk.phase / Math.PI) !== Math.floor(ph0 / Math.PI)) footstep(wade);
-    if (Engine.trackFollow) Engine.trackFollow(wk.x);
     /* the head: on Auto it drifts from one view to the next, slowly; a look taken by hand is kept a few seconds, then let go */
     if (wk.auto) {
       if ((ai.gazeT -= dt) <= 0) pickGaze();
@@ -1246,14 +1248,15 @@
     const fd = pitch < -0.03 ? clamp(EYE / Math.sin(-pitch), 1.5, 40) : 40;
     wk.cam.focus += (fd - wk.cam.focus) * 0.08;
   }
-  /* a footprint, heel and ball, a little to the side of the line walked; fainter on wet sand, none in the water (a ripple
-     instead); and with sound on, a soft crunch */
+  /* how wet the sand is at a point: soaked at the water's edge, dry a few metres up the beach */
+  function sandWet(x, z) { const g = Layout.shoreDZ(x), up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g); return clamp(1 - (up - 0.4) / 2.6, 0, 1); }
+  /* a footprint, left and right in turn a hand's width either side of the line walked, toes the way the walker is going,
+     turned out a touch as feet are; deeper and darker in wet sand, none in the water (a ripple instead) */
   function footstep(wade) {
     wk.foot = -wk.foot;
-    const fx = -Math.sin(wk.h), fz = -Math.cos(wk.h), s = wk.foot * 0.1, x = wk.x + Math.cos(wk.h) * s + fx * 0.12, z = wk.z - Math.sin(wk.h) * s + fz * 0.12;
-    if (wade < 0.35) {
-      const a = 0.45 * (1 - wade * 2.2);
-      Engine.trackStamp([[x - fx * 0.075, z - fz * 0.075, x - fx * 0.07, z - fz * 0.07, 0.085, a], [x, z, x + fx * 0.075, z + fz * 0.075, 0.1, a]]);
+    const s = wk.foot * 0.095, x = wk.x + Math.cos(wk.h) * s, z = wk.z - Math.sin(wk.h) * s;
+    if (wade < 0.35 && Engine.marks) {
+      Engine.marks.foot(x, z, wk.h - wk.foot * 0.09, wk.foot < 0, sandWet(x, z), st.t);
       wk.prints++;
     } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
   }

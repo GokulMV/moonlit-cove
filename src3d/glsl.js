@@ -375,7 +375,7 @@ ${COMMON}
 ${SKY_FN}
 ${ART}
 uniform float uTime, uDay, uShadowK, uShadowOn;
-uniform sampler2D uNoise, uWater, uSand, uDecal, uRelief, uShadowMap, uTrack; uniform vec4 uTrackRect;
+uniform sampler2D uNoise, uWater, uSand, uDecal, uRelief, uShadowMap;
 uniform vec4 uDecalRect; uniform vec2 uShadowSize; uniform mat4 uShadowMatrix;
 uniform vec3 uAmb, uKeyDir, uKeyCol, uMoonGlit, uSunGlit;
 ${WAVEH}
@@ -646,12 +646,6 @@ void main(){
       vec2 e = vec2(0.02/uDecalRect.z, 0.02/uDecalRect.w);
       rg += vec2(texture2D(uRelief, duv + vec2(e.x, 0.0)).r - rel.r, texture2D(uRelief, duv + vec2(0.0, e.y)).r - rel.r)*4.5;
     }
-    { vec2 tu = (p - uTrackRect.xy)/uTrackRect.zw;
-      if (tu.x > 0.0 && tu.y > 0.0 && tu.x < 1.0 && tu.y < 1.0){
-        vec2 te = 1.0/vec2(2048.0, 860.0);
-        float t0 = texture2D(uTrack, tu).r, tx = texture2D(uTrack, tu + vec2(te.x, 0.0)).r, tz = texture2D(uTrack, tu + vec2(0.0, te.y)).r;
-        rel.b = max(rel.b, t0*0.35); rg += vec2(tx - t0, tz - t0)*2.2; rel.g = max(rel.g, t0*0.6);
-      } }
     float veg = smoothstep(-0.4, 1.4, p.y - vegZ(p.x) + (nm.r - 0.5)*1.6);
     float trample = rel.g;
     float dryness = smoothstep(-0.2, -3.5, s);

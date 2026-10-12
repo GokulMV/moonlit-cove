@@ -11,7 +11,7 @@ const Engine = (() => {
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
   let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = 0, skyMesh = null, groundMesh = null;
   const cork = { k: 0, to: 0, t0: 0, p0: null, r0: null };
-  let envSkyMat, envScene, pmrem, n3Tex, noiseT, trackCv, trackCx, trackTex, trackDirty = false;
+  let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const hash = x => { const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -376,7 +376,7 @@ const Engine = (() => {
   function moveCamp(ox, oz, camX) {
     Layout.setOrigin(ox, oz);
     rebuildCamp(); registerDyn(surge.dyn); surge.ripples.length = 0;
-    trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackDirty = true; trackInk = false;
+    if (marks) marks.clear();
     coastFollow(camX ?? Layout.camp.x);
     /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
     if (world) world.update(camX ?? Layout.camp.x, 250);
@@ -434,7 +434,7 @@ const Engine = (() => {
   const _e = new T.Euler(0, 0, 0, 'YXZ');
   function setVan(v) {
     const g = camp.vanGroup;
-    if (v.x !== undefined) { g.position.set(v.x, v.lift || 0, v.z); _e.set(v.roll || 0, v.heading, v.pitch || 0, 'YXZ'); g.quaternion.setFromEuler(_e); vanS.moved = true; trackFollow(v.x); }
+    if (v.x !== undefined) { g.position.set(v.x, v.lift || 0, v.z); _e.set(v.roll || 0, v.heading, v.pitch || 0, 'YXZ'); g.quaternion.setFromEuler(_e); vanS.moved = true; }
     for (const w of camp.vanWheels) { if (v.spin !== undefined) w.spin.rotation.z = -v.spin; if (w.front && v.steer !== undefined) w.steer.rotation.y = v.steer; }
     if (v.k !== undefined) vanS.k = v.k;
     if (v.brake !== undefined) vanS.brake = v.brake;
@@ -457,66 +457,7 @@ const Engine = (() => {
     Mats.U.uHead.value.set(hp.x, hp.y, hp.z, 1.3 * vanS.head); Mats.U.uHeadDir.value.set(fwd.x, -0.18, fwd.z).normalize();
   }
   const vanPose = () => { const g = camp.vanGroup; _e.setFromQuaternion(g.quaternion, 'YXZ'); return { x: g.position.x, z: g.position.z, heading: _e.y }; };
-  /* tyre tracks: segments stamped into a canvas the sand shader reads */
-  /* tyre tracks live in a window of sand that follows the van; the sea smooths them away where it runs up the beach */
-  const TRK = { W: 2048, H: 860, mw: 96, md: 40, z0: -30 };
-  function trackFollow(cx) {
-    const R = gU.uTrackRect.value; if (Math.abs(cx - (R.x + R.z / 2)) < R.z * 0.22) return;
-    const nx = Math.round(cx - R.z / 2), dpx = Math.round((R.x - nx) * TRK.W / R.z);
-    const tmp = document.createElement('canvas'); tmp.width = TRK.W; tmp.height = TRK.H; tmp.getContext('2d').drawImage(trackCv, 0, 0);
-    trackCx.fillStyle = '#000'; trackCx.fillRect(0, 0, TRK.W, TRK.H); trackCx.drawImage(tmp, dpx, 0);
-    R.x -= dpx * R.z / TRK.W; trackDirty = true;
-  }
-  /* (a walker's footprints need the window where they are walking, not where the van is) */
-  Object.assign(api, { trackFollow });
-  /* the sea smooths the tracks (and whatever else is pressed into that canvas) only where it really runs: each wave to
-     its own reach, tongue for tongue, and most where the water stands deepest and longest, so they wear away by degrees
-     and unevenly, and their worn ends follow the waves. It rubs out through a coarse mask, a quarter metre a cell. The
-     canvas holds 8 bits, which a very light touch can't wear down, so that is dealt out as the odd firmer dab instead.
-     Until something has been pressed in (trackStamp sets trackInk) there is nothing to wash, nor to send to the GPU */
-  const WM = { w: 384, h: 160, min: 0.1 };
-  let washT = 0, washWt = null, washCv = null, washCx = null, washImg = null, trackInk = false;
-  function trackWash(wt) {
-    const now = performance.now(); if (now - washT < 220) return; washT = now;
-    const dt = washWt === null ? 0 : Math.min(1, wt - washWt); washWt = wt;
-    if (!trackInk || !(dt > 0)) return;
-    if (!washCv) { washCv = document.createElement('canvas'); washCv.width = WM.w; washCv.height = WM.h; washCx = washCv.getContext('2d'); washImg = washCx.createImageData(WM.w, WM.h); }
-    const R = gU.uTrackRect.value, px = washImg.data, cw = R.z / WM.w, ch = R.w / WM.h;
-    const tide = gU.uWv.value.filter(W => W.y > 0).map(W => [W.x, W.y, W.z, W.w, seedW(W)]);
-    px.fill(0);
-    for (let i = 0; i < WM.w; i++) {
-      const x = R.x + (i + 0.5) * cw, g = shoreDZ(x), k = Math.sqrt(1 + g * g), sz = Layout.shoreZ(x);
-      /* how far up the sand the water is here and now, of every swell on the beach */
-      let top = -0.3;
-      for (const [x0, amp, ph, ob, sd] of tide) {
-        const T_ = tsOf(amp), tau = wt - (x0 + 0.9 * Math.sin(x * 0.11 + ph) + x * 0.03 * ob); if (tau <= 0 || tau > T_ + 1) continue;
-        const [Rw, dl] = reach(x, amp, sd), u = (tau - dl) / T_; if (u > 0 && u < 1) top = Math.max(top, swashEdge(Rw, u));
-      }
-      for (const w of surge.waves) {
-        const amp = userAmpJS(w, x, wt); if (amp < 0.02) continue;
-        const T_ = tsOf(amp), [Rw, dl] = reach(x, amp, seedU(w)), u = (wt - w.x - dl) / T_; if (u > 0 && u < 1) top = Math.max(top, swashEdge(Rw, u));
-      }
-      const j0 = Math.max(0, Math.floor((sz - 3.5 - R.y) / ch)), j1 = Math.min(WM.h - 1, Math.ceil((sz + top * k - R.y) / ch));
-      for (let j = j0; j <= j1; j++) {
-        const z = R.y + (j + 0.5) * ch, r = (z - sz) / k, d = top - r; if (d <= 0) continue;
-        /* gone soonest in the sea and under deep water, slowest at the thin edge, and patchily */
-        const n = 0.55 + 0.25 * Math.sin(x * 2.3 + 1.7 * Math.sin(z * 1.9)) + 0.2 * Math.sin(z * 3.1 + 1.3 * Math.sin(x * 1.7 + 0.5));
-        const a = 1 - Math.exp(-dt * (r < -0.3 ? 1.5 : 0.35 * Math.min(1, d / 0.5) * (0.4 + n)));
-        if (a >= WM.min) px[(j * WM.w + i) * 4 + 3] = a * 255;
-        else if (Math.random() < a / WM.min) px[(j * WM.w + i) * 4 + 3] = WM.min * 255;
-      }
-    }
-    washCx.putImageData(washImg, 0, 0); trackCx.drawImage(washCv, 0, 0, TRK.W, TRK.H); trackDirty = true;
-  }
-  function trackStamp(segs) {
-    const R = gU.uTrackRect.value, sx = TRK.W / R.z, sz = TRK.H / R.w, x = trackCx;
-    x.lineCap = 'round'; trackInk = true;
-    for (const [x0, z0, x1, z1, w, a] of segs) {
-      x.strokeStyle = `rgba(255,255,255,${a})`; x.lineWidth = w * sx;
-      x.beginPath(); x.moveTo((x0 - R.x) * sx, (z0 - R.y) * sz); x.lineTo((x1 - R.x) * sx, (z1 - R.y) * sz); x.stroke();
-    }
-    trackDirty = true;
-  }
+  /* footprints and tyre tracks are decals pressed into the sand (marks.js) */
   /* the van (or anything) shoving props: a hit with its own direction, no backwash */
   function knock(x, z, rad, vx, vz, wt) {
     const sp = Math.hypot(vx, vz), hits = [];
@@ -632,11 +573,8 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uUw: { value: [0, 1, 2].map(() => new T.Vector4()) }, uRip: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uNearRect: { value: new T.Vector4(-48, -62, 48, -2) }, uTrack: { value: null }, uTrackRect: { value: new T.Vector4(-48, -30, 96, 40) }, uDbgG: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) }
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uUw: { value: [0, 1, 2].map(() => new T.Vector4()) }, uRip: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uNearRect: { value: new T.Vector4(-48, -62, 48, -2) }, uDbgG: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) }
     });
-    { const c = document.createElement('canvas'); c.width = TRK.W; c.height = TRK.H; const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, TRK.W, TRK.H);
-      trackCv = c; trackCx = x; trackTex = new T.CanvasTexture(c); trackTex.colorSpace = T.NoColorSpace; trackTex.flipY = false; trackTex.minFilter = T.LinearFilter; trackTex.generateMipmaps = false; gU.uTrack.value = trackTex;
-      gU.uTrackRect.value.set(-TRK.mw / 2, TRK.z0, TRK.mw, TRK.md); }
     groundMat = new T.ShaderMaterial({ uniforms: gU, vertexShader: GLSL.GROUND_VS, fragmentShader: GLSL.GROUND_FS, defines: { FAR: 1 } });
     const ground = new T.Mesh(new T.PlaneGeometry(40000, 40000, 160, 160), groundMat);   /* in cells, or depth goes ragged across one huge triangle */
     ground.rotation.x = -Math.PI / 2; ground.position.set(0, 0, -19800); ground.frustumCulled = false; scene.add(ground); groundMesh = ground;
@@ -657,6 +595,7 @@ const Engine = (() => {
     world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
+    marks = Marks.build(natG); Object.assign(api, { marks });
     post = makePost();
     return { casters: nCast };
   }
@@ -743,8 +682,7 @@ const Engine = (() => {
     if (pitch.on) { const P = pitch.k; L.string *= P.string; L.fairy *= P.string; L.lantern *= P.lantern; F.i *= P.fire; F.smoke *= P.fire; F.steam *= P.fire; }
     if (camp.rugMat && surge.rugWet != null) { const e = sm01(surge.rugWet, surge.rugWet + 1.5, wt); camp.rugMat.color.setRGB(1 - 0.5 * e, 1 - 0.5 * e, 1 - 0.46 * e); }
     Mats.U.uLights.value.set(L.string, L.lantern, L.van * vf * (1 - vanS.k), L.fairy);
-    trackWash(wt);
-    if (trackDirty) { trackTex.needsUpdate = true; trackDirty = false; }
+    if (marks) marks.update(t, wt, S, swashFront);
     Mats.U.uFire.value.set(F.i, ff, F.smoke, F.steam);
     if (o.lightK) Mats.U.uLightK.value.set(...o.lightK);
     uBulb.uProg.value = L.string; uFairy.uProg.value = L.fairy > 0 ? 1 : 0; uFairy.uI.value = 0.5 * L.fairy * vf;
@@ -900,7 +838,7 @@ const Engine = (() => {
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post };
-  Object.assign(api, { init, warm, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, trackStamp, knock });
+  Object.assign(api, { init, warm, render, project, paintMenu, book, books, origin, prop, corkOut, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });
   Object.defineProperties(api, { world: { get: () => world }, life: { get: () => life }, paper: { get: () => paper }, camera: { get: () => camera }, renderer: { get: () => R }, scene: { get: () => scene } });
   return api;
 })();
