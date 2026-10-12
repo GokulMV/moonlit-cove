@@ -6,7 +6,7 @@ const hour = +(process.argv[2] || 21);
 const { browser, page, logs } = await open({ w: 1280, h: 760, rs: 0.7, hour });
 let fails = 0; const check = (ok, what) => { console.log((ok ? '  ok   ' : '  FAIL ') + what); if (!ok) fails++; };
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
-await page.evaluate(() => { window.__coveDtCap = 0.5; });
+await page.evaluate(() => { window.__coveDtCap = 1.0; });
 const n = await page.evaluate(() => Engine.seatCount());
 check(n >= 6, `${n} seats`);
 for (let i = 0; i < n; i++) {

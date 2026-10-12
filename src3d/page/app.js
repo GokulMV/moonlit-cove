@@ -1348,6 +1348,14 @@
 
   const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   const lerpCam = (a, b, t) => ({ pos: a.pos.map((v, i) => v + (b.pos[i] - v) * t), look: a.look.map((v, i) => v + (b.look[i] - v) * t), fov: a.fov + (b.fov - a.fov) * t, focus: (a.focus || 25) + ((b.focus || 25) - (a.focus || 25)) * t });
+  /* the same, but the eyes turn (by yaw and pitch, the short way round) rather than their look point sliding: for walking
+     up to a seat and turning round to sit in it */
+  function swingCam(a, b, t) {
+    const dir = c => { const d = [c.look[0] - c.pos[0], c.look[1] - c.pos[1], c.look[2] - c.pos[2]], l = Math.hypot(...d) || 1; return { yaw: Math.atan2(d[0], -d[2]), pitch: Math.asin(Math.max(-1, Math.min(1, d[1] / l))), l }; };
+    const A = dir(a), B = dir(b), yaw = A.yaw + wrapA(B.yaw - A.yaw) * t, pitch = A.pitch + (B.pitch - A.pitch) * t, l = A.l + (B.l - A.l) * t, cp = Math.cos(pitch);
+    const pos = a.pos.map((v, i) => v + (b.pos[i] - v) * t);
+    return { pos, look: [pos[0] + Math.sin(yaw) * cp * l, pos[1] + Math.sin(pitch) * l, pos[2] - Math.cos(yaw) * cp * l], fov: a.fov + (b.fov - a.fov) * t, focus: (a.focus || 25) + ((b.focus || 25) - (a.focus || 25)) * t };
+  }
 
   /* (filming: the film maker stops the page's own frames and steps the scene itself, one exact frame at a time) */
   const film = { on: false, dt: 0 };
@@ -1373,7 +1381,9 @@
       const tv = bookView(), a = rd.cam ? 1 - Math.exp(-dtR * 4) : 1;
       rd.cam = rd.cam ? lerpCam(rd.cam, tv, a) : tv; st.to = rd.cam;
     }
-    let cam = !st.to || (st.to === orbC && st.camT >= 1) ? orbC : lerpCam(st.from, st.to, ease(st.camT));
+    let cam = !st.to || (st.to === orbC && st.camT >= 1) ? orbC : (st.to.swing ? swingCam : lerpCam)(st.from, st.to, ease(st.camT));
+    /* walking up to a seat: a step's bob */
+    if (seat.on && seat.approach && seat.approach.stage === 1 && seat.approach.walk && !reduced) { const d = ease(st.camT) * seat.approach.dist; cam = Object.assign({}, cam, { pos: cam.pos.slice() }); cam.pos[1] -= 0.028 * (0.5 - 0.5 * Math.cos(2 * Math.PI * d / 0.72)); }
     st.cur = cam;
     /* driving: physics, van pose, chase camera, sound */
     car.k = Math.max(0, Math.min(1, car.k + (car.on ? dtR / 1.6 : -dtR / 1.8)));
@@ -1390,6 +1400,7 @@
     if (wk.on) stepWalk(dtR);
     if (wk.camK > 0) { const e = ease(wk.camK); cam = e >= 1 ? wk.cam : lerpCam(cam, wk.cam, e); }
     if (window.__coveCamFix) cam = window.__coveCamFix;     /* (the test bench can put the camera anywhere) */
+    st.camFinal = cam;
     if (sound.amb) sound.amb.engine(car.on, Math.min(1, Math.abs(car.v) / 14), drv ? drv.thr : 0, Math.min(1, Math.abs(car.v) / 8));
     const aspect = view.w / view.h;
     if (aspect < 1.2 && !rd.on) cam = Object.assign({}, cam, { fov: Math.min(80, cam.fov * (1 + (1.2 - aspect) * 0.75)) });
@@ -1644,19 +1655,41 @@
     const breathe = reduced ? 0 : 0.0035 * Math.sin(performance.now() / 1000 * 1.55);
     const yaw0 = P.yaw, e = [P.eye[0] + Math.sin(yaw0) * fwd, P.eye[1] + drop + breathe, P.eye[2] - Math.cos(yaw0) * fwd];
     const yaw = yaw0 + seat.yaw, pitch = P.pitch + seat.pitch - 0.08 * (1 - k), cp = Math.cos(pitch) * 8;
-    return { pos: e, look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: P.kind === 'rug' ? 54 : 58, focus: P.kind === 'rug' ? 1.2 : 2.6 };
+    return { pos: e, look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: P.kind === 'rug' ? 54 : 58, focus: P.kind === 'rug' ? 1.2 : 2.6, swing: true };
+  }
+  /* where you stand before you sit: just in front of a chair or the log, looking at it; just behind a cushion, looking
+     over the table */
+  function standCam(P) {
+    const fx = Math.sin(P.yaw), fz = -Math.cos(P.yaw), off = P.kind === 'rug' ? -0.38 : 0.78, x = P.eye[0] + fx * off, z = P.eye[2] + fz * off;
+    const g = Math.max(0, Engine.world ? Engine.world.land(x, z) : 0);
+    const look = P.kind === 'rug' ? [P.eye[0] + fx * 1.6, 0.45, P.eye[2] + fz * 1.6] : [P.eye[0] - fx * 0.3, 0.72, P.eye[2] - fz * 0.3];
+    return { pos: [x, g + EYE, z], look, fov: 58, focus: 2, swing: true };
+  }
+  /* walking stops where you are: the eyes go on from there (the explore camera does not come back first) */
+  function endWalkHere() {
+    if (!wk.on) return;
+    wk.on = false; wk.camK = 0; keys.clear(); touch.x = touch.y = 0;
+    document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
   }
   function sit(i) {
     if (!ready || !st.entered || car.on || (seat.on && seat.i === i) || !(i >= 0 && i < Engine.seatCount())) return;
     if (rd.on || st.chapter) openChapter(null);
     toggleSettings(false);
-    const moving = seat.on;
-    if (wk.on) stopWalk();
+    const moving = seat.on, walking = wk.on;
+    /* from where the eyes are now: the walker's, the seat you are getting up from, or the explore camera */
+    const from = JSON.parse(JSON.stringify(st.camFinal || st.cur || V.wide));
+    if (walking) { endWalkHere(); seat.wasWalking = true; } else if (!moving) seat.wasWalking = false;
     if (moving) Engine.seatProps(seat.i, false);
-    Object.assign(seat, { on: true, i, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null });
+    Object.assign(seat, { on: true, i, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null, pose: Engine.seatPose(i) });
     Engine.seatProps(i, true);
-    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = seatCam(); st.camT = 0; st.camDur = moving ? 1.6 : camDur(st.from, st.to);
-    seat.sitAt = performance.now() + st.camDur * 1000 * 0.62;
+    /* up (if you were sitting), over to the seat at standing height, walking if you were walking; then round and down */
+    const P = Engine.seatPose(i), stand = standCam(P), dist = Math.hypot(from.pos[0] - stand.pos[0], from.pos[1] - stand.pos[1], from.pos[2] - stand.pos[2]);
+    st.from = from; st.camT = 0;
+    if (dist > 0.35) {
+      seat.approach = { stage: 1, stand, dist, walk: walking || moving };
+      st.to = stand; st.camDur = clamp(walking || moving ? dist / 1.4 : 0.9 + dist / 9, 0.8, walking || moving ? 7 : 2.4);
+      seat.sitAt = Infinity;
+    } else { seat.approach = null; st.to = seatCam(); st.camDur = 1.5; seat.sitAt = performance.now() + 1500 * 0.5; }
     document.body.classList.add('seated'); document.body.classList.remove('seat-hint-off'); $('seatHud').hidden = false;
     clearTimeout(seat.hintT); seat.hintT = setTimeout(() => document.body.classList.add('seat-hint-off'), 7000);
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
@@ -1683,7 +1716,17 @@
   }
   /* getting up switches the radio off: it is the seat's */
   function leaveSeat() { if (!seat.on) return; Engine.seatProps(seat.i, false); seat.on = false; seat.drag = null; document.body.classList.remove('seated', 'look-drag'); $('seatHud').hidden = true; radioOff(); }
-  function standUp() { if (!seat.on) return; leaveSeat(); goView('wide'); }
+  function standUp() {
+    if (!seat.on) return;
+    const P = seat.pose, back = seat.wasWalking; leaveSeat();
+    if (back && P) {
+      /* you walked here: you get up and walk on, from in front of the seat */
+      /* (the eyes rise from the seat into the walker's as the walk view blends in) */
+      const s = standCam(P); startWalk(); wk.x = s.pos[0]; wk.z = s.pos[2]; wk.h = wk.hT = -P.yaw; wk.hy.v = 0; wk.my = 0; walkCamera();
+      return;
+    }
+    goView('wide');
+  }
   $('bStand').addEventListener('click', standUp);
   $('bSeatPrev').addEventListener('click', () => nextSeat(-1)); $('bSeatNext').addEventListener('click', () => nextSeat(1));
   $('bTurnL').addEventListener('click', () => turnChair(1)); $('bTurnR').addEventListener('click', () => turnChair(-1));
@@ -2148,7 +2191,12 @@
     /* opening something else, or taking the van, gets you up out of the chair */
     if (seat.on && (rd.on || car.on || wk.on || st.chapter)) { leaveSeat(); if (!rd.on && !st.chapter && !wk.on) goView('wide'); }
     stepChairs(dt); stepSketch(dt); stepToolbox(dt);
-    if (seat.on) { const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a; st.to = seatCam(); }
+    if (seat.on) {
+      const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a;
+      const ap = seat.approach;
+      if (ap && ap.stage === 1) { if (st.camT >= 1) { ap.stage = 2; st.from = JSON.parse(JSON.stringify(ap.stand)); st.camT = 0; st.camDur = 1.5; seat.sitAt = performance.now() + 1500 * 0.5; st.to = seatCam(); } }
+      else { if (ap && st.camT >= 1) seat.approach = null; st.to = seatCam(); }
+    }
     if (st.chapter !== 'wishes' && $('drawer').classList.contains('wishes-mode')) $('drawer').classList.remove('wishes-mode');
     wish.look += ((st.chapter === 'wishes' ? 1 : 0) - wish.look) * Math.min(1, dt * 1.5); Engine.setBoardLook(wish.look);
     /* the dial lights while it plays (and flickers while it tunes); the needle swings to the station */

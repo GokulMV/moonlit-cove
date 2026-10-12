@@ -60,5 +60,16 @@ const Models = (() => {
     g.translate(0, 0, -depth / 2); g.computeVertexNormals(); return g;
   }
   const lit = (hex, p = {}, key) => Mats.lit(Object.assign({ color: C(hex) }, p), key);
-  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit };
+  /* a tube along a curve whose radius follows r(t), t 0 to 1 along it; sx, sy squash its section (a strap, say) */
+  function tube(curve, segs, radial, r, { sx = 1, sy = 1, caps = false } = {}) {
+    const fr = curve.computeFrenetFrames(segs, false), pos = [], uv = [], idx = [];
+    for (let i = 0; i <= segs; i++) { const t = i / segs, p = curve.getPointAt(t), N = fr.normals[i], B = fr.binormals[i], rr = r(t);
+      for (let k = 0; k <= radial; k++) { const a = k / radial * Math.PI * 2, c = Math.cos(a) * rr * sx, s = Math.sin(a) * rr * sy;
+        pos.push(p.x + N.x * c + B.x * s, p.y + N.y * c + B.y * s, p.z + N.z * c + B.z * s); uv.push(k / radial, t); } }
+    for (let i = 0; i < segs; i++) for (let k = 0; k < radial; k++) { const a = i * (radial + 1) + k, b = a + radial + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    if (caps) for (const e of [0, segs]) { const c = curve.getPointAt(e / segs), m = pos.length / 3; pos.push(c.x, c.y, c.z); uv.push(0.5, 0.5);
+      for (let k = 0; k < radial; k++) { const a = e * (radial + 1) + k; e ? idx.push(m, a, a + 1) : idx.push(m, a + 1, a); } }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit, tube };
 })();

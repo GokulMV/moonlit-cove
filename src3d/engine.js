@@ -20,7 +20,8 @@ const Engine = (() => {
   const ENV_SIZE = 128, ENV_EVERY = 1.6, ENV_FADE = 1.4;
   const env = { cube: null, cam: null, out: null, from: null, to: null, mat: null, qs: null, qc: null, face: -1, at: -1e9, k: 1, want: new Float64Array(8), built: new Float64Array(8).fill(NaN) };
   /* scratch for render(): a frame makes no garbage of its own */
-  const R3 = { key: new T.Vector3(), top: new T.Vector3(), side: new T.Vector3(), right: new T.Vector3(), fc: new T.Vector3() }, haze4 = new T.Vector4();
+  const R3 = { key: new T.Vector3(), top: new T.Vector3(), side: new T.Vector3(), right: new T.Vector3(), fc: new T.Vector3(), sun: new T.Vector3() }, haze4 = new T.Vector4(), sunScr4 = new T.Vector4();
+  let lastCloudT = null;
   const Lw = { string: 0, lantern: 0, van: 0, fairy: 0 }, Fw = { i: 0, smoke: 0, steam: 0 };
   const fxP = { smokeLo: new T.Vector3(), smokeHi: new T.Vector3(), steamLo: new T.Vector3(), steamHi: new T.Vector3(), bfly: [0, 0, 0] };
   const ppFire = { dbg: 0, I: 0, flick: 0, t: 0, fc: R3.fc, n3: null }, pp = {};
@@ -46,12 +47,21 @@ const Engine = (() => {
     const fire = mk(GLSL.FIRE_FS, { uDepth: { value: null }, uN3: { value: null }, uInvProj: { value: new T.Matrix4() }, uCamW: { value: new T.Matrix4() }, uCamP: { value: new T.Vector3() }, uFC: { value: new T.Vector3() }, uT: { value: 0 }, uI: { value: 1 }, uFlick: { value: 0.5 }, uDbgF: { value: 0 } });
     Object.assign(fin.uniforms, { uAO: { value: null }, uFire: { value: null }, uAOk: { value: 0 }, uFireOn: { value: 0 }, uHaze: { value: new T.Vector4() }, uNoiseT: { value: null }, uRain: { value: 0 }, uRainT: { value: 0 }, uRainSlant: { value: 0.12 } });
     Object.assign(down.uniforms, { uFire: { value: null }, uFireOn: { value: 0 } });
+    fin.uniforms.uSunScr = { value: new T.Vector4() };
+    /* the clouds: marched at half size before the scene, each frame blended into the last (turned to where it now lies on
+       screen), so the grain of a few dozen steps smooths away; the sky draws them from it */
+    const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uPrevVP: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uPrev: { value: null }, uBlend: { value: 0.15 }, uHasPrev: { value: 0 }, uFrame: { value: 0 }, uEnv: { value: 0 } };
+    for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uN3', 'uCD', 'uCO', 'uCQ']) cloudU[k] = su0[k];
+    const cloudM = mk(GLSL.CLOUD_FS, cloudU);
+    let clRT = [], ci = 0, clPrev = false, clFrame = 0, clCam = new T.Vector3(1e9, 0, 0), clT = -1e9;
+    const _vr = new T.Matrix4();
     let rt = null, bl = [], dofRT = null, aoRT = null, aoBRT = null, fireRT = null, W = 0, H = 0, S = 0;
     function resize(w, h, samples) {
       if (w === W && h === H && samples === S) return;
       W = w; H = h; S = samples;
-      if (rt) { rt.dispose(); rt.depthTexture.dispose(); bl.forEach(b => b.dispose()); dofRT.dispose(); aoRT.dispose(); aoBRT.dispose(); fireRT.dispose(); }
+      if (rt) { rt.dispose(); rt.depthTexture.dispose(); bl.forEach(b => b.dispose()); dofRT.dispose(); aoRT.dispose(); aoBRT.dispose(); fireRT.dispose(); clRT.forEach(c => c.dispose()); }
       const hw = Math.max(1, w >> 1), hh = Math.max(1, h >> 1);
+      clRT = [0, 1].map(() => new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter })); clPrev = false;
       aoRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false }); aoBRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false });
       fireRT = new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false });
       rt = new T.WebGLRenderTarget(w, h, { type: T.HalfFloatType, samples, depthBuffer: true });
@@ -63,6 +73,18 @@ const Engine = (() => {
     function render(p) {
       const sync = () => { if (p.prof) { const g = R.getContext(); g.finish(); const fb = g.getParameter(g.FRAMEBUFFER_BINDING); if (fb) { const px = new Float32Array(4); g.readPixels(0, 0, 1, 1, g.RGBA, g.FLOAT, px); } else { const px = new Uint8Array(4); g.readPixels(0, 0, 1, 1, g.RGBA, g.UNSIGNED_BYTE, px); } p.prof.push(performance.now()); } };
       sync();
+      if (p.clouds) {
+        /* a jump (camp moved, a new view far away) or a leap of the clouds' clock starts the blend afresh */
+        if (camera.position.distanceTo(clCam) > 40 || Math.abs(p.cloudT - clT) > 20) clPrev = false;
+        clCam.copy(camera.position); clT = p.cloudT;
+        const c = cloudM.uniforms; c.uInvProj.value.copy(camera.projectionMatrixInverse); c.uCamRot.value.setFromMatrix4(camera.matrixWorld);
+        c.uPrev.value = clRT[1 - ci].texture; c.uHasPrev.value = clPrev ? 1 : 0; c.uBlend.value = p.cloudBlend; c.uFrame.value = (clFrame++) % 997;
+        quad.material = cloudM; R.setRenderTarget(clRT[ci]); R.render(qs, qc);
+        su0.uCB.value = clRT[ci].texture; su0.uCBOn.value = 1; su0.uCBInv.value.set(1 / rt.width, 1 / rt.height);
+        /* (for the next frame: where a direction lay on this frame's screen) */
+        _vr.copy(camera.matrixWorldInverse).setPosition(0, 0, 0); c.uPrevVP.value.copy(camera.projectionMatrix).multiply(_vr);
+        ci = 1 - ci; clPrev = true;
+      } else su0.uCBOn.value = 0;
       R.setRenderTarget(rt); R.clear(); R.render(scene, camera);
       if (p.ao > 0.01) {
         const a = ssao.uniforms; a.uDepth.value = rt.depthTexture; a.uTexel.value.set(1 / rt.width, 1 / rt.height);
@@ -99,13 +121,13 @@ const Engine = (() => {
       u.uAO.value = aoBRT.texture; u.uAOk.value = p.ao || 0; u.uFire.value = fireRT.texture; u.uFireOn.value = fireOn ? 1 : 0;
       u.uHaze.value.copy(p.haze || new T.Vector4()); u.uNoiseT.value = p.noiseT; u.uRain.value = p.rain || 0; u.uRainT.value = performance.now() / 1000; u.uRainSlant.value = p.rainSlant ?? 0.12;
       u.uScene.value = rt.texture; u.uBloom.value = bl[0].texture; u.uRes.value.set(canvas.width, canvas.height);
-      u.uExp.value = p.exp; u.uBloomK.value = p.bloomK; u.uFade.value = p.fade; u.uTime.value = p.t; u.uNight.value = p.night;
+      u.uExp.value = p.exp; u.uBloomK.value = p.bloomK; u.uFade.value = p.fade; u.uTime.value = p.t; u.uNight.value = p.night; u.uSunScr.value.copy(p.sunScr || new T.Vector4());
       R.setRenderTarget(null); R.render(qs, qc);
       sync();
     }
     /* for warming up: every pass's material, and a way to compile one */
     const compile = m => { quad.material = m; R.compile(qs, qc); };
-    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire], compile };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM], compile };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -534,7 +556,7 @@ const Engine = (() => {
     skyMat = new T.ShaderMaterial({
       uniforms: Object.assign({}, skyU, { uEnv: { value: 0 }, uCloudLit: { value: new T.Vector3() }, uStars: { value: 1 }, uTime: { value: 0 }, uPhaseC: { value: 1 }, uPhaseSign: { value: 1 }, uCloud: { value: 0.85 }, uMoonR: { value: 0.0175 }, uSunR: { value: 0.016 }, uNoise: { value: noiseTex },
         uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.55, -0.83) }, uCloudT: { value: 0 },
-        uN3: { value: null }, uCD: { value: null }, uCO: { value: new T.Vector3() }, uCQ: { value: 1 } }),
+        uN3: { value: null }, uCD: { value: null }, uCO: { value: new T.Vector3() }, uCQ: { value: 1 }, uCB: { value: null }, uCBOn: { value: 0 }, uCBInv: { value: new T.Vector2(1, 1) } }),
       vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false
     });
     const sky = new T.Mesh(new T.SphereGeometry(5000, 48, 24), skyMat); sky.renderOrder = 1000; sky.frustumCulled = false; scene.add(sky); skyMesh = sky;
@@ -637,6 +659,9 @@ const Engine = (() => {
        or a resized window shows the frame in only part of it */
     if (canvas.width !== lastCW || canvas.height !== lastCH) { lastCW = canvas.width; lastCH = canvas.height; R.setSize(lastCW, lastCH, false); }
     const S = Sky.compute(o.ms, o.loc), t = o.t;
+    /* under a deck of cloud the sun no longer lights the scene directly: its light dims and its shadows soften away */
+    { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0;
+      if (ov > 0) { const k = 1 - 0.75 * ov; S.keyCol = S.keyCol.map(v => v * k); S.shadowK *= 1 - 0.85 * ov; } }
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
@@ -666,7 +691,7 @@ const Engine = (() => {
     const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; su.uCO.value.copy(camera.position); su.uCQ.value = o.cloudQ ?? 1; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
     if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }
     /* under a deck of cloud the sun and moon no longer glitter on the sea */
-    { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, g = 1 - 0.88 * ov;
+    { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, g = 1 - ov;
       V(gU.uAmb, S.amb); V(gU.uKeyDir, S.keyDir); V(gU.uKeyCol, S.keyCol); gU.uMoonGlit.value.set(S.moonGlit[0] * g, S.moonGlit[1] * g, S.moonGlit[2] * g); gU.uSunGlit.value.set(S.sunGlit[0] * g, S.sunGlit[1] * g, S.sunGlit[2] * g); }
     gU.uDay.value = S.day; gU.uShadowK.value = S.shadowK; gU.uWaveT.value = o.waveT ?? t; Mats.U.uTime.value = t;
     gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0;
@@ -756,6 +781,12 @@ const Engine = (() => {
     if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
     pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;
     pp.dofK = o.dof === false ? 0 : 4.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.003 + 0.008 * soft; pp.veil = 0.05 * soft;
+    { const sd = S.sunDirV, sw = R3.sun.set(camera.position.x + sd[0] * 1000, camera.position.y + sd[1] * 1000, camera.position.z + sd[2] * 1000).project(camera);
+      const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, up = Math.max(0, Math.min(1, (S.sAlt + 1.5) / 3));
+      const on = sw.z < 1 && Math.abs(sw.x) < 1.3 && Math.abs(sw.y) < 1.3 ? up * (1 - ov) * 0.9 : 0;
+      pp.sunScr = sunScr4.set(sw.x * 0.5 + 0.5, sw.y * 0.5 + 0.5, on, 0); }
+    pp.clouds = o.cloudBuf !== false; pp.cloudT = o.cloudT ?? t;
+    pp.cloudBlend = (su.uFlash.value > 0.05 ? 0.6 : 0.14) + Math.min(0.4, Math.abs((o.cloudT ?? t) - (lastCloudT ?? (o.cloudT ?? t))) * 0.8); lastCloudT = o.cloudT ?? t;
     pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);

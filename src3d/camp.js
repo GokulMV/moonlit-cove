@@ -458,20 +458,10 @@ void main(){
     }
     g.add(at(mesh(new T.TorusGeometry(0.03, 0.007, 6, 16), ironM), 0, 1.47, 0)).children.at(-1).rotation.x = Math.PI / 2;
     const linkG = new T.TorusGeometry(0.013, 0.0032, 5, 10);
-    let k = 0; for (let y = 1.43; y > 1.03; y -= 0.031, k++) { const l = mesh(linkG, ironM, true, false); l.scale.set(1, 1.55, 1); l.rotation.y = k % 2 ? Math.PI / 2 : 0; at(l, 0, y, 0); g.add(noFire(l)); }
-    kettle = grp(0, 0.72, 0, -0.9); g.add(kettle);
-    const enamelT = Mats.tex(Paint.enamel(), { repeat: true });
-    const enamelM = Mats.lit({ map: enamelT, roughness: 0.28 }, 'pot'), sootM = L('#141110', { roughness: 0.9 }, 'pot'), rimM = L('#101a28', { roughness: 0.3 }, 'pot');
-    kettle.add(noFire(at(mesh(new T.CylinderGeometry(0.074, 0.094, 0.2, 28), enamelM), 0, 0.1, 0)));
-    kettle.add(noFire(at(mesh(new T.CylinderGeometry(0.0955, 0.0965, 0.045, 28, 1, true), sootM), 0, 0.02, 0)));
-    kettle.add(noFire(at(mesh(new T.CylinderGeometry(0.094, 0.094, 0.006, 28), sootM), 0, 0.002, 0)));
-    kettle.add(noFire(at(mesh(new T.TorusGeometry(0.074, 0.006, 6, 28), rimM), 0, 0.2, 0))).children.at(-1).rotation.x = Math.PI / 2;
-    kettle.add(noFire(at(mesh(new T.CylinderGeometry(0.058, 0.07, 0.03, 26), enamelM), 0, 0.215, 0)));
-    kettle.add(noFire(at(mesh(new T.SphereGeometry(0.02, 12, 8), new T.MeshStandardMaterial({ color: C('#a8c8d8'), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.8 })), 0, 0.24, 0)));
-    const spout = mesh(new T.CylinderGeometry(0.011, 0.022, 0.13, 12), enamelM); spout.rotation.z = 0.85; at(spout, -0.112, 0.125, 0); kettle.add(noFire(spout));
-    const hdl = mesh(new T.TorusGeometry(0.058, 0.008, 6, 16, Math.PI), rimM); hdl.rotation.z = -Math.PI / 2; at(hdl, 0.085, 0.11, 0); kettle.add(noFire(hdl));
-    const bail = mesh(new T.TorusGeometry(0.094, 0.0035, 5, 24, Math.PI), ironM); bail.rotation.y = Math.PI / 2; at(bail, 0, 0.19, 0); bail.scale.set(1, 1.05, 1); kettle.add(noFire(bail));
-    for (const z of [-0.095, 0.095]) kettle.add(noFire(at(mesh(new T.SphereGeometry(0.009, 8, 6), rimM), 0, 0.19, z)));
+    let k = 0, lowY = 1.43; for (let y = 1.43; y > 1.1; y -= 0.031, k++) { const l = mesh(linkG, ironM, true, false); l.scale.set(1, 1.55, 1); l.rotation.y = k % 2 ? Math.PI / 2 : 0; at(l, 0, y, 0); g.add(noFire(l)); lowY = y; }
+    /* the coffee pot, its S-hook through the last link (models/camp/coffeepot.js) */
+    const pot = Models.make('camp/coffeepot'); pot.traverse(o => { if (o.isMesh) o.userData.noFireShadow = true; });
+    kettle = grp(0, lowY - 0.019 - pot.userData.hangY, 0, -0.9); kettle.add(pot); g.add(kettle);
     }
     refs.dyn.push({ o: tri, kind: 'fall', half: 0.86, tip: 1.25 }); refs.tripod = tri;
     /* tin mug on the flat stone */
@@ -485,7 +475,7 @@ void main(){
     g.updateMatrixWorld(true);
     g.children.forEach(o => { if (o.userData.base) sootRock(o, o.userData.base, F, o.position.x * 13); });
     refs.mugTop = mug.localToWorld(new T.Vector3(0, 0.1, 0));
-    refs.potTop = kettle.localToWorld(new T.Vector3(-0.165, 0.18, 0));
+    refs.potTop = kettle.localToWorld(new T.Vector3(-0.152, 0.196, 0));
     refs.kettle = kettle;
     refs.fireBase = new T.Vector3(F.x, 0.08, F.z);
   }
