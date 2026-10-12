@@ -88,49 +88,6 @@ const Nature = (() => {
     }
   }
 
-  /* a lump of a stylized crown: a round, puffy, slightly squashed ball, its surface dented a little (each corner moved
-     in or out, the faces that share it moving with it, so it stays closed), with the smooth normals of the ball it was
-     made from, so it shades as one soft shape */
-  function lumpGeo(R, sy, detail, r) {
-    const g = new T.IcosahedronGeometry(1, detail), p = g.attributes.position, nr = new Float32Array(p.count * 3), jit = new Map();
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = Math.round(x * 997) + ',' + Math.round(y * 997) + ',' + Math.round(z * 997);
-      if (!jit.has(k)) jit.set(k, 1 + (r() - 0.5) * 0.12);
-      const j = jit.get(k); p.setXYZ(i, x * R * j, y * R * sy * j, z * R * j);
-      const nx = x, ny = y / sy, nz = z, l = Math.hypot(nx, ny, nz); nr[i * 3] = nx / l; nr[i * 3 + 1] = ny / l; nr[i * 3 + 2] = nz / l;
-    }
-    g.setAttribute('normal', new T.BufferAttribute(nr, 3));
-    return g;
-  }
-  /* the camp's own trees and bushes, stylized as the forest's are (world.js): a trunk, and a crown of a few low-poly
-     lumps in three greens */
-  function crowns(root, list, opts) {
-    const mats = opts.cols.map(c => Mats.crown(c, opts.top)), barkM = Mats.lit({ color: new T.Color('#5a4433'), roughness: 0.95, flatShading: true });
-    const per = [[], [], []], q = new T.Quaternion(), e = new T.Euler(), one = new T.Vector3(1, 1, 1);
-    const add = (k, g, x, y, z, ry) => { e.set(0, ry, 0); q.setFromEuler(e); g.applyMatrix4(new T.Matrix4().compose(new T.Vector3(x, y, z), q, one)); per[k].push(g); };
-    for (const [x, z, R0, Hc0, seed] of list) {
-      const r = Textures.rng(seed * 31 + 7), R = R0 * (opts.k || 1), Hc = Hc0 * (opts.k || 1);
-      if (opts.trunk) {
-        const top = new T.Vector3(x + (r() - 0.5) * 0.4, Hc * 0.6, z + (r() - 0.5) * 0.4);
-        const c = new T.CatmullRomCurve3([new T.Vector3(x, -0.2, z), new T.Vector3(x + (r() - 0.5) * 0.3, Hc * 0.3, z + (r() - 0.5) * 0.3), top]);
-        const tr = new T.Mesh(taperTube(c, 8, 6, t => 0.24 - 0.11 * t, 1), barkM); tr.castShadow = tr.receiveShadow = true; root.add(tr);
-        add(0, lumpGeo(R * 0.9, 0.86, 1, r), top.x, Hc * 0.98, top.z, r() * TAU);
-        const n = 4 + Math.floor(r() * 3);
-        for (let i = 0; i < n; i++) { const a = i / n * TAU + r() * 0.5, d = R * (0.55 + r() * 0.3); add(1 + (i % 2), lumpGeo(R * (0.5 + r() * 0.24), 0.84, 1, r), top.x + Math.cos(a) * d, Hc * (0.7 + r() * 0.28), top.z + Math.sin(a) * d * 0.9, r() * TAU); }
-      } else {
-        add(0, lumpGeo(R * 0.62, Hc / R * 0.9, 1, r), x, Hc * 0.48, z, r() * TAU);
-        for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + r() * 0.7, d = R * (0.42 + r() * 0.2); add(1 + (i % 2), lumpGeo(R * (0.36 + r() * 0.14), Hc / R * 0.85, 1, r), x + Math.cos(a) * d, Hc * (0.3 + r() * 0.2), z + Math.sin(a) * d, r() * TAU); }
-      }
-    }
-    per.forEach((gs, k) => { if (!gs.length) return; const m = new T.Mesh(mergeGeos(gs), mats[k]); m.castShadow = true; m.receiveShadow = false; root.add(m); });
-  }
-  function mergeGeos(gs) {
-    let n = 0; for (const g of gs) n += g.attributes.position.count;
-    const P = new Float32Array(n * 3), N = new Float32Array(n * 3); let o = 0;
-    for (const g of gs) { P.set(g.attributes.position.array, o * 3); N.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
-    const out = new T.BufferGeometry(); out.setAttribute('position', new T.BufferAttribute(P, 3)); out.setAttribute('normal', new T.BufferAttribute(N, 3)); out.computeBoundingSphere(); return out;
-  }
-
   /* leaf-card canopies: trees get a trunk, branches and tiered leaf clusters; bushes are dense mounds */
   function cards(root, list, refs, opts) {
     const texs = [0, 1, 2].map(k => Mats.tex(Paint.leafCard(opts.seed + k * 7, k === 2 ? opts.palette : null)));
@@ -179,8 +136,8 @@ const Nature = (() => {
   function build(root) {
     const refs = {};
     palms(root, refs);
-    crowns(root, Layout.trees, { trunk: true, top: 8, cols: ['#4f8c3b', '#3c7432', '#46813a'] });
-    crowns(root, Layout.bushes, { trunk: false, top: 1.6, k: 0.8, cols: ['#427d37', '#356c30', '#4b8a3d'] });
+    cards(root, Layout.trees, refs, { seed: 71, card: 1.22, density: 46, trunk: true, palette: ['#2b4a22', '#35592a', '#24401e', '#3f6530'] });
+    cards(root, Layout.bushes, refs, { seed: 83, card: 0.86, density: 44, trunk: false, palette: ['#3a5a2a', '#46682f', '#2f4a24', '#557a36'] });
     return refs;
   }
 
@@ -195,5 +152,5 @@ const Nature = (() => {
       }
     }
   }
-  return { build, sway, taperTube, frondGeo, lumpGeo };
+  return { build, sway, taperTube, frondGeo };
 })();

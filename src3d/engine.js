@@ -509,7 +509,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null; const faunaIn = {};
+  let fauna = null, faunaT = null, roughNow = 0, shacks = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -737,7 +737,6 @@ const Engine = (() => {
     coastFollow(Layout.cameras.wide.pos[0]);
     world = World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
-    flora = Flora.build(natG, world);
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
     world.prime();
@@ -823,7 +822,6 @@ const Engine = (() => {
       splashes = life.update(t, dt, camera.position.x, { day: S.day, twilight, calm: o.calm, realT: performance.now() / 1000, fish: o.dens ? o.dens.fish : 0.5 });
       for (const sp of splashes) { surge.ripples.push({ x: sp.x, z: sp.z, t0: o.waveT ?? t, A: 0.35 * sp.k / 0.4 }); }
     }
-    if (flora) flora.update(t, camera);
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
@@ -1080,17 +1078,6 @@ const Engine = (() => {
       sketch: camp.sketch ? at(camp.sketch, 0, 0.06, 0) : null, toolbox: camp.toolbox ? at(camp.toolbox, 0, 0.3, 0) : null };
   }
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
-  /* the wild flowers at the forest's edge: which one a touch at (nx, ny) would pick (null if none is near enough), and
-     picking it (it shrinks away; what was picked comes back: { kind, name, at }) */
-  const pickFlower = (nx, ny) => flora ? flora.nearest(camera, nx, ny, canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height) : null;
-  const pluckFlower = (f, t) => flora ? flora.pluck(f, t) : null;
-  /* the bouquet in a jar on the picnic table (an empty list takes it away) */
-  function setBouquetJar(list) {
-    if (bouquetJar) { bouquetJar.parent && bouquetJar.parent.remove(bouquetJar); bouquetJar.traverse(m => { if (m.isMesh && m.geometry && !m.geometry.userData.shared) m.geometry.dispose(); }); bouquetJar = null; }
-    if (!flora || !camp || !camp.table || !list || !list.length) return;
-    bouquetJar = flora.jar(list); bouquetJar.position.set(-0.53, 0.425, 0.24); camp.table.add(bouquetJar);
-  }
-  Object.assign(api, { pickFlower, pluckFlower, setBouquetJar, flora: () => flora });
   /* what a wave (or the van) has knocked over: its dot and what it offers wait until the camp is put back up. Names are
      the chapters' and the dots' own: a chair, a seat, the radio, the board, the drawing board, the toolbox, the bottle… */
   function knockedObj(name) {
