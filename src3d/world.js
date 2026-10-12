@@ -209,7 +209,7 @@ const World = (() => {
         if (late()) yield;
         const x = h.hx + (r() - 0.5) * h.w * 3.6, z = zt + 2 + r() * 40, m = massif(x, z);
         if (m < 2.0 || m < hill(x, z) || slope(x, z) > 0.45 || crowded(L, x, z, gap)) continue;
-        L.push({ x, z, y: land(x, z), ry: r() * TAU, s: 0.8 + r() * 0.45, v: Math.floor(r() * 3) }); i++;
+        L.push({ x, z, y: land(x, z), ry: r() * TAU, s: 0.8 + r() * 0.45, v: Math.floor(r() * 12) }); i++;
       }
     }
     return out;
@@ -431,34 +431,13 @@ void main(){
     if (!lite) for (let i = 0; i < 3; i++) dry.push({ g: Nature.frondGeo(cr * 0.75, 1.0, -0.5, 1.1, 6), m: M(lx, h - 0.4, lz, 0, r() * TAU, 0) });
     return lite ? { bark: merge(bark), fA: merge(fA) } : { bark: merge(bark), fA: merge(fA), fB: merge(fB), dry: merge(dry) };
   }
-  /* ── stylized trees and bushes: crowns of a few low-poly lumps, each an icosahedron dented a little so no two faces
-     lie alike and squashed a little, shaded face by face (Mats.crown): clean shapes in place of clouds of leaf cards.
-     Far off, the same lumps in fewer faces ── */
-  const lumpGeo = (R, sy, detail, r) => Nature.lumpGeo(R, sy, detail, r);
-  function treeProto(seed, lite) {
-    const r = rng(seed), R = 2.2 + r() * 1.2, Hc = 4.6 + r() * 2.6, bark = [], c = [[], [], []], det = lite ? 0 : 1;
-    const top = new T.Vector3((r() - 0.5) * 0.4, Hc * 0.6, (r() - 0.5) * 0.4);
-    bark.push({ g: Nature.taperTube(new T.CatmullRomCurve3([new T.Vector3(0, -0.3, 0), new T.Vector3((r() - 0.5) * 0.3, Hc * 0.3, (r() - 0.5) * 0.3), top]), lite ? 3 : 6, lite ? 5 : 6, t => 0.3 - 0.14 * t, 1), m: M() });
-    /* a big lump on top, a ring of smaller ones round it and a little below */
-    c[0].push({ g: lumpGeo(R * 0.92, 0.86, det, r), m: M(top.x, Hc * 0.98, top.z, 0, r() * TAU, 0) });
-    const n = lite ? 3 : 4 + Math.floor(r() * 3);
-    for (let i = 0; i < n; i++) {
-      const a = i / n * TAU + r() * 0.5, d = R * (0.55 + r() * 0.3), y = Hc * (0.7 + r() * 0.28), s = R * (0.5 + r() * 0.24);
-      c[1 + (i % 2)].push({ g: lumpGeo(s, 0.84, det, r), m: M(top.x + Math.cos(a) * d, y, top.z + Math.sin(a) * d * 0.9, 0, r() * TAU, 0) });
-    }
-    return { bark: merge(bark), c0: merge(c[0]), c1: merge(c[1]), c2: merge(c[2]) };
+  /* ── the broadleaf trees, the bushes and the scrub are grown (trees.js): tropical almonds, casuarinas and beach
+     hibiscus, sea grape, low leafy scrub; far off, the same trees with fewer, bigger leaf cards and no twigs. Each
+     shape carries its own materials ── */
+  function grown(kind, seed, lite) {
+    const g = Trees.grow(kind, seed, lite), m = Trees.materials(kind);
+    g.mats = { bark: m.bark, c0: m.leaves[0], c1: m.leaves[1], c2: m.leaves[2] }; return g;
   }
-  function bushProto(seed, R, Hc, det = 1) {
-    const r = rng(seed), c = [[], [], []];
-    c[0].push({ g: lumpGeo(R * 0.62, Hc / R * 0.9, det, r), m: M(0, Hc * 0.48, 0, 0, r() * TAU, 0) });
-    const n = det ? 5 : 3;
-    for (let i = 0; i < n; i++) {
-      const a = i / n * TAU + r() * 0.7, d = R * (0.42 + r() * 0.2);
-      c[1 + (i % 2)].push({ g: lumpGeo(R * (0.36 + r() * 0.14), Hc / R * 0.85, det, r), m: M(Math.cos(a) * d, Hc * (0.3 + r() * 0.2), Math.sin(a) * d, 0, r() * TAU, 0) });
-    }
-    return { c0: merge(c[0]), c1: merge(c[1]), c2: merge(c[2]) };
-  }
-
 
   /* ── the forest's front rows, scattered on a jittered grid a cell at a time from hashes of the cell, so a chunk's
      trees never depend on what was built before it. Each kind keeps its spacing: of two neighbours of a kind that
@@ -501,7 +480,7 @@ void main(){
         const z = Co.vegZ(x) + dep;
         if (!ok(x, z)) continue;
         const k = ki * 8 + 4;
-        L.push({ x, z, y: land(x, z), ry: hash3(gx, gd, k) * TAU, s: 0.8 + 0.45 * hash3(gx, gd, k + 1), v: Math.floor(hash3(gx, gd, k + 2) * 3) });
+        L.push({ x, z, y: land(x, z), ry: hash3(gx, gd, k) * TAU, s: 0.8 + 0.45 * hash3(gx, gd, k + 1), v: Math.floor(hash3(gx, gd, k + 2) * 12) });
       }
       yield;
     }
@@ -523,13 +502,14 @@ void main(){
     const frondT = [Mats.tex(Paint.frond(31)), Mats.tex(Paint.frond(47)), Mats.tex(Paint.frond(59, 1))].map(t => Mats.foliage(t, 0.4, [1, 1, 1], true));
     const barkP = Mats.lit({ map: Mats.tex(Paint.bark(5), { repeat: true }), roughness: 0.95 }), barkT = Mats.lit({ color: new T.Color('#4a3a2d'), roughness: 0.95 });
     /* the crowns' greens: a lighter top, two in the ring round it; the bushes' and the low scrub's their own */
-    const treeM = [['#4f8c3b', 8], ['#3c7432', 8], ['#46813a', 8]].map(([c, h]) => Mats.crown(c, h)), bushM = [['#427d37', 1.6], ['#356c30', 1.6], ['#4b8a3d', 1.6]].map(([c, h]) => Mats.crown(c, h)), fernM = [['#4d8c3c', 0.6], ['#3e7a34', 0.6], ['#589643', 0.6]].map(([c, h]) => Mats.crown(c, h));
-    const Pr = { palm: [11, 23, 37].map(s => palmProto(s)), tall: [43, 61].map(s => palmProto(s, true)), tree: [51, 67, 89].map(s => treeProto(s)),
-      bush: [[13, 1.6, 1.3], [29, 1.9, 1.6], [41, 1.3, 1.0]].map(a => bushProto(...a)), fern: [[5, 0.55, 0.5, 0], [7, 0.7, 0.6, 0]].map(a => bushProto(...a)) };
-    const lite = { tree: [51, 67, 89].map(s => treeProto(s, true)), palm: [11, 23, 37].map(s => palmProto(s, false, true)), tall: [43, 61].map(s => palmProto(s, true, true)) };
-    const parts = { palm: [['bark', barkP], ['fA', frondT[0]], ['fB', frondT[1]], ['dry', frondT[2]]], tree: [['bark', barkT], ['c0', treeM[0]], ['c1', treeM[1]], ['c2', treeM[2]]], bush: [['c0', bushM[0]], ['c1', bushM[1]], ['c2', bushM[2]]], fern: [['c0', fernM[0]], ['c1', fernM[1]], ['c2', fernM[2]]] };
+    const TREES = [['almond', 51], ['casuarina', 67], ['hibiscus', 89], ['casuarina', 131], ['almond', 157], ['hibiscus', 173]];
+    const Pr = { palm: [11, 23, 37].map(s => palmProto(s)), tall: [43, 61].map(s => palmProto(s, true)), tree: TREES.map(([k, s]) => grown(k, s)),
+      bush: [13, 29, 41].map(s => grown('grape', s)), fern: [5, 7, 19].map(s => grown('scrub', s)) };
+    const lite = { tree: TREES.map(([k, s]) => grown(k, s, true)), palm: [11, 23, 37].map(s => palmProto(s, false, true)), tall: [43, 61].map(s => palmProto(s, true, true)) };
+    const leafParts = [['bark', null], ['c0', null], ['c1', null], ['c2', null]];
+    const parts = { palm: [['bark', barkP], ['fA', frondT[0]], ['fB', frondT[1]], ['dry', frondT[2]]], tree: leafParts, bush: leafParts, fern: leafParts };
     parts.tall = parts.palm;
-    const farParts = { palm: [['bark', barkP], ['fA', frondT[0]]], tall: [['bark', barkP], ['fA', frondT[0]]], tree: [['bark', barkT], ['c0', treeM[0]], ['c1', treeM[1]], ['c2', treeM[2]]] };
+    const farParts = { palm: [['bark', barkP], ['fA', frondT[0]]], tall: [['bark', barkP], ['fA', frondT[0]]], tree: leafParts };
 
     const worldG = new T.Group(); worldG.name = 'world'; worldG.matrixAutoUpdate = false; root.add(worldG);
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3();
@@ -639,8 +619,8 @@ void main(){
           const L = all.filter(p => p.v % Pr[kind].length === v); if (!L.length) continue;
           const attr = new T.InstancedBufferAttribute(new Float32Array(L.length * 16), 16);
           L.forEach((p, i) => { e.set(0, p.ry, 0); q.setFromEuler(e); sc.setScalar(p.s); pos.set(p.x - o.x, Math.max(-0.05, p.y), p.z - o.z); m4.compose(pos, q, sc); m4.toArray(attr.array, i * 16); });
-          for (const [part, mat] of parts[kind]) g.near.add(inst(Pr[kind][v][part], mat, attr, L.length));
-          if (farParts[kind]) for (const [part, mat] of farParts[kind]) g.far.add(inst((lite[kind] || Pr[kind])[v][part], mat, attr, L.length));
+          for (const [part, mat] of parts[kind]) { const P = Pr[kind][v]; if (P[part]) g.near.add(inst(P[part], mat || P.mats[part], attr, L.length)); }
+          if (farParts[kind]) for (const [part, mat] of farParts[kind]) { const P = (lite[kind] || Pr[kind])[v]; if (P[part]) g.far.add(inst(P[part], mat || P.mats[part], attr, L.length)); }
           if (late()) yield;
         }
       }
