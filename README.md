@@ -24,7 +24,7 @@ The repo has a `Dockerfile`, which Railway uses automatically: it installs the b
 1. In Railway: **New Project → Deploy from GitHub repo**, pick this repo.
 2. Once it is deployed, open the service's **Settings → Networking** and click **Generate Domain** to check it on a `*.up.railway.app` address.
 3. Optional: set the health check path to `/healthz` in the service settings.
-4. Give the wish board somewhere to keep its wishes, or they vanish with every deploy: add a **volume** (right-click the project canvas, or press ⌘K / Ctrl+K, and choose **Volume**), attach it to this service, and set its **mount path** to `/data`. The image already points the board there (`DATA_DIR=/data`), and its entrypoint hands the volume to the unprivileged user the server runs as.
+4. Give the wish board somewhere to keep its wishes, or they vanish with every deploy: add a **volume** (right-click the project canvas, or press ⌘K / Ctrl+K, and choose **Volume**), attach it to this service, and set its **mount path** to `/data`. The image already points the board there (`DATA_DIR=/data`; if the volume is mounted somewhere else, the server follows `RAILWAY_VOLUME_MOUNT_PATH`), and its entrypoint hands the volume to the unprivileged user the server runs as. Without a volume the deploy log says `NO VOLUME IS ATTACHED` and `/api/wishes` answers `"kept": false`.
 5. To be able to take a wish down, open the service's **Variables** and add `WISH_ADMIN_KEY` with a long random value (for example the output of `openssl rand -hex 24`). Without it, deleting is switched off.
 
 Every push to `main` redeploys.

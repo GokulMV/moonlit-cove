@@ -9,10 +9,12 @@
    PORT comes from the environment (Railway sets it); 8080 otherwise.
 
    The wish board, under /api/wishes:
-     GET    /api/wishes?limit=n   the newest wishes first: { wishes: [{ id, text, name, at }], total }
+     GET    /api/wishes?limit=n   the newest wishes first: { wishes: [{ id, text, name, at }], total, kept }
+                                  (kept is false on Railway with no volume attached: the board empties on each deploy)
      POST   /api/wishes           { text, name } → { wish, total }, or { error } in plain words
      DELETE /api/wishes/<id>      with the header X-Admin-Key: $WISH_ADMIN_KEY (switched off when unset)
-   Wishes live in $DATA_DIR/wishes.json (./data by default; a Railway volume at /data in production).
+   Wishes live in $DATA_DIR/wishes.json (./data by default; a Railway volume at /data in production, or wherever
+   RAILWAY_VOLUME_MOUNT_PATH says the attached volume is).
    ───────────────────────────────────────────────────────────── */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -60,7 +62,14 @@ const files = load();
 
 /* ── the wish board ── */
 const WISH = { keep: 2000, text: 160, name: 32, body: 4096, gap: 20e3, perHour: 8 };
-const DATA_DIR = path.resolve(HERE, process.env.DATA_DIR || 'data'), WISH_FILE = path.join(DATA_DIR, 'wishes.json');
+/* Railway names the volume's mount path when one is attached; otherwise DATA_DIR (the image sets /data), else ./data.
+   On Railway without a volume, every deploy starts on a fresh disk and the board comes back empty, so it says so */
+const ON_RAILWAY = !!(process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID);
+const VOLUME = process.env.RAILWAY_VOLUME_MOUNT_PATH || '';
+const DATA_DIR = path.resolve(HERE, VOLUME || process.env.DATA_DIR || 'data'), WISH_FILE = path.join(DATA_DIR, 'wishes.json');
+const KEPT = !ON_RAILWAY || !!VOLUME;
+if (!KEPT) console.warn('Wishes: NO VOLUME IS ATTACHED. Wishes are written to the container’s own disk and will be gone after the next deploy.\n' +
+  '  Fix: in Railway, add a Volume (right-click the project canvas, or ⌘K → Volume), attach it to this service, mount path /data.');
 const ADMIN_KEY = process.env.WISH_ADMIN_KEY || '';
 let wishes = [];                 /* newest first */
 function loadWishes() {
@@ -230,7 +239,7 @@ async function wishApi(req, res, url) {
   if (url.pathname === '/api/wishes') {
     if (req.method === 'GET' || req.method === 'HEAD') {
       const n = Math.max(1, Math.min(WISH.keep, parseInt(url.searchParams.get('limit'), 10) || 100));
-      return sendJSON(req, res, 200, { wishes: wishes.slice(0, n), total: wishes.length });
+      return sendJSON(req, res, 200, { wishes: wishes.slice(0, n), total: wishes.length, kept: KEPT });
     }
     if (req.method === 'POST') return postWish(req, res);
     return sendJSON(req, res, 405, { error: 'Not like that.' }, { Allow: 'GET, HEAD, POST' });
@@ -266,6 +275,6 @@ const server = http.createServer((req, res) => {
 });
 /* a slow sender can't hold a connection open for long */
 server.headersTimeout = 15000; server.requestTimeout = 20000;
-server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes in ${WISH_FILE}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
+server.listen(PORT, () => console.log(`Moonlit Cove on port ${PORT} · ${files.size} files · ${wishes.length} wishes in ${WISH_FILE}${KEPT ? '' : ' (NOT KEPT: no volume)'}${ADMIN_KEY ? '' : ' (deleting is off: no WISH_ADMIN_KEY)'}`));
 /* on the way down, let a wish that is being written finish first */
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { writing.catch(() => {}).then(() => server.close(() => process.exit(0))); setTimeout(() => process.exit(0), 3000).unref(); });
