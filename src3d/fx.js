@@ -49,16 +49,14 @@ void main(){
   gl_Position = projectionMatrix*mv;
 }`;
   const FLY_VS = `
+${GLSL.FLY}
 attribute vec4 aSeed; uniform float uTime, uScale, uI; varying float vA;
 void main(){
-  float h = aSeed.w;
-  vec3 p = aSeed.xyz + vec3(sin(uTime*0.31 + h*12.0)*0.8 + sin(uTime*0.73 + h*5.0)*0.3,
-                            sin(uTime*0.41 + h*7.0)*0.35 + sin(uTime*1.1 + h*3.0)*0.1,
-                            cos(uTime*0.27 + h*9.0)*0.8 + cos(uTime*0.61 + h*2.0)*0.3);
-  float period = 2.0 + 2.6*fract(h*13.7), ph = mod(uTime + h*31.0, period);
-  vA = smoothstep(0.0, 0.2, ph)*smoothstep(1.0, 0.4, ph)*uI;
-  vec4 mv = modelViewMatrix*vec4(p, 1.0);
-  gl_PointSize = clamp(0.16*uScale/(-mv.z), 2.0, 16.0);
+  float h = aSeed.w, lift, f = flyFlash(uTime, h, lift);
+  vA = f*uI;
+  if (vA < 0.004){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  vec4 mv = modelViewMatrix*vec4(flyPath(aSeed.xyz, uTime, h, lift), 1.0);
+  gl_PointSize = clamp(0.15*uScale/(-mv.z), 2.0, 18.0);
   gl_Position = projectionMatrix*mv;
 }`;
   const MOTH_VS = `
@@ -135,11 +133,11 @@ void main(){ vec4 t = texture2D(uPuff, vUv); gl_FragColor = vec4(mix(uLo, uHi, s
     /* twice as many as the default shows, in shuffled order, so the density setting draws an even share of them */
     const homes = [], shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     for (let rep = 0; rep < 2; rep++) {
-      for (const b of [...Layout.bushes, ...Layout.trees]) for (let i = 0; i < 4; i++) homes.push([b[0] + (r() - 0.5) * b[2] * 2.4, 0.4 + r() * 2.2, b[1] + (r() - 0.5) * b[2] * 2.0, r()]);
+      for (const b of [...Layout.bushes, ...Layout.trees]) for (let i = 0; i < 7; i++) homes.push([b[0] + (r() - 0.5) * b[2] * 2.4, 0.4 + r() * 2.2, b[1] + (r() - 0.5) * b[2] * 2.0, r()]);
       for (let i = 0; i < 14; i++) { const a = r() * TAU; homes.push([Layout.camp.x + Math.cos(a) * (4.6 + r() * 2), 0.5 + r() * 1.6, Layout.camp.z + Math.sin(a) * (2.8 + r() * 1.5) + 1.0, r()]); }
     }
     shuffle(homes);
-    refs.flies = points(homes.length, i => homes[i], FLY_VS, { uTime: { value: 0 }, uScale: { value: 1000 }, uI: { value: 1 }, uCol: { value: new T.Vector3(0.72, 1.0, 0.3) }, uCore: { value: 0.16 } });
+    refs.flies = points(homes.length, i => homes[i], FLY_VS, { uTime: { value: 0 }, uScale: { value: 1000 }, uI: { value: 1 }, uCol: { value: new T.Vector3(0.66, 1.0, 0.26) }, uCore: { value: 0.2 } });
     scene.add(refs.flies);
     /* moths circling lanterns and a few bulbs */
     const mh = [];

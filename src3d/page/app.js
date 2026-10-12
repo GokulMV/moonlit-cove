@@ -1446,12 +1446,8 @@
       /* every wave you see reach the sand gets its own wash, in time */
       const waves = Engine.waveSchedule(st.t - 1, st.t + 6).map(w => ({ id: w.id, t: ctx.currentTime + (w.x - st.t) / st.motion, amp: w.amp, user: !!w.user, pan: (((w.x * 7.3) % 1 + 1) % 1 - 0.5) * 0.5 }));
       if (ss.fireOut != null && sound.douse == null) sound.douse = ctx.currentTime + 0.05;
-      const cp = cam.pos, sz = Layout.shoreZ(cp[0]), oceanNear = Math.max(0, Math.min(1, 1 - (Math.hypot(cp[2] - sz, cp[1]) - 5) / 26));
-      const fireNear = Math.max(0, Math.min(1, 1 - (Math.hypot(cp[0] - Layout.fire.x, cp[1], cp[2] - Layout.fire.z) - 2.5) / 12));
       sound.thunder = sound.thunder.filter(th => th.t > ctx.currentTime - 2);
-      /* the crickets are in the trees: nearer them, a little louder */
-      const forestNear = Math.max(0, Math.min(1, 1 - (Math.abs(cp[2] - Layout.vegZ(cp[0])) - 4) / 26));
-      sound.amb.schedule(ctx.currentTime + 0.6, { night, forestNear, crickets: tod.crickets * (1 - 0.8 * W.rain), birds: tod.birds * (1 - W.rain), gulls: tod.gulls * (1 - W.rain), owl: tod.owl * (1 - W.rain), fireI: tod.fire * (1 - 0.6 * W.rain) * (ss.fireOut == null ? 1 : 0), waves, douse: sound.douse, oceanNear, fireNear, rain: W.rain, thunder: sound.thunder });
+      sound.amb.schedule(ctx.currentTime + 0.6, { night, crickets: tod.crickets * (1 - 0.8 * W.rain), birds: tod.birds * (1 - W.rain), gulls: tod.gulls * (1 - W.rain), owl: tod.owl * (1 - W.rain), fireI: tod.fire * (1 - 0.6 * W.rain) * (ss.fireOut == null ? 1 : 0), waves, douse: sound.douse, place: hearing(cam), rain: W.rain, thunder: sound.thunder });
     }
 
     /* keep the frame rate comfortable. A change of resolution remakes every render target and shows, so it is rare
@@ -1709,7 +1705,7 @@
     if (!on) return;
     const ctx = radioCtx(); if (!ctx) return;
     if (!radio.noise) { const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0); let y = 0; for (let i = 0; i < d.length; i++) { y = 0.7 * y + 0.3 * (Math.random() * 2 - 1); d[i] = y; } radio.noise = b; }
-    const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), v = 0.05 * radio.vol;
+    const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), v = 0.05 * radio.vol * (radio.heard ?? 1);
     s.buffer = radio.noise; s.loop = true; f.type = 'lowpass'; f.frequency.value = 2400; f.Q.value = 0.5;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.12); g.gain.setTargetAtTime(v * 0.5, t + 0.5, 0.4);
     s.connect(f); f.connect(g); g.connect(ctx.destination);
@@ -1749,7 +1745,7 @@
     const s = L[radio.si]; store.set('radioStation', s.id);
     radio.state = 'tuning'; radio.msg = ''; radio.dialT = 0.06 + 0.88 * (hashOf(s.id) % 1000) / 1000;
     hiss(true);
-    const el = radioEl(); el.src = s.url; el.volume = radio.vol;
+    const el = radioEl(); el.src = s.url; el.volume = clamp(radio.vol * (radio.heard ?? 1), 0, 1);
     clearTimeout(radio.timer); radio.timer = setTimeout(() => { if (radio.on && radio.state === 'tuning') failed(); }, 9000);
     const p = el.play(); if (p && p.catch) p.catch(err => { if (!radio.on || el.getAttribute('src') !== s.url || (err && err.name === 'AbortError')) return; if (err && err.name === 'NotAllowedError') { radioOff(true); radio.msg = 'Press the power button to listen.'; syncRadioUI(); } else failed(); });
     /* the directory counts a listen when a station is played, and asks players to tell it */
@@ -1769,7 +1765,7 @@
     const Q = radio.songs; if (!Q.length || !radio.on) return;
     if (!auto) { radio.fails = 0; radio.msg = ''; }
     radio.qi = ((i % Q.length) + Q.length) % Q.length; radio.state = 'tuning'; radio.dialT = 0.06 + 0.88 * (radio.qi + 0.5) / Q.length; hiss(false);
-    const s = Q[radio.qi], el = radioEl(); el.src = s.url; el.volume = radio.vol;
+    const s = Q[radio.qi], el = radioEl(); el.src = s.url; el.volume = clamp(radio.vol * (radio.heard ?? 1), 0, 1);
     const p = el.play(); if (p && p.catch) p.catch(err => { if (radio.on && el.getAttribute('src') === s.url && !(err && err.name === 'AbortError')) failed(); });
     mediaInfo(s.name, 'Your songs'); syncRadioUI();
   }
@@ -1815,7 +1811,7 @@
   $('rdAdd').addEventListener('click', () => $('rdFile').click());
   document.querySelectorAll('[data-rsrc]').forEach(b => b.addEventListener('click', () => setSource(b.dataset.rsrc)));
   $('rdVol').value = radio.vol;
-  $('rdVol').addEventListener('input', e => { radio.vol = clamp(+e.target.value, 0, 1); store.set('radioVol', radio.vol); if (radio.el) radio.el.volume = radio.vol; });
+  $('rdVol').addEventListener('input', e => { radio.vol = clamp(+e.target.value, 0, 1); store.set('radioVol', radio.vol); if (radio.el) radio.el.volume = clamp(radio.vol * (radio.heard ?? 1), 0, 1); });
   $('radio').addEventListener('keydown', e => e.stopPropagation());
   function syncRadioUI() {
     const on = radio.on, songs = radio.src === 'songs', s = songs ? radio.songs[radio.qi] : radio.stations && radio.stations[radio.si], n = radio.songs.length;
@@ -1872,6 +1868,32 @@
     }
   }
 
+  /* where each sound comes from, as heard from the camera (or the walker's ears): the surf from the waterline, birds and
+     crickets from the trees, the crackle from the fire. Each fades with distance (the fire, a point, quickly; the long
+     line of the surf more slowly; trees muffle the sea), the air takes the highs off what is far, and each pans to the
+     side it is on */
+  function hearing(cam) {
+    const cp = cam.pos, lk = cam.look, fx0 = lk[0] - cp[0], fz0 = lk[2] - cp[2], fl = Math.hypot(fx0, fz0) || 1, rx = -fz0 / fl, rz = fx0 / fl;
+    const side = (dx, dz) => { const l = Math.hypot(dx, dz) || 1; return (dx * rx + dz * rz) / l; };
+    const x = cp[0], z = cp[2], y = Math.max(0, cp[1] - 1.6);
+    /* the fire */
+    const F = Layout.fire, fdx = F.x - x, fdz = F.z - z, fd = Math.hypot(fdx, fdz, cp[1] - 0.35);
+    const fire = { g: 1.25 * Math.pow(2.5 / Math.max(2.5, fd), 1.3), pan: side(fdx, fdz) * 0.8 * Math.min(1, fd / 1.5), lp: clamp(18000 * Math.pow(3 / Math.max(3, fd), 0.55), 2500, 18000) };
+    /* the surf: how far up the beach from the waterline, and how high; muffled once well inside the trees */
+    const k = Math.hypot(1, Layout.shoreDZ(x)), up = (z - Layout.shoreZ(x)) / k, sd = Math.hypot(Math.max(0, up), y);
+    const inTrees = clamp((z - Layout.vegZ(x) - 3) / 12, 0, 1);
+    const sea = { g: Math.max(0.07, 1.15 * Math.pow(10 / Math.max(10, sd), 0.7)) * (1 - 0.4 * inTrees), pan: side(Layout.shoreDZ(x) / k, -1 / k) * 0.55, lp: clamp(15000 * Math.pow(12 / Math.max(12, sd), 0.55), 2500, 15000) * (1 - 0.5 * inTrees) };
+    /* the trees: birds by day, crickets by night (which carry further) */
+    const vd = Math.hypot(Math.max(0, Layout.vegZ(x) - z), y * 0.6), vp = side(0, 1) * 0.5 * Math.min(1, vd / 4);
+    return { fire, sea, forest: { g: Math.max(0.06, Math.pow(7 / Math.max(7, vd), 0.8)), pan: vp }, crick: { g: Math.max(0.15, Math.pow(7 / Math.max(7, vd), 0.55)), pan: vp } };
+  }
+  /* the radio is a thing in the world too: loud beside it, faint across the beach. (A station is a stream from another
+     site, which the page may not route through its own sound graph, so only its volume can follow you, not its side) */
+  function radioHeard(cam) {
+    const p = Engine.radioPos ? Engine.radioPos() : null; if (!p) return 1;
+    const d = Math.hypot(p[0] - cam.pos[0], p[1] - cam.pos[1], p[2] - cam.pos[2]);
+    return Math.pow(1.8 / Math.max(1.8, d), 1.15);
+  }
   /* every frame, after the scene is drawn: the seated view, the board's light, the radio's dial, the dots */
   function extras(dt) {
     if (!wish.started) startWishes();
@@ -1885,12 +1907,17 @@
     const glow = radio.on ? (radio.state === 'playing' ? 1 : 0.55 + 0.25 * Math.sin(performance.now() / 70)) : 0;
     radio.glow += (glow - radio.glow) * Math.min(1, dt * 6);
     Engine.setRadio(radio.glow * 0.8 / Math.max(0.05, (st.S && st.S.exposure) || 1), radio.dial);     /* (a warm glow, not a glare: night exposure is high) */
-    const duck = radio.on && radio.state === 'playing' ? 0.55 : 1;
+    /* the radio's loudness from where you are (it has a volume of its own; the bed of sound steps back only as far as the
+       radio is loud) */
+    const heard = st.cur ? radioHeard(st.cur) : 1;
+    radio.heard = radio.heard == null ? heard : radio.heard + (heard - radio.heard) * Math.min(1, dt * 4);
+    if (radio.el && own(radio.el)) { const v = clamp(radio.vol * radio.heard, 0, 1); if (Math.abs(radio.el.volume - v) > 0.004) radio.el.volume = v; }
+    const duck = radio.on && radio.state === 'playing' ? 1 - 0.45 * Math.min(1, radio.heard * 1.5) : 1;
     if (sound.amb && sound.amb.duck && (radio.duckFor !== sound.amb || radio.duckK !== duck)) { radio.duckFor = sound.amb; radio.duckK = duck; sound.amb.duck(duck); }
     placeExtraSpots();
   }
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX });
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard });
 })();

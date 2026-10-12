@@ -9,8 +9,12 @@
    weather  rain and thunder
    Every recording plays at its own pitch, whole, at a clean
    bitrate; the mix is left uncoloured, with only a limiter that
-   catches peaks. Each channel can be switched off on its own. The
-   same graph renders offline for the film's soundtrack.
+   catches peaks. Each channel can be switched off on its own.
+   Each sound comes from a place: the surf from the waterline, the
+   birds and crickets from the trees, the crackle from the fire. As
+   you move, each fades with its distance, dulls as the air takes
+   its highs, and pans to the side it is on. The same graph renders
+   offline for the film's soundtrack.
    Recordings: Moodist sound library (Pixabay licence / CC0); the
    van's engine and knocks: Kenney (CC0).
    ───────────────────────────────────────────────────────────── */
@@ -43,10 +47,11 @@ const Ambience = (() => {
        its average, decide how loud it may play) */
     const LOOPS = { sea: ['ocean', 0.05, 0.5], crickets: ['insects', 0.008, 0.25], fire: ['fire', 0.03, 0.32], birds: ['forest', 0.012, 0.3], gulls: ['ocean', 0.007, 0.22], rain: ['weather', 0.04, 0.35] };
     const normOf = (s, target, ceil) => Math.min(target / Math.max(s.rms, 1e-4), ceil / Math.max(s.peak || 4 * s.rms, 1e-4));
-    /* the sea sounds nearer or further with the camera; the crickets come from the trees, a little softened by them */
-    const oceanLP = F('lowpass', 14000, 0.5); oceanLP.connect(ch.ocean);
-    const crickLP = F('lowpass', 7500, 0.5); crickLP.connect(ch.insects);
-    const dest = { ocean: oceanLP, insects: crickLP, forest: ch.forest, fire: ch.fire, weather: ch.weather };
+    /* places: a bus for each, through which its sounds reach their channel (how loud from here, how dull, which side) */
+    const placeBus = (to, lpHz) => { const lp = lpHz ? F('lowpass', lpHz, 0.5) : null, pan = P(0), g = G(1); chain(lp, pan, g, to); return { in: lp || pan || g, lp, pan, g }; };
+    const place = { sea: placeBus(ch.ocean, 14000), forest: placeBus(ch.forest, 16000), crick: placeBus(ch.insects, 7500), fire: placeBus(ch.fire, 18000) };
+    /* the gulls are over the water; the rain is everywhere */
+    const dest = { sea: place.sea.in, gulls: place.sea.in, crickets: place.crick.in, birds: place.forest.in, fire: place.fire.in, rain: ch.weather };
     const L = {}, B = {};
     function loopSource(name, buf, s, g, offset) {
       const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = s.loopStart; src.loopEnd = Math.min(s.loopEnd, buf.duration - 0.01);
@@ -58,12 +63,12 @@ const Ambience = (() => {
         /* inlined in the single-file build; a separate file (fetched when sound is first turned on) on the website */
         const buf = await decode(ctx, s.b64 ? b64buf(s.b64) : await (await fetch(s.url)).arrayBuffer()); B[name] = buf;
         const lp = LOOPS[name]; if (!lp || s.loopEnd == null) return;
-        const g = G(0), norm = normOf(s, lp[1], lp[2]); g.connect(dest[lp[0]]);
+        const g = G(0), norm = normOf(s, lp[1], lp[2]); g.connect(dest[name]);
         const off = rnd() * 0.9;
         L[name] = { src: loopSource(name, buf, s, g, off), g, norm };
         /* the sea's second take, for the waves that reach the sand: the same surf, half a loop apart, silent until a
            wave comes in */
-        if (name === 'sea') { const g2 = G(0); g2.connect(oceanLP); L.sea2 = { src: loopSource('sea', buf, s, g2, (off + 0.5) % 1), g: g2, norm }; }
+        if (name === 'sea') { const g2 = G(0); g2.connect(place.sea.in); L.sea2 = { src: loopSource('sea', buf, s, g2, (off + 0.5) % 1), g: g2, norm }; }
       } catch (e) { /* a recording that fails to decode just stays silent */ }
     }));
 
@@ -87,20 +92,31 @@ const Ambience = (() => {
       g.cancelScheduledValues(t0); g.setTargetAtTime(k, t0, big ? 0.5 : 0.35); g.setTargetAtTime(0, t0 + (big ? 3.2 : 1.6), big ? 2.4 : 1.4);
     }
 
+    /* where each sound comes from, as heard from here: { sea, forest, crick, fire: { g, pan, lp } }. Without one (the
+       film, the tests), the older nearness numbers stand in */
+    const legacyPlace = s => { const sn = s.oceanNear ?? 0.5, fn = s.fireNear ?? 0.3, wn = s.forestNear ?? 0.5;
+      return { sea: { g: 0.7 + 0.45 * sn, pan: 0, lp: 5200 + 9000 * sn }, forest: { g: 1, pan: 0 }, crick: { g: 0.55 + 0.45 * wn, pan: 0 }, fire: { g: 0.25 + 0.95 * fn, pan: 0, lp: 18000 } }; };
+    const clampP = v => Math.max(-1, Math.min(1, v || 0));
+    function setPlace(b, v, now, tc) {
+      if (!b || !v) return;
+      b.g.gain.setTargetAtTime(Math.max(0, v.g), now, tc);
+      if (b.pan && v.pan != null) b.pan.pan.setTargetAtTime(clampP(v.pan), now, tc);
+      if (b.lp && v.lp) b.lp.frequency.setTargetAtTime(Math.max(400, Math.min(20000, v.lp)), now, tc);
+    }
     /* advance to audio time `until`.
-       s = { night, crickets, fireI, fireNear, oceanNear, birds, gulls, owl, waves:[{id,t,amp,pan,user}], douse, rain, thunder:[{id,t,k,pan}] } */
+       s = { night, crickets, fireI, place, birds, gulls, owl, waves:[{id,t,amp,pan,user}], douse, rain, thunder:[{id,t,k,pan}] } */
     const st = { lastWaves: new Set(), lastThunder: new Set(), owlNext: 20, doused: null };
     let cursor = ctx.currentTime;
     function schedule(until, s) {
       const now = Math.max(cursor, ctx.currentTime);
       const set = (name, v, tc = 1.2) => { const l = L[name]; if (l) l.g.gain.setTargetAtTime(Math.max(0, v) * l.norm, now, tc); };
-      const near = s.oceanNear ?? 0.5;
-      set('sea', 0.7 + 0.45 * near);
-      oceanLP.frequency.setTargetAtTime(5200 + 9000 * near, now, 1.0);
-      set('crickets', (s.crickets ?? s.night ?? 1) * (0.55 + 0.45 * (s.forestNear ?? 0.5)), 2.5);
+      const pl = s.place || legacyPlace(s), tcP = s.place ? 0.25 : 1.0;
+      setPlace(place.sea, pl.sea, now, tcP); setPlace(place.forest, pl.forest, now, tcP); setPlace(place.crick, pl.crick, now, tcP); setPlace(place.fire, pl.fire, now, tcP);
+      set('sea', 1);
+      set('crickets', s.crickets ?? s.night ?? 1, 2.5);
       /* (put out by a wave: the crackle stops at once) */
       const doused = s.douse != null && s.douse <= until;
-      set('fire', doused ? 0 : (s.fireI ?? 0) * (0.25 + 0.95 * (s.fireNear ?? 0.3)), doused ? 0.15 : 0.6);
+      set('fire', doused ? 0 : (s.fireI ?? 0), doused ? 0.15 : 0.6);
       set('birds', s.birds ?? 0, 3);
       set('gulls', (s.gulls ?? 0) * (0.5 + 0.5 * Math.max(0, Math.sin(now * 0.05))), 4);
       set('rain', s.rain || 0, 1.5);
@@ -114,7 +130,7 @@ const Ambience = (() => {
       }
       if (st.lastWaves.size > 200) st.lastWaves = new Set([...st.lastWaves].slice(-60));
       if (st.owlNext < now) st.owlNext = now + 25 + rnd() * 30;
-      if (st.owlNext < until) { if ((s.owl ?? 0) > 0.5 && SNDS.owl) oneShot('owl', st.owlNext, normOf(SNDS.owl, 0.012, 0.15), -0.6 + rnd() * 0.3, ch.forest); st.owlNext += 60 + rnd() * 70; }
+      if (st.owlNext < until) { if ((s.owl ?? 0) > 0.5 && SNDS.owl) oneShot('owl', st.owlNext, normOf(SNDS.owl, 0.012, 0.15), (rnd() - 0.5) * 0.4, place.forest.in); st.owlNext += 60 + rnd() * 70; }
       cursor = Math.max(cursor, until);
     }
     function setEnabled(name, v) {

@@ -825,6 +825,9 @@ const Engine = (() => {
     const ch = camp.chairs && camp.chairs[i]; if (!ch) return null;
     return { eye: ch.localToWorld(new T.Vector3(-0.27, 0.9, 0)).toArray(), fire: [Layout.fire.x, 0.35, Layout.fire.z] };
   }
+  /* where the radio is, for its sound */
+  function radioPos() { const g = camp && camp.radio && camp.radio.group; if (!g) return null; g.updateMatrixWorld(true); const v = g.getWorldPosition(new T.Vector3()); return [v.x, v.y, v.z]; }
+  Object.assign(api, { radioPos });
   /* what a click at (nx, ny) across the canvas lands on: 'chair0', 'chair1', 'radio', 'board', or null */
   function pick(nx, ny) {
     if (!camp || !camp.pick) return null;

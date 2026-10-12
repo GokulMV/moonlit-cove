@@ -33,6 +33,22 @@ check(r.peak < 0.99, 'nothing clips');
 check(r.rms > 0.005, 'it is audible');
 check(r.g111 < 2.5 * Math.max(r.g70, r.g160), 'no tone at 111 Hz');
 const out = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'dist', 'soundscape.wav'); fs.writeFileSync(out, Buffer.from(r.wav, 'base64')); console.log('wrote', out);
+/* each sound comes from somewhere: by the fire it crackles, jogging away it fades to nothing; the surf is loudest at the
+   water's edge and muffled in the trees; the radio is loud beside it and faint across the beach */
+const h = await page.evaluate(() => {
+  const c = window.__cove, F = Layout.fire, at = (x, z, y = 1.6, lx = x + 1, lz = z) => c.hearing({ pos: [x, y, z], look: [lx, y, lz] });
+  const sz = x => Layout.shoreZ(x), vz = x => Layout.vegZ(x);
+  const seat = at(F.x + 1.2, F.z + 0.4), far = at(F.x + 60, sz(F.x + 60) + 4), farther = at(F.x + 150, sz(F.x + 150) + 4);
+  const edge = at(F.x + 40, sz(F.x + 40) + 0.5), trees = at(F.x + 40, vz(F.x + 40) + 25);
+  const rp = Engine.radioPos(), rNear = c.radioHeard({ pos: [rp[0] + 1, 1.2, rp[2]] }), rFar = c.radioHeard({ pos: [rp[0] + 50, 1.6, rp[2]] });
+  /* facing east along the beach, the sea is on the left and the trees on the right */
+  return { fireSeat: seat.fire.g, fireFar: far.fire.g, fireFarther: farther.fire.g, seaEdge: edge.sea.g, seaTrees: trees.sea.g, seaPan: edge.sea.pan, treePan: edge.forest.pan, rNear, rFar };
+});
+console.log('hearing:', Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +v.toFixed(3)])));
+check(h.fireSeat > 1 && h.fireFar < 0.03 && h.fireFarther < 0.01, 'the fire is loud beside it and gone 60 m away');
+check(h.seaEdge > 1 && h.seaTrees < h.seaEdge * 0.32, 'the surf is loudest at the water and muffled in the trees');
+check(h.seaPan < -0.3 && h.treePan > 0.2, 'the sea and the trees pan to their own sides');
+check(h.rNear > 0.9 && h.rFar < 0.06, 'the radio is loud beside it and faint across the beach');
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));
 check(!errs.length, errs.length ? 'page errors: ' + errs.slice(0, 3).join(' | ') : 'no page errors');
 console.log(fails ? `${fails} failed` : 'all passed');

@@ -139,7 +139,7 @@ vec4 cloudLayer(vec3 d, vec3 Ld, vec3 haze){
   float L0 = tTop - t0, L = min(L0, 9000.0);        /* a long grazing path: only its near part shows, the rest is haze */
   int N = int(clamp(L/110.0, 18.0, 40.0)*uCQ);
   float ds = L/float(N);
-  float jit = hash12(gl_FragCoord.xy + fract(uCloudT*0.013)*517.0);   /* (grain, not a pattern) */
+  float jit = 0.5 + 0.7*(hash12(gl_FragCoord.xy + fract(uCloudT*0.013)*517.0) - 0.5);   /* (fine grain, not a pattern) */
   /* drifting on the wind, and slowly boiling */
   vec2 drift = uWind*uCloudT*9.0; vec3 dr3 = vec3(-drift.x, uCloudT*0.8, -drift.y);
   float cosT = dot(d, Ld);
@@ -980,5 +980,29 @@ void main(){
   gl_FragColor = vec4(c, 1.0);
 }`;
 
-  return { COMMON, SKY_FN, SKY_VS, SKY_FS, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
+  /* a firefly: dark most of the time, then a short flash (a quick rise, a slower fade) at an unsteady rhythm of its own,
+     every few seconds, now and then missing one. Most flash once, some twice in quick succession, a few glow softly.
+     It wanders slowly about its home, and climbs a few centimetres as it flashes (the J of its flight); it drops back in
+     the dark, where no one sees */
+  const FLY = `
+float flyHash(float n){ return fract(sin(n*91.345 + 0.17)*43758.5453); }
+float flyEnv(float u, float rise, float fall){ return u < 0.0 ? 0.0 : smoothstep(0.0, rise, u)*exp(-max(0.0, u - rise)/fall); }
+/* how bright (0..1) firefly h is at time t, and how far through its flash (for the climb) */
+float flyFlash(float t, float h, out float lift){
+  float kind = fract(h*7.31), P = kind < 0.72 ? 2.6 + 2.0*fract(h*13.7) : kind < 0.92 ? 3.8 + 2.2*fract(h*13.7) : 6.0 + 3.0*fract(h*13.7);
+  float tt = t + h*61.0, n = floor(tt/P), u = tt - n*P;
+  float skip = step(0.85, flyHash(n*1.71 + h*13.1));                      /* a missed flash now and then */
+  u -= flyHash(n*3.13 + h*7.7)*0.45*P;                                    /* and never quite on the beat */
+  float f = kind < 0.72 ? flyEnv(u, 0.07, 0.24)
+          : kind < 0.92 ? flyEnv(u, 0.05, 0.12) + flyEnv(u - 0.42, 0.05, 0.12)
+          : flyEnv(u, 0.35, 0.6)*0.75;
+  lift = clamp(u/0.7, 0.0, 1.0);
+  return f*(1.0 - skip);
+}
+vec3 flyPath(vec3 home, float t, float h, float lift){
+  return home + vec3(sin(t*0.13 + h*12.0)*1.1 + sin(t*0.31 + h*5.0)*0.35,
+                     sin(t*0.17 + h*7.0)*0.32 + sin(t*0.43 + h*3.0)*0.08 + 0.07*lift*lift,
+                     cos(t*0.11 + h*9.0)*1.1 + cos(t*0.29 + h*2.0)*0.35);
+}`;
+  return { FLY, COMMON, SKY_FN, SKY_VS, SKY_FS, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
 })();

@@ -248,32 +248,27 @@ void main(){
   /* fireflies: they flash in their own rhythms (a slow glow, a double flash, a quick train), and some keep time with a
      wave that runs along the treeline; each flash climbs a little, as theirs do */
   const FLY_VS = `
+${GLSL.FLY}
 attribute vec4 aSeed; uniform float uTime, uScale, uI, uCx, uHalf; varying float vA, vH;
-float pulse(float x, float at){ float u = (x - at)/0.09; return exp(-u*u); }
 void main(){
   float h = aSeed.w; vH = fract(h*5.71); vA = 0.0;
   if (h < 0.0){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }      /* no firefly in this place */
-  float t = uTime, kind = fract(h*7.31), P = 3.0 + 2.6*fract(h*13.7), sync = step(0.7, fract(h*3.17));
-  float ph = mod(t + mix(h*37.0, aSeed.x*0.07 + fract(h*5.1)*0.3, sync), P);
-  float f = kind < 0.55 ? smoothstep(0.0, 0.35, ph)*(1.0 - smoothstep(0.5, 1.5, ph))
-          : kind < 0.85 ? pulse(ph, 0.12) + pulse(ph, 0.5)
-          : pulse(ph, 0.12) + pulse(ph, 0.38) + pulse(ph, 0.64) + 0.7*pulse(ph, 0.9);
-  vec3 p = aSeed.xyz + vec3(sin(t*0.23 + h*12.0)*0.9 + sin(t*0.61 + h*5.0)*0.35,
-                            sin(t*0.37 + h*7.0)*0.22 + sin(t*1.3 + h*3.0)*0.06 + 0.16*f,
-                            cos(t*0.19 + h*9.0)*0.9 + cos(t*0.53 + h*2.0)*0.35);
+  float lift, f = flyFlash(uTime, h, lift);
+  if (f < 0.01){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  vec3 p = flyPath(aSeed.xyz, uTime, h, lift);
   vec4 mv = modelViewMatrix*vec4(p, 1.0);
-  float px = 0.16*uScale/max(-mv.z, 0.1);
+  float px = 0.15*uScale/max(-mv.z, 0.1);
   /* smaller than its sprite far off: dimmer rather than bigger, so the far treeline glitters instead of blazing */
   vA = f*uI*pow(min(1.0, px/2.0), 1.5)*smoothstep(uHalf, uHalf - 40.0, abs(p.x - uCx));
-  gl_PointSize = clamp(px, 2.0, 16.0);
+  gl_PointSize = clamp(px, 2.0, 18.0);
   gl_Position = vA < 0.004 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
 }`;
   const FLY_FS = `
 varying float vA, vH;
 void main(){
   float r = length(gl_PointCoord - 0.5), a = smoothstep(0.5, 0.0, r);
-  vec3 c = mix(vec3(0.72, 1.0, 0.3), vec3(1.0, 0.8, 0.28), vH*vH);       /* most green-gold, a few amber */
-  gl_FragColor = vec4(c*(a*a*0.5 + smoothstep(0.16, 0.0, r)*1.6)*vA, 1.0);
+  vec3 c = mix(vec3(0.66, 1.0, 0.26), vec3(1.0, 0.82, 0.3), vH*vH*vH);   /* yellow-green, a few amber */
+  gl_FragColor = vec4(c*(a*a*0.7 + smoothstep(0.2, 0.0, r)*2.6)*vA, 1.0);
 }`;
   /* midges: dark specks looping and bobbing in a loose column, that light up when you look through them toward the low sun */
   const GNAT_VS = `
@@ -489,7 +484,7 @@ void main(){
        a cell left behind is moved ahead and its fireflies laid out afresh where it now lies (the same way each time a stretch
        comes round). They are interleaved across the cells, so the density setting draws an even share of every cell ── */
     const flies = (() => {
-      const NC = 32, CF = 10, SPAN = NC * CF, PER = 38, N = NC * PER, cellX = new Float64Array(NC).fill(NaN);
+      const NC = 32, CF = 10, SPAN = NC * CF, PER = 120, N = NC * PER, cellX = new Float64Array(NC).fill(NaN);
       const u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uI: { value: 0 }, uCx: { value: 0 }, uHalf: { value: SPAN / 2 } };
       const C = cloud(N, [['aSeed', 4]], new T.ShaderMaterial({ uniforms: u, vertexShader: FLY_VS, fragmentShader: FLY_FS, blending: T.AdditiveBlending, transparent: true, depthWrite: false })), S = C.A.aSeed.array;
       function lay(j, X) {
@@ -497,10 +492,12 @@ void main(){
         const ci = Math.round(X / CF);
         for (let s = 0; s < PER; s++) {
           const k = (s * NC + j) * 4, r = n => hash2(ci * 1.37 + s * 0.071 + n * 17.13, s * 3.17 + n * 1.9 + ci * 0.013);
-          const x = X + r(1) * CF, depth = -4 + 11 * r(2) * r(2);     /* most over the grass in front of the trees and at their edge, fewer in among them */
-          const z = Layout.vegZ(x) + depth, y = Math.max(0, land(x, z)) + 0.25 + 1.8 * Math.pow(r(3), 1.5) * (depth > 1 ? 1.4 : 0.8);
-          /* the camp keeps its own fireflies round its bushes (fx.js): these thin out toward it */
-          const keep = sm(14, 24, Math.abs(x - Layout.camp.x)) > r(4);
+          const x = X + r(1) * CF, depth = -3.5 + 12 * r(2) * r(2);   /* over the grass in front of the trees and at their edge, fewer in among them */
+          const z = Layout.vegZ(x) + depth, y = Math.max(0, land(x, z)) + 0.3 + 1.9 * Math.pow(r(3), 1.6) * (depth > 1 ? 1.3 : 0.7);
+          /* in patches: some stretches of the treeline full of them, others with hardly any. The camp keeps its own
+             fireflies round its bushes (fx.js): these thin out toward it */
+          const patch = 0.15 + 0.85 * sm(0.35, 0.8, 0.5 + 0.35 * Math.sin(x * 0.041 + 1.3) + 0.25 * Math.sin(x * 0.0173 + 4.1));
+          const keep = sm(14, 24, Math.abs(x - Layout.camp.x)) * patch > r(4);
           S[k] = x; S[k + 1] = y; S[k + 2] = z; S[k + 3] = keep ? r(5) : -1;
         }
       }
