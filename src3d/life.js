@@ -156,8 +156,10 @@ void main(){
   vDepth = max(0.0, hs - w.y);
   float g = shoreDZv(pc.x), dist = (shoreZv(pc.x) - pc.y)/sqrt(1.0 + g*g);
   vA = S.w*smoothstep(0.8, 1.8, dist)*smoothstep(8.0, 5.0, dist)*step(0.01, sc);
+  /* (and a few centimetres nearer still: the sea's mesh only follows the waves between its own points) */
   vec3 ray = w - cameraPosition; float k = ray.y < -1e-4 ? clamp((hs + 0.015 - cameraPosition.y)/ray.y, 0.0, 1.0) : 1.0;
-  gl_Position = projectionMatrix*viewMatrix*vec4(cameraPosition + ray*k, 1.0);
+  vec3 pt = cameraPosition + ray*k, vv = pt - cameraPosition; float dd = length(vv);
+  gl_Position = projectionMatrix*viewMatrix*vec4(pt - vv/max(dd, 1e-3)*min(dd*0.5, 0.06 + 0.0015*dd), 1.0);
 }`;
   const FISH3_FS = `
 uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay;

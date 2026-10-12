@@ -271,7 +271,13 @@ vec2 lastHit(float x, float z){
   const FOAM_VS = `
 ${SURF_T}
 varying vec2 vUv; varying vec3 vW; varying vec2 vHit;
-void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), c = modelMatrix*instanceMatrix[3]; vW = w.xyz; vHit = lastHit(c.x, c.z); gl_Position = projectionMatrix*viewMatrix*w; }`;   /* (each ring is centred on its rock) */
+void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), c = modelMatrix*instanceMatrix[3];
+  /* (riding on the water as it rises and falls, not at a height of its own, or every crest that passes cuts it off in a
+     straight line) */
+  w.y = waveH(w.xz) + 0.01; vW = w.xyz; vHit = lastHit(c.x, c.z);
+  /* (and drawn a few centimetres nearer along the line of sight: the sea's mesh only follows the waves between its own points) */
+  vec3 v = w.xyz - cameraPosition; float d = length(v);
+  gl_Position = projectionMatrix*viewMatrix*vec4(w.xyz - v/max(d, 1e-3)*min(d*0.5, 0.06 + 0.0015*d), 1.0); }`;   /* (each ring is centred on its rock) */
   const FOAM_FS = `
 uniform float uTime; uniform vec3 uAmbF, uKeyColT; uniform sampler2D uNoise; uniform vec4 uFog;
 varying vec2 vUv; varying vec3 vW; varying vec2 vHit;

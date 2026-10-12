@@ -622,7 +622,18 @@ void main(){
           }
           if (moved) C.A.aSeed.needsUpdate = true;
         },
-        shift(dx, dz) { for (let i = 0; i < N; i++) { S[i * 4] += dx; S[i * 4 + 2] += dz; } for (let j = 0; j < NC; j++) cellX[j] += dx; C.A.aSeed.needsUpdate = true; }
+        shift(dx, dz) { for (let i = 0; i < N; i++) { S[i * 4] += dx; S[i * 4 + 2] += dz; } for (let j = 0; j < NC; j++) cellX[j] += dx; C.A.aSeed.needsUpdate = true; },
+        /* for picking up (inspect.js): those near the camera (FLY_VS's path, the same sums here); let go, it flies off */
+        pickables(list, cam) {
+          if (!this.n) return; const t = Mats.U.uTime.value;
+          for (let i = 0; i < this.n; i++) {
+            const k = i * 4, h = S[k + 3]; if (h < 0) continue;
+            const dx = S[k] - cam.x, dz = S[k + 2] - cam.z; if (dx * dx + dz * dz > 400) continue;
+            const x = S[k] + Math.sin(t * 0.13 + h * 12) * 1.1 + Math.sin(t * 0.31 + h * 5) * 0.35, y = S[k + 1] + Math.sin(t * 0.17 + h * 7) * 0.32 + Math.sin(t * 0.43 + h * 3) * 0.08 + 0.03, z = S[k + 2] + Math.cos(t * 0.11 + h * 9) * 1.1 + Math.cos(t * 0.29 + h * 2) * 0.35;
+            list.push({ kind: 'firefly', x, y, z, r: 0.05, yaw: 0, size: 1.3, reach: 20,
+              take() { S[k + 3] = -1; C.A.aSeed.needsUpdate = true; }, give() { S[k + 3] = h; C.A.aSeed.needsUpdate = true; } });
+          }
+        }
       };
     })();
 
@@ -1232,7 +1243,7 @@ void main(){
       get counts() { return { fireflies: flies.n, gnats: gnats.n, dragonflies: dragon.n, butterflies: butter.n, bats: bats.n, gulls: gulls.n, sandpipers: pipers.n, crabs: crabs.n, dolphins: dolphins.n, whales: whales.n }; },
       debug: { gulls, pipers, crabs, dolphins, whales, mist, flies, gnats, bats, dragon, butter },
       /* what can be picked up and held (inspect.js) */
-      pickables(list) { crabs.pickables(list); gulls.pickables(list); pipers.pickables(list); bflyPickables(list); dflyPickables(list); batPickables(list); dolphins.pickables(list); whales.pickables(list); },
+      pickables(list, cam) { crabs.pickables(list); gulls.pickables(list); pipers.pickables(list); bflyPickables(list); dflyPickables(list); batPickables(list); dolphins.pickables(list); whales.pickables(list); if (cam) flies.pickables(list, cam); },
       /* a splash thrown up off the water at (x, z), s metres across (inspect.js: something thrown in) */
       splash(x, z, s) { spray.add(x, z, nowT, s); }
     };

@@ -10,6 +10,8 @@ await page.waitForFunction(() => window.__cove.film.on, null, { timeout: 120000 
 await page.addStyleTag({ content: '#hud{display:none!important}' });
 await page.evaluate(() => { const c = window.__cove, st = c.st; st.rsI = 5; st.rs = 1; st.rsAt = 1e15; st.motion = 0.7; st.flow = 1; c.WX.__t = { cirrus: 0.1, alto: 0, cumulus: 0.2, stratus: 0, storm: 0, rain: 0 }; st.weather = '__t'; Object.assign(st.wx, c.WX.__t); st.nextBolt = 1e15; });
 const only = process.env.SHOTS ? process.env.SHOTS.split(',') : null;
+/* (HIDE=kelp or HIDE=canopy: leave one of them out, to tell which is which) */
+if (process.env.HIDE) await page.evaluate(h => { const d = Engine.shallows.debug, m = h === 'kelp' ? d.kelpM : d.canopyM; if (m) m.visible = false; }, process.env.HIDE);
 const shot = async (name, cam, n = 10) => {
   if (!cam || (only && !only.includes(name))) return;
   const b64 = await page.evaluate(([cam, n]) => { window.__coveCamFix = cam; const c = window.__cove; for (let i = 0; i < n; i++) c.filmStep(1 / 30); return document.getElementById('scene').toDataURL('image/png').slice(22); }, [cam, n]);
@@ -26,12 +28,20 @@ const C = await page.evaluate(() => {
   const deep = p => Layout.shoreZ(p.x) - p.z;
   const w = wet.filter(p => p.rad > 0.6 && deep(p) > 7).sort((a, b) => Math.abs(a.x - cx) - Math.abs(b.x - cx))[0];
   if (w) { const sz = Layout.shoreZ(w.x); out.kelp = { pos: [w.x + 4, 3.2, Math.max(sz + 1.5, w.z + 7)], look: [w.x, -0.2, w.z], fov: 50, focus: 9 }; out.rock = [w.x, w.z, w.rad, deep(w)]; }
+  /* (every shrimp laid out so far, not only those in reach of where the camera starts) */
+  const all = Engine.shallows && Engine.shallows.debug.shrimp ? Engine.shallows.debug.shrimp() : [];
+  const sh = all.sort((a, b) => Math.abs(a[0] - cx) - Math.abs(b[0] - cx))[0];
+  if (sh) out.shrimp = { pos: [sh[0] + 0.7, 1.1, sh[2] + 0.9], look: [sh[0], sh[1], sh[2]], fov: 40, focus: 1.8 }, out.shr = sh, out.nShrimp = all.length;
   const h = Engine.inspect.candidates().filter(c => c.kind === 'hermit').sort((a, b) => Math.abs(a.x - cx) - Math.abs(b.x - cx))[0];
-  if (h) out.hermit = { pos: [h.x - 0.8, 0.7, h.z + 0.9], look: [h.x, 0.02, h.z], fov: 45, focus: 1.2 }, out.crab = [h.x, h.z];
+  if (h) out.hermit = { pos: [h.x - 0.9, 0.9, h.z + 1.0], look: [h.x, 0.03, h.z], fov: 40, focus: 1.4 }, out.crab = [h.x, h.z];
+  if (Engine.shallows.debug.kelp) out.kelpN = [Engine.shallows.debug.kelp(), Engine.shallows.debug.kelpTris];
   return out;
 });
-console.log('  school', C.school, 'rock', C.rock, 'hermit', C.crab);
-await shot('shoal', C.shoal); await shot('kelp', C.kelp); await shot('hermit', C.hermit);
+console.log('  kelp fronds built, tris each:', C.kelpN);
+console.log('  school', C.school, 'rock', C.rock, 'hermit', C.crab, 'shrimp', C.shr, 'of', C.nShrimp);
+/* (the crab first: the hermit crabs follow the camera, so once it has been out to the rocks they are somewhere else) */
+await shot('hermit', C.hermit); await shot('shoal', C.shoal); await shot('shrimp', C.shrimp); await shot('kelp', C.kelp);
+if (C.kelp && (!only || only.includes('kelpnear'))) await shot('kelpnear', { pos: [C.rock[0] + 1.6, 1.5, C.rock[1] + 2.2], look: [C.rock[0] - 0.4, -0.5, C.rock[1] - 0.4], fov: 50, focus: 2.5 });
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));
 console.log(errs.length ? 'page errors:\n  ' + errs.slice(0, 6).map(e => e.slice(0, 300)).join('\n  ') : 'no page errors');
 await browser.close();

@@ -45,57 +45,151 @@ void main(){
   gl_FragColor = vec4(mix(off, lit, on), 1.0);
 }`;
 
-  /* the van's open side door looks into a lit room: the plane ray-traces a box behind itself
-     (floor, panelled walls, a window with curtains, a made bed, a warm lamp and fairy lights) */
+  /* inside the van, seen through its open door and every window: one room traced through by each of them in the van's
+     own frame, so all of them look into the same place. Birch-ply walls, a plank floor with a rug, the rear bench in a
+     plaid with its backrest under the back window, a kitchen unit with sink and stove along the far side and a locker
+     over it, a little table on its leg, the cab's two seats with the dashboard and the steering wheel beyond them; a warm
+     lamp on the ceiling, fairy lights strung along it, the daylight in through the windows and the door; through the
+     pop-top's opening the lit canvas. A window's own glass reflects the sky, and the living windows have their curtains
+     gathered at the sides */
   const VAN_VS = `
-varying vec3 vP; varying vec3 vC;
+uniform mat4 uVanInv;
+varying vec3 vL, vCam; varying vec2 vP2;
 void main(){
-  vP = position;
-  vC = (inverse(modelMatrix)*vec4(cameraPosition, 1.0)).xyz;
-  gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0);
+  vec4 w = modelMatrix*vec4(position, 1.0);
+  vL = (uVanInv*w).xyz; vCam = (uVanInv*vec4(cameraPosition, 1.0)).xyz; vP2 = position.xy;
+  gl_Position = projectionMatrix*viewMatrix*w;
 }`;
   const VAN_FS = `
-uniform vec3 uLamp; uniform float uTime; uniform vec2 uHalf; varying vec3 vP; varying vec3 vC;
+uniform vec3 uLamp, uAmbIn, uKeyDirT, uKeyColT, uAmbF, uNrm; uniform float uTime, uMode, uPop, uDoor; uniform vec2 uHalf; uniform mat4 uVanInv;
+varying vec3 vL, vCam; varying vec2 vP2;
 float h21(vec2 p){ vec3 q = fract(vec3(p.xyx)*0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
-vec2 boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax){
-  vec3 i = 1.0/rd, t0 = (bmin - ro)*i, t1 = (bmax - ro)*i, a = min(t0, t1), b = max(t0, t1);
-  return vec2(max(max(a.x, a.y), a.z), min(min(b.x, b.y), b.z));
+/* (a box hit from outside, nearer than t so far: t, the normal, and which it was) */
+void box(vec3 ro, vec3 rd, vec3 a, vec3 b, float id, inout float t, inout vec3 n, inout float hit){
+  vec3 i = 1.0/rd, t0 = (a - ro)*i, t1 = (b - ro)*i, mn = min(t0, t1), mx = max(t0, t1);
+  float tn = max(max(mn.x, mn.y), mn.z), tf = min(min(mx.x, mx.y), mx.z);
+  if (tn > 0.0 && tn < tf && tn < t){ t = tn; hit = id; n = -sign(rd)*step(mn.yzx, mn.xyz)*step(mn.zxy, mn.xyz); }
 }
+vec3 plaid(vec3 p){
+  float a = step(0.5, fract(p.x*5.0 + p.y*5.0)), b = step(0.5, fract(p.z*5.0)), l = max(step(0.94, fract(p.x*5.0 + p.y*5.0 + 0.25)), step(0.94, fract(p.z*5.0 + 0.25)));
+  return mix(vec3(0.5, 0.12, 0.07)*(0.7 + 0.3*a)*(0.7 + 0.3*b), vec3(0.75, 0.62, 0.38), l*0.7);
+}
+vec3 wood(vec3 p, vec3 base){ return base*(0.86 + 0.14*sin(p.x*38.0 + 2.5*sin(p.y*9.0 + p.z*7.0)))*(0.94 + 0.06*h21(floor(p.xz*6.0))); }
+/* what shows through a window or the door from inside: the day, or the night */
+vec3 outside(vec3 rd){ return uAmbF*mix(vec3(0.55, 0.5, 0.42)*0.9, vec3(1.25, 1.4, 1.6), smoothstep(-0.12, 0.18, rd.y)); }
 void main(){
-  vec3 ro = vec3(vP.xy, 0.0), rd = normalize(vP - vC);
-  if (rd.z > -0.001) rd.z = -0.001;
-  vec3 rmin = vec3(-1.5, -uHalf.y, -1.55), rmax = vec3(1.8, uHalf.y + 0.12, 0.02);
+  vec3 ro = vL, rd = normalize(vL - vCam);
+  /* the room: the inside of the box the walls make */
+  vec3 rmin = vec3(-2.08, 0.46, -0.8), rmax = vec3(2.02, 1.84, 0.8);
   vec3 tr = (mix(rmin, rmax, step(0.0, rd)) - ro)/rd;
-  float t = min(min(tr.x, tr.y), tr.z);
-  vec3 p = ro + rd*t, n = tr.x < min(tr.y, tr.z) ? vec3(-sign(rd.x), 0.0, 0.0) : (tr.y < tr.z ? vec3(0.0, -sign(rd.y), 0.0) : vec3(0.0, 0.0, 1.0));
-  vec3 alb;
-  if (n.y > 0.5) alb = vec3(0.42, 0.26, 0.14)*(0.85 + 0.15*step(0.5, fract(p.z*7.0)))*(0.9 + 0.1*h21(floor(vec2(p.x*1.4, p.z*7.0))));
-  else if (n.y < -0.5) alb = vec3(0.55, 0.42, 0.28);
-  else alb = vec3(0.62, 0.48, 0.32)*(0.92 + 0.08*step(0.04, fract(p.x*1.6 + p.z*1.6)));
-  /* window + curtains on the far wall */
-  if (n.z > 0.5){
-    float wx = abs(p.x - 0.15), wy = p.y - 0.36;
-    if (wx < 0.42 && abs(wy) < 0.2) alb = vec3(0.006, 0.01, 0.03);
-    float cur = smoothstep(0.3, 0.42, wx)*(1.0 - smoothstep(0.56, 0.6, wx))*step(abs(wy), 0.27);
-    alb = mix(alb, vec3(0.62, 0.22, 0.12)*(0.8 + 0.2*sin(p.x*90.0)), cur);
+  float t = min(min(tr.x, tr.y), tr.z), hit = 0.0;
+  vec3 n = tr.x < min(tr.y, tr.z) ? vec3(-sign(rd.x), 0.0, 0.0) : (tr.y < tr.z ? vec3(0.0, -sign(rd.y), 0.0) : vec3(0.0, 0.0, -sign(rd.z)));
+  /* and what stands in it */
+  box(ro, rd, vec3(-2.08, 0.46, -0.8), vec3(-1.32, 0.9, 0.8), 1.0, t, n, hit);     /* the bench: its base */
+  box(ro, rd, vec3(-2.06, 0.9, -0.78), vec3(-1.3, 1.03, 0.78), 2.0, t, n, hit);     /*   its cushion */
+  box(ro, rd, vec3(-2.08, 1.03, -0.78), vec3(-1.9, 1.24, 0.78), 2.0, t, n, hit);    /*   its backrest */
+  box(ro, rd, vec3(-1.28, 0.46, 0.44), vec3(0.34, 1.1, 0.8), 3.0, t, n, hit);       /* the kitchen unit */
+  box(ro, rd, vec3(-1.3, 1.1, 0.42), vec3(0.36, 1.13, 0.8), 4.0, t, n, hit);        /*   its worktop */
+  box(ro, rd, vec3(-1.28, 1.62, 0.52), vec3(0.34, 1.84, 0.8), 3.0, t, n, hit);      /* the locker over it */
+  box(ro, rd, vec3(-1.22, 0.9, -0.2), vec3(-0.62, 0.93, 0.36), 5.0, t, n, hit);     /* the table */
+  box(ro, rd, vec3(-0.94, 0.46, 0.06), vec3(-0.9, 0.9, 0.1), 5.0, t, n, hit);       /*   its leg */
+  box(ro, rd, vec3(1.16, 0.46, 0.12), vec3(1.62, 0.86, 0.74), 6.0, t, n, hit);      /* the driver's seat */
+  box(ro, rd, vec3(1.1, 0.86, 0.14), vec3(1.24, 1.52, 0.72), 6.0, t, n, hit);
+  box(ro, rd, vec3(1.16, 0.46, -0.74), vec3(1.62, 0.86, -0.12), 6.0, t, n, hit);    /* the passenger's */
+  box(ro, rd, vec3(1.1, 0.86, -0.72), vec3(1.24, 1.52, -0.14), 6.0, t, n, hit);
+  box(ro, rd, vec3(1.8, 0.92, -0.8), vec3(2.02, 1.18, 0.8), 7.0, t, n, hit);        /* the dashboard */
+  /* the steering wheel: a ring, tipped back toward the driver, its hub and a spoke across */
+  { vec3 c = vec3(1.66, 1.14, 0.43), wn = normalize(vec3(-0.85, 0.53, 0.0)), up = normalize(cross(wn, vec3(0.0, 0.0, 1.0))); float dn = dot(rd, wn);
+    if (abs(dn) > 1e-4){ float tw = dot(c - ro, wn)/dn; vec3 q = ro + rd*tw - c; float rr = length(q);
+      bool on = abs(rr - 0.19) < 0.017 || rr < 0.035 || (rr < 0.19 && abs(dot(q, up)) < 0.012);
+      if (tw > 0.0 && tw < t && on){ t = tw; hit = 8.0; n = -wn*sign(dn); } } }
+  vec3 p = ro + rd*t, alb = vec3(0.6), emit = vec3(0.0);
+  bool open = false;
+  if (hit == 0.0){
+    /* the room's own surfaces, and where they open to the outside */
+    if (n.y > 0.5){
+      /* the floor: planks, and the rug */
+      alb = wood(p.zxy*vec3(1.0, 0.2, 1.0), vec3(0.36, 0.22, 0.12))*(0.9 + 0.1*step(0.04, fract(p.z*8.0)));
+      if (p.x > -1.25 && p.x < 0.95 && abs(p.z + 0.08) < 0.42){
+        /* (a woven rug: narrow bands, a plain border round it) */
+        float bd = min(min(p.x + 1.25, 0.95 - p.x), 0.42 - abs(p.z + 0.08)), st = step(0.5, fract(p.x*7.0));
+        alb = bd < 0.06 ? vec3(0.62, 0.3, 0.16) : mix(vec3(0.12, 0.17, 0.3), vec3(0.72, 0.66, 0.52), st)*(0.9 + 0.1*step(0.8, fract(p.z*14.0)));
+      }
+    } else if (n.y < -0.5){
+      alb = vec3(0.8, 0.76, 0.68);
+      /* (the pop-top's opening: the canvas up there, lit through) */
+      if (uPop > 0.5 && p.x > -1.58 && p.x < 1.02 && abs(p.z) < 0.68){ alb = vec3(0.72, 0.58, 0.4)*(0.94 + 0.06*h21(floor(p.xz*40.0))); emit += alb*uAmbF*0.7*(0.8 + 0.2*smoothstep(0.68, 0.3, abs(p.z))); }
+      /* the lamp in the middle of it */
+      emit += uLamp*9.0*smoothstep(0.075, 0.055, length(p.xz - vec2(-0.45, 0.05)));
+    } else {
+      /* the walls: birch ply in panels */
+      alb = vec3(0.66, 0.52, 0.36)*(0.92 + 0.08*step(0.03, fract(p.x*1.6 + p.z*1.6 + 0.5)))*(p.y < 0.9 ? 0.85 : 1.0);
+      float side = n.z;   /* (−1: the wall on the far side, +1: the door's) */
+      if (abs(n.z) > 0.5){
+        bool liv = false; float xc = 0.0, hw = 0.0;
+        if (side < 0.0){ for (int i = 0; i < 3; i++){ float c0 = 0.55 - float(i)*0.97; if (abs(p.x - c0) < 0.4 && abs(p.y - 1.36) < 0.21){ open = true; liv = true; xc = c0; hw = 0.4; } } }
+        if (abs(p.x - 1.5) < 0.33 && abs(p.y - 1.36) < 0.21) open = true;
+        if (side > 0.0 && uDoor > 0.5 && p.x > -0.86 && p.x < 0.2 && p.y < 1.76) open = true;
+        /* (curtains gathered at the sides of the living windows) */
+        if (side < 0.0){ for (int i = 0; i < 3; i++){ float c0 = 0.55 - float(i)*0.97, dx = abs(p.x - c0); if (dx > 0.27 && dx < 0.45 && abs(p.y - 1.36) < 0.25){ open = false; alb = vec3(0.62, 0.24, 0.1)*(0.72 + 0.28*sin(p.x*95.0)); } } }
+      } else if (n.x > 0.5){
+        /* the back: its window over the bench */
+        if (abs(p.z) < 0.55 && abs(p.y - 1.42) < 0.17) open = true;
+      } else {
+        /* the front: the windscreen over the dashboard */
+        if (p.y > 1.18 && abs(p.z) < 0.72) open = true;
+      }
+    }
+  } else if (hit == 1.0) alb = wood(p, vec3(0.38, 0.23, 0.12));
+  else if (hit == 2.0) alb = plaid(p);
+  else if (hit == 3.0){
+    alb = wood(p, vec3(0.46, 0.3, 0.16));
+    if (n.z < -0.5){ float dx = fract((p.x + 1.28)/0.405); alb *= 0.75 + 0.25*smoothstep(0.0, 0.03, min(dx, 1.0 - dx)); if (length(vec2(dx - 0.88, p.y - (p.y > 1.5 ? 1.66 : 1.02))) < 0.05) alb = vec3(0.75, 0.7, 0.6); }
+  } else if (hit == 4.0){
+    alb = vec3(0.74, 0.7, 0.62);
+    if (n.y > 0.5){
+      if (length(p.xz - vec2(-0.3, 0.6)) < 0.13) alb = vec3(0.5, 0.52, 0.55)*(0.6 + 0.4*smoothstep(0.13, 0.09, length(p.xz - vec2(-0.3, 0.6))));
+      for (int i = 0; i < 2; i++){ float d = length(p.xz - vec2(-0.92 + float(i)*0.28, 0.6)); if (abs(d - 0.06) < 0.012 || d < 0.015) alb = vec3(0.06); }
+    }
+  } else if (hit == 5.0) alb = wood(p, vec3(0.6, 0.42, 0.24));
+  else if (hit == 6.0) alb = vec3(0.62, 0.52, 0.38)*(0.88 + 0.12*step(0.08, fract(p.y*6.0 + p.x*6.0)));
+  else if (hit == 7.0){
+    alb = vec3(0.07, 0.07, 0.075);
+    if (n.x < -0.5){ for (int i = 0; i < 2; i++){ float d = length(p.yz - vec2(1.07, 0.32 + float(i)*0.19)); if (d < 0.055) alb = d > 0.045 ? vec3(0.7) : vec3(0.82, 0.78, 0.66); } }
+  } else alb = vec3(0.82, 0.78, 0.68);
+  vec3 col;
+  if (open) col = outside(rd);
+  else {
+    /* the lamp, the daylight (from the door and the windows, more higher up), the fairy lights' glow along the
+       ceiling, and the corners darker */
+    vec3 Lp = vec3(-0.45, 1.78, 0.05), d = Lp - p; float r2 = dot(d, d);
+    float ndl = max(dot(n, d*inversesqrt(r2)), 0.0)*0.85 + 0.15;
+    vec3 lt = uLamp*(ndl*1.5/(1.0 + r2*2.2) + 0.15);
+    lt += uAmbIn*(0.42 + 0.3*smoothstep(0.46, 1.7, p.y) + 0.35*smoothstep(0.2, -0.8, p.z)*uDoor + 0.15*max(n.y, 0.0));
+    float fy = smoothstep(1.55, 1.84, p.y);
+    if (fy > 0.0){ float fx = fract(p.x/0.17) - 0.5; lt += uLamp*fy*3.0*exp(-(fx*fx*0.0289 + (abs(p.z) - 0.72)*(abs(p.z) - 0.72))*260.0)*(0.8 + 0.2*sin(uTime*3.0 + floor(p.x/0.17)*1.7)); }
+    vec3 dw = vec3(min(p.x - rmin.x, rmax.x - p.x), min(p.y - rmin.y, rmax.y - p.y), min(p.z - rmin.z, rmax.z - p.z));
+    dw = mix(dw, vec3(9.0), abs(n)*step(hit, 0.5));
+    float ao = 0.62 + 0.38*smoothstep(0.0, 0.22, min(min(dw.x, dw.y), dw.z));
+    col = alb*lt*ao + emit;
   }
-  /* bed along the far wall */
-  vec2 hb = boxHit(ro, rd, vec3(-1.45, -0.65, -1.62), vec3(0.95, -0.22, -0.92));
-  if (hb.x > 0.0 && hb.x < hb.y && hb.x < t){
-    t = hb.x; p = ro + rd*t;
-    vec3 q = (p - vec3(-0.25, -0.435, -1.27))/vec3(1.2, 0.215, 0.35);
-    vec3 aq = abs(q); n = aq.x > max(aq.y, aq.z) ? vec3(sign(q.x), 0.0, 0.0) : (aq.y > aq.z ? vec3(0.0, sign(q.y), 0.0) : vec3(0.0, 0.0, sign(q.z)));
-    alb = n.y > 0.5 ? mix(vec3(0.55, 0.5, 0.42), vec3(0.18, 0.32, 0.36), step(0.5, fract(p.x*4.0))) : vec3(0.3, 0.2, 0.13);
-    if (n.y > 0.5 && p.x > 0.55) alb = vec3(0.8, 0.76, 0.68);
+  /* the window itself: its curtains, its glass */
+  if (uMode > 0.5){
+    vec2 q = abs(vP2), hf = uHalf;
+    if (uMode < 1.5){
+      float cw = 0.16*hf.x/0.4;
+      if (q.x > hf.x - cw || q.y > hf.y - 0.025){ vec3 cu = vec3(0.62, 0.24, 0.1)*(0.7 + 0.3*sin(vP2.x*85.0))*(q.y > hf.y - 0.025 ? 0.7 : 1.0); col = cu*(uAmbF*0.55 + uAmbIn*0.3 + uLamp*1.6); }
+    }
+    col *= 0.62 + 0.38*smoothstep(0.0, 0.05, min(hf.x - q.x, hf.y - q.y));
+    float cv = clamp(dot(-rd, uNrm), 0.0, 1.0), F = 0.05 + 0.95*pow(1.0 - cv, 5.0);
+    vec3 R = reflect(rd, uNrm), kd = normalize(mat3(uVanInv)*uKeyDirT);
+    vec3 refl = uAmbF*mix(vec3(0.5, 0.45, 0.38)*0.7, vec3(1.1, 1.25, 1.45), smoothstep(-0.15, 0.3, R.y)) + uKeyColT*pow(max(dot(R, kd), 0.0), 500.0)*3.0;
+    col = mix(col*0.85, refl, min(1.0, F + 0.08));
+  } else {
+    /* (the doorway's own edge: the thickness of the body) */
+    col *= 0.55 + 0.45*smoothstep(0.0, 0.06, min(uHalf.x - abs(vP2.x), uHalf.y - abs(vP2.y)));
   }
-  vec3 Lp = vec3(0.25, 0.72, -0.75), d = Lp - p; float r2 = dot(d, d);
-  float ndl = max(dot(n, d*inversesqrt(r2)), 0.0)*0.8 + 0.2;
-  vec3 c = alb*uLamp*(ndl*1.6/(1.0 + r2*3.0) + 0.25);
-  float lampG = exp(-dot(p.xz - Lp.xz, p.xz - Lp.xz)*30.0)*step(0.78, p.y);
-  c += uLamp*lampG*2.5;
-  if (p.y > 0.78){ float fx = fract(p.x*6.0) - 0.5; c += uLamp*smoothstep(0.08, 0.0, length(vec2(fx/6.0, p.z + 0.08)))*1.6*(0.8 + 0.2*sin(uTime*3.0 + floor(p.x*6.0)*1.7)); }
-  float edge = smoothstep(0.0, 0.06, min(uHalf.x - abs(vP.x), uHalf.y - abs(vP.y)));
-  gl_FragColor = vec4(c*(0.55 + 0.45*edge), 1.0);
+  gl_FragColor = vec4(col, 1.0);
 }`;
 
   function instancedLights(points, radius, uniforms) {
@@ -222,11 +316,15 @@ void main(){
     const bodyM = Mats.litP({ color: C('#ffffff'), roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.12 }, 'van');
     refs.vanGlow = [];
     const glass = new T.MeshStandardMaterial({ color: C('#0a1016'), roughness: 0.04, metalness: 0.85 });
-    const curtT = Mats.tex(Paint.curtain(), { repeat: true });
-    const shine = new T.MeshStandardMaterial({ color: C('#000000'), roughness: 0.03, metalness: 1, transparent: true, opacity: 0.42, depthWrite: false });
     const rubber2 = L('#0e0e0f', { roughness: 0.7 });
     const chrome = new T.MeshStandardMaterial({ color: C('#d8dbde'), roughness: 0.18, metalness: 0.95 });
     const dark = L('#141416', { roughness: 0.85 }), rubber = L('#121212', { roughness: 0.92 }), rimW = L('#e9e5da', { roughness: 0.4 });
+    /* the light inside (the engine sets the lamp and the daylight each frame), whether the pop-top is up and the door open */
+    const lamp = new T.Color(0, 0, 0), ambIn = new T.Color(0, 0, 0), uPop = { value: 1 }, uDoor = { value: 1 };
+    refs.vanInside = { color: lamp, amb: ambIn, pop: uPop, door: uDoor };
+    /* a pane that looks into the van: mode 0 the open doorway, 1 a living window with its curtains, 2 the cab's glass */
+    const paneMat = (hw, hh, mode, nrm) => new T.ShaderMaterial({ uniforms: { uLamp: { value: lamp }, uAmbIn: { value: ambIn }, uPop, uDoor, uTime: U.bulb.uTime, uVanInv: Mats.U.uVanInv,
+      uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF, uHalf: { value: new T.Vector2(hw, hh) }, uMode: { value: mode }, uNrm: { value: nrm.clone() } }, vertexShader: VAN_VS, fragmentShader: VAN_FS });
     /* body: side profile with real wheel arches, extruded across the width with rounded edges */
     const sill = 0.36, xr = -1.25, xf = 1.28, AR = 0.53, BV = 0.1;
     const sh = new T.Shape();
@@ -242,29 +340,28 @@ void main(){
     bg.translate(0, 0, -0.75); bg.computeVertexNormals();
     g.add(mesh(bg, bodyM));
     const SZ = 0.75 + BV;                                   /* flat side faces at z = ±SZ */
-    /* side windows with chrome surrounds */
-    /* windows: rubber seal, then either dark glass (cab) or warm curtains lit from inside behind a reflective pane */
-    const win = (x, y, w, h, side, lit, r = 0.07) => {
-      const tr = mesh(new T.ShapeGeometry(rrect(w + 0.045, h + 0.045, r + 0.02)), rubber2, false); at(tr, x, y, side * (SZ + 0.002));
-      let gl;
-      if (lit) {
-        const cm = new T.MeshStandardMaterial({ color: C('#3a2414'), map: curtT, emissiveMap: curtT, emissive: new T.Color(1, 0.6, 0.3), emissiveIntensity: 0.1, roughness: 0.6 });
-        refs.vanGlow.push({ m: cm, k: 0.075 + 0.03 * ((x * 7.31 + 10) % 1) });
-        gl = mesh(new T.ShapeGeometry(rrect(w, h, r)), cm, false); at(gl, x, y, side * (SZ + 0.004));
-        const sh = mesh(new T.ShapeGeometry(rrect(w, h, r)), shine, false); at(sh, x, y, side * (SZ + 0.007)); if (side < 0) sh.rotation.y = Math.PI; g.add(sh);
-      } else { gl = mesh(new T.ShapeGeometry(rrect(w, h, r)), glass, false); at(gl, x, y, side * (SZ + 0.005)); }
+    /* windows: a rubber seal round each, and in it a pane that looks into the van (its own glass on it) */
+    const ringG = (w, h, r, t) => { const o = rrect(w + 2 * t, h + 2 * t, r + t); o.holes.push(rrect(w, h, r)); return new T.ShapeGeometry(o, 6); };
+    const win = (x, y, w, h, side, mode, r = 0.07, parent = g, zOff = 0) => {
+      const tr = mesh(ringG(w, h, r, 0.024), rubber2, false); at(tr, x, y, side * (SZ + 0.006 + zOff));
+      /* (the pane a little bigger than the seal's opening, its edge tucked under it: no slit of paint between them seen side-on) */
+      const gl = mesh(new T.ShapeGeometry(rrect(w + 0.016, h + 0.016, r + 0.008), 6), paneMat(w / 2, h / 2, mode, new T.Vector3(0, 0, side)), false); at(gl, x, y, side * (SZ + 0.003 + zOff));
       if (side < 0) { tr.rotation.y = Math.PI; gl.rotation.y = Math.PI; }
-      g.add(tr, gl);
+      parent.add(tr, gl); return gl;
     };
-    for (const [x, w, lit] of [[1.5, 0.66, 0], [0.55, 0.8, 1], [-0.42, 0.8, 1], [-1.38, 0.8, 1]]) win(x, 1.36, w, 0.42, 1, lit);
-    win(1.5, 1.36, 0.66, 0.42, -1, 0); win(0.62, 1.36, 0.46, 0.42, -1, 1);
+    /* (the door's side: the cab's window, the doorway, and a plain panel between where the clipboard hangs) */
+    for (const [x, w, mode] of [[1.5, 0.66, 2], [0.55, 0.8, 1], [-0.42, 0.8, 1], [-1.38, 0.8, 1]]) win(x, 1.36, w, 0.42, 1, mode);
+    win(1.5, 1.36, 0.66, 0.42, -1, 2);
     /* rear window, split windscreen, wipers */
-    { const rw = mesh(new T.ShapeGeometry(rrect(1.1, 0.34, 0.07)), glass, false); rw.rotation.y = -Math.PI / 2; at(rw, -2.1 - BV - 0.004, 1.42, 0); g.add(rw); }
+    { const rw = mesh(new T.ShapeGeometry(rrect(1.116, 0.356, 0.078), 6), paneMat(0.55, 0.17, 2, new T.Vector3(-1, 0, 0)), false); rw.rotation.y = -Math.PI / 2; at(rw, -2.1 - BV - 0.004, 1.42, 0); g.add(rw);
+      const rs = mesh(ringG(1.1, 0.34, 0.07, 0.024), rubber2, false); rs.rotation.y = -Math.PI / 2; at(rs, -2.1 - BV - 0.007, 1.42, 0); g.add(rs); }
     const A = new T.Vector2(2.14 + BV * 0.97, 1.1 + BV * 0.24), Bp = new T.Vector2(2.0 + BV * 0.96, 1.58 + BV * 0.28);
     const th = Math.atan2(Bp.x - A.x, Bp.y - A.y) * -1, mid = A.clone().add(Bp).multiplyScalar(0.5), len = A.distanceTo(Bp);
     for (const z of [-0.36, 0.36]) {
-      const ws = mesh(new T.ShapeGeometry(rrect(0.64, len - 0.06, 0.08)), glass, false);
-      ws.rotation.set(0, Math.PI / 2, -th, 'ZYX'); at(ws, mid.x + 0.006, mid.y, z); g.add(ws);
+      const ws = mesh(new T.ShapeGeometry(rrect(0.656, len - 0.044, 0.088), 6), glass, false);
+      ws.rotation.set(0, Math.PI / 2, -th, 'ZYX'); at(ws, mid.x + 0.006, mid.y, z);
+      ws.material = paneMat(0.32, (len - 0.06) / 2, 2, new T.Vector3(0, 0, 1).applyEuler(ws.rotation)); g.add(ws);
+      const wsr = mesh(ringG(0.64, len - 0.06, 0.08, 0.022), rubber2, false); wsr.rotation.copy(ws.rotation); at(wsr, mid.x + 0.009, mid.y, z); g.add(wsr);
       const wp = mesh(new T.BoxGeometry(0.01, 0.42, 0.012), dark); wp.rotation.set(0.5 * Math.sign(z), 0, -th); at(wp, mid.x + 0.02, mid.y - 0.12, z * 0.6); g.add(wp);
     }
     /* front: round headlamps in chrome bezels, bumper, an indicator pair */
@@ -280,15 +377,26 @@ void main(){
     for (const z of [-0.68, 0.68]) { const tm = new T.MeshStandardMaterial({ color: C('#8f1a12'), roughness: 0.25, emissive: new T.Color(1, 0.08, 0.04), emissiveIntensity: 0 }); refs.vanTail.push(tm); g.add(at(mesh(new T.BoxGeometry(0.03, 0.18, 0.09), tm), -2.1 - BV - 0.01, 0.98, z)); }
     /* side mirrors */
     for (const z of [-1, 1]) {
-      g.add(between(new T.CylinderGeometry(0.008, 0.008, 1, 6), chrome, new T.Vector3(1.86, 1.25, z * (SZ + 0.01)), new T.Vector3(1.9, 1.38, z * (SZ + 0.16))));
+      { const a = new T.Vector3(1.86, 1.25, z * (SZ + 0.01)), b = new T.Vector3(1.9, 1.38, z * (SZ + 0.16)); g.add(between(new T.CylinderGeometry(0.008, 0.008, a.distanceTo(b), 6), chrome, a, b)); }   /* (between() keeps the length it is given) */
       g.add(at(mesh(new T.CapsuleGeometry(0.045, 0.06, 4, 10), dark), 1.9, 1.42, z * (SZ + 0.17))).children.at(-1).scale.set(0.35, 1, 1.3);
     }
     /* cab door seams + handles, engine louvres at the back */
     for (const z of [-1, 1]) {
-      g.add(at(mesh(new T.BoxGeometry(0.006, 1.2, 0.004), dark), 1.02, 1.12, z * (SZ + 0.002)));
+      /* (the cab door's back edge, from over the wheel arch to the roof's curve) */
+      g.add(at(mesh(new T.BoxGeometry(0.006, 0.9, 0.004), dark), 1.02, 1.29, z * (SZ + 0.002)));
       g.add(at(mesh(new T.BoxGeometry(0.1, 0.02, 0.02), chrome), 1.15, 1.08, z * (SZ + 0.012)));
     }
-    for (let i = 0; i < 6; i++) g.add(at(mesh(new T.BoxGeometry(0.34, 0.012, 0.006), dark), -1.62, 0.98 + i * 0.045, SZ + 0.002));
+    /* the engine's louvres, low on the back corner (clear of the window over them and the wheel arch in front) */
+    for (let i = 0; i < 6; i++) g.add(at(mesh(new T.BoxGeometry(0.3, 0.012, 0.006), dark), -1.95, 0.86 + i * 0.045, SZ + 0.002));
+    /* the back: the engine lid's seam and its handle, the number plate under it with its little lamp */
+    { const lid = mesh(ringG(0.9, 0.4, 0.07, 0.008), dark, false); lid.rotation.y = -Math.PI / 2; at(lid, -2.1 - BV - 0.003, 0.88, 0); g.add(lid);
+      const hd = mesh(new T.BoxGeometry(0.02, 0.025, 0.12), chrome); at(hd, -2.1 - BV - 0.012, 1.0, 0); g.add(hd);
+      const pc = document.createElement('canvas'); pc.width = 256; pc.height = 72; const a = pc.getContext('2d');
+      a.fillStyle = '#f2efe6'; a.fillRect(0, 0, 256, 72); a.strokeStyle = '#222'; a.lineWidth = 4; a.strokeRect(4, 4, 248, 64);
+      a.fillStyle = '#1d1d1f'; a.font = 'bold 44px "IBM Plex Mono", monospace'; a.textAlign = 'center'; a.textBaseline = 'middle'; a.fillText('COVE 77', 128, 38);
+      const pl = mesh(new T.PlaneGeometry(0.3, 0.085), L('#ffffff', { map: Mats.tex(pc), roughness: 0.5 }), false); pl.rotation.y = -Math.PI / 2; at(pl, -2.1 - BV - 0.004, 0.6, 0); g.add(pl);
+      g.add(at(mesh(new T.BoxGeometry(0.03, 0.022, 0.08), chrome), -2.1 - BV - 0.012, 0.66, 0)); }
+
     /* wheels: rounded tyres, white rims, chrome caps */
     const tyreG = new T.LatheGeometry([[0.2, -0.1], [0.29, -0.1], [0.322, -0.082], [0.333, -0.045], [0.333, 0.045], [0.322, 0.082], [0.29, 0.1], [0.2, 0.1]].map(([r, y]) => new T.Vector2(r, y)), 32);
     for (const x of [xr, xf]) for (const z of [-1, 1]) {
@@ -323,22 +431,20 @@ void main(){
       const b2 = mesh(new T.SphereGeometry(1, 32, 12), L('#d9684e', { roughness: 0.3 })); b2.scale.set(1.115, 0.037, 0.05); rb.add(b2);
     }
     /* surfboard leaning on the back corner */
-    { const sb = grp(-2.32, 0, -0.55, 0); g.add(sb); sb.rotation.set(0.0, 0.2, -0.2); refs.boardLean = sb;
+    /* (its foot out on the sand behind the bumper, its back resting against the van's rear corner, through neither) */
+    { const sb = grp(-2.6, 0, -0.52, 0); g.add(sb); sb.rotation.set(0.0, 0.2, -0.24); refs.boardLean = sb;
       const board = mesh(new T.SphereGeometry(1, 32, 14), L('#efe4c8', { roughness: 0.3 })); board.scale.set(0.035, 1.12, 0.26); at(board, 0, 1.1, 0); sb.add(board);
       const st2 = mesh(new T.SphereGeometry(1, 32, 14), L('#d9684e', { roughness: 0.3 })); st2.scale.set(0.037, 1.115, 0.05); at(st2, 0, 1.1, 0); sb.add(st2);
       const fin = mesh(new T.BoxGeometry(0.11, 0.1, 0.012), dark); at(fin, 0.06, 0.18, 0); sb.add(fin); }
-    /* the sliding door, open: a lit interior behind the opening, the door panel slid back outside */
+    /* the sliding door, open: the room inside seen through the doorway, the door panel slid back outside */
     const DX = -0.33, DW = 1.06, DH = 1.3, DY = 0.46 + DH / 2;
-    const seal = mesh(new T.ShapeGeometry(rrect(DW + 0.05, DH + 0.05, 0.06)), dark, false); seal.rotation.y = Math.PI; at(seal, DX, DY, -SZ - 0.002); g.add(seal); refs.vanOpen = [seal];
-    const lamp = new T.Color(0.13, 0.08, 0.04);
-    const inside = new T.ShaderMaterial({ uniforms: { uLamp: { value: lamp }, uTime: U.bulb.uTime, uHalf: { value: new T.Vector2(DW / 2, DH / 2) } }, vertexShader: VAN_VS, fragmentShader: VAN_FS });
-    const door = new T.Mesh(new T.PlaneGeometry(DW, DH), inside); door.rotation.y = Math.PI; at(door, DX, DY, -SZ - 0.004); g.add(door); refs.vanOpen.push(door);
+    const seal = mesh(ringG(DW, DH, 0.06, 0.03), dark, false); seal.rotation.y = Math.PI; at(seal, DX, DY, -SZ - 0.003); g.add(seal); refs.vanOpen = [seal];
+    const door = new T.Mesh(new T.PlaneGeometry(DW, DH), paneMat(DW / 2, DH / 2, 0, new T.Vector3(0, 0, -1))); door.rotation.y = Math.PI; at(door, DX, DY, -SZ - 0.004); g.add(door); refs.vanOpen.push(door);
     { const st = at(mesh(new T.BoxGeometry(DW, 0.05, 0.12), L('#3a2a1e', { roughness: 0.8 })), DX, 0.47, -SZ - 0.04); g.add(st); refs.vanOpen.push(st); }          /* step */
     const slid = new T.Group(); g.add(slid); refs.vanSlid = { g: slid, dx: DW + 0.06 };
     const sd = mesh(new T.ExtrudeGeometry(rrect(DW, DH, 0.06), { depth: 0.03, bevelEnabled: false }), bodyM); sd.rotation.y = Math.PI; at(sd, DX - DW - 0.06, DY, -SZ - 0.035); slid.add(sd);
-    { const gl = mesh(new T.ShapeGeometry(rrect(0.8, 0.4, 0.06)), glass, false); gl.rotation.y = Math.PI; at(gl, DX - DW - 0.06, 1.36, -SZ - 0.069); slid.add(gl); }
+    win(DX - DW - 0.06, 1.36, 0.8, 0.4, -1, 1, 0.06, slid, 0.066);
     slid.add(at(mesh(new T.BoxGeometry(0.1, 0.022, 0.022), chrome), DX - DW / 2 - 0.02 - DW - 0.06 + DW / 2 + 0.38, 1.05, -SZ - 0.075));
-    refs.vanInside = { color: lamp };
     /* awning over the doorway: striped canvas from the roof edge out to two poles, scalloped valance */
     const AW = { x0: -1.95, x1: 0.62, zi: -SZ - 0.02, zo: -2.55, yi: 1.9, yo: 1.74 };
     const awn = new T.Group(); g.add(awn); refs.vanAwning = { g: awn, zi: AW.zi, poles: [] };
@@ -359,7 +465,16 @@ void main(){
         pin: (i, j) => j === 0, uv: (i, j) => [i / (VN - 1) * 2.2, j / (VR - 1)], stretch: 1, shear: 0.5, bend: 0.08, tether: true }], step: 1 / 120, iters: 4, maxSteps: 12, damp: 1.2, air: 2.2 });
       const vm = mesh(vcl.geometry(0), cloth); vm.geometry.boundingSphere = new T.Sphere(new T.Vector3((AW.x0 + AW.x1) / 2, AW.yo - 0.1, AW.zo), (AW.x1 - AW.x0) / 2 + 0.4); awn.add(vm);
       refs.fabric.push({ cl: vcl, mesh: vm, frame: awn, gust: 1, r: (AW.x1 - AW.x0) / 2 + 0.4, c: vm.geometry.boundingSphere.center });
-      for (const x of [AW.x0 + 0.03, AW.x1 - 0.03]) { const pl = at(mesh(new T.CylinderGeometry(0.014, 0.016, AW.yo, 8), chrome), x, AW.yo / 2, AW.zo); awn.add(pl); refs.vanAwning.poles.push(pl); }
+      /* the poles: painted aluminium, a foot plate in the sand, each held by a guy line out to a peg */
+      const poleM = L('#aeb2b5', { roughness: 0.42, metalness: 0.55 }), ropeM = L('#d8cfb8', { roughness: 0.9 }), pegM = L('#6b6f73', { roughness: 0.5, metalness: 0.4 });
+      for (const [x, sd] of [[AW.x0 + 0.03, -1], [AW.x1 - 0.03, 1]]) {
+        const pl = at(mesh(new T.CylinderGeometry(0.0125, 0.0125, AW.yo, 10), poleM), x, AW.yo / 2, AW.zo); awn.add(pl); refs.vanAwning.poles.push(pl);
+        const ft = at(mesh(new T.CylinderGeometry(0.035, 0.04, 0.012, 12), pegM), x, 0.006, AW.zo); awn.add(ft); refs.vanAwning.poles.push(ft);
+        const top = new T.Vector3(x, AW.yo - 0.02, AW.zo), peg = new T.Vector3(x + sd * 0.45, 0.03, AW.zo - 0.95);
+        const c = new T.CatmullRomCurve3([top, top.clone().lerp(peg, 0.5).add(new T.Vector3(0, -0.025, 0)), peg]);
+        const rp = mesh(new T.TubeGeometry(c, 16, 0.0035, 5, false), ropeM, false); awn.add(rp); refs.vanAwning.poles.push(rp);
+        const pg = mesh(new T.CylinderGeometry(0.006, 0.004, 0.12, 6), pegM); pg.rotation.set(-0.5, 0, sd * 0.25); at(pg, peg.x, 0.03, peg.z); awn.add(pg); refs.vanAwning.poles.push(pg);
+      }
       const rail = mesh(new T.CylinderGeometry(0.03, 0.03, AW.x1 - AW.x0 + 0.1, 12), L('#d9d4c8', { roughness: 0.5 })); rail.rotation.z = Math.PI / 2; at(rail, (AW.x0 + AW.x1) / 2, AW.yi + 0.02, AW.zi - 0.02); g.add(rail);
     }
     /* fairy lights along the awning edge */

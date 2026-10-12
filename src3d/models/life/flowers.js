@@ -51,7 +51,7 @@
     const st = stemGeo([[0, 0, 0], [0.003, 0.035, 0.002], [-0.002, 0.075, -0.002], [0.002, H - 0.002, 0]], 0.0018, 0.0014, green);
     const lf = (len, s) => leafGeo(len, 0.012, x => Math.sin(Math.PI * Math.min(1, x * 0.95 + 0.04)) * (1 + 0.12 * Math.sin(x * 24)), { col: lin('#3e6d2a'), fold: 0.3, arch: 0.15 });
     const stemParts = [{ geo: st }, { geo: lf(0.042), m: M.M4(0.002, 0.03, 0, 0, 0.4, 0.5) }, { geo: lf(0.036), m: M.M4(-0.001, 0.062, 0, 0, Math.PI + 0.9, 0.55) }];
-    g.add(new T.Mesh(M.mergeC(stemParts), M.lit('#ffffff', { vertexColors: true, roughness: 0.6, side: T.DoubleSide })));
+    g.add(new T.Mesh(M.mergeC(stemParts), M.lit('#ffffff', { vertexColors: true, roughness: 0.82, side: T.DoubleSide })));
     g.userData.anim = t => { head.rotation.z = 0.12 + 0.03 * Math.sin(t * 1.3); head.rotation.x = 0.04 * Math.sin(t * 1.7); };
     return g;
   });

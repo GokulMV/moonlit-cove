@@ -581,6 +581,7 @@ const Engine = (() => {
     camp.vanPop.lid.rotation.z = camp.vanPop.th * (1 - sm(0.15, 0.75, k)); camp.vanPop.canvas.visible = k < 0.12;
     camp.vanSlid.g.position.x = camp.vanSlid.dx * sm(0.25, 0.9, k);
     camp.vanOpen.forEach(o => o.visible = k < 0.6);
+    if (camp.vanInside.door) { camp.vanInside.door.value = k < 0.6 ? 1 : 0; camp.vanInside.pop.value = k < 0.12 ? 1 : 0; }
     camp.boardLean.visible = k < 0.5; camp.boardRoof.visible = k >= 0.5;
     camp.vanHead.forEach(m => m.emissiveIntensity = 3.5 * vanS.head);
     camp.vanTail.forEach(m => m.emissiveIntensity = 0.4 * vanS.head + 2.2 * vanS.brake);
@@ -747,7 +748,7 @@ const Engine = (() => {
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
     /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js) */
     inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
-      sources: [L => fauna.pickables(L), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c)],
+      sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c)],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
     post = makePost(); gU.uSunVis.value = post.visTex;
@@ -950,7 +951,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     uBulb.uOff.value.set(S.amb[0] * 0.6 + 0.002, S.amb[1] * 0.55 + 0.002, S.amb[2] * 0.45 + 0.002); uFairy.uOff.value.copy(uBulb.uOff.value);
     camp.lanterns.forEach((l, i) => { const lo = flickOut(surge.lantOut[i], wt, 0.6), k = 0.42 * L.lantern * candleFlicker(t, i) * lo; Mats.U.uLant.value[i].w = l.s * lo * (l.vis ?? 1); l.mat.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.55 * k + S.amb[1] * 0.5, 0.22 * k + S.amb[2] * 0.5); });
     camp.candles.forEach((m, i) => { const k = 0.5 * L.lantern * candleFlicker(t, i + 5) * flickOut(surge.candleOut, wt, 0.5); m.color.setRGB(1.0 * k + 0.01, 0.6 * k + 0.01, 0.28 * k + 0.01); });
-    { const k = 0.085 * L.van * vf; camp.vanInside.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.6 * k + S.amb[1] * 0.5, 0.3 * k + S.amb[2] * 0.5); }
+    /* (the lamp inside the van, and the daylight that comes in at its door and windows) */
+    { const k = 0.085 * L.van * vf, I = camp.vanInside; I.color.setRGB(1.0 * k, 0.6 * k, 0.3 * k); if (I.amb) I.amb.setRGB(S.amb[0] * 0.5, S.amb[1] * 0.5, S.amb[2] * 0.5); }
     (camp.vanGlow || []).forEach(v => { v.m.emissiveIntensity = v.k * L.van * vf; });
     { const k = 0.45 * F.i * (0.7 + 0.4 * ff); camp.coals.color.setRGB(1.0 * k, 0.28 * k, 0.05 * k); }
     Nature.sway(nature, t, o.wind ?? 1);

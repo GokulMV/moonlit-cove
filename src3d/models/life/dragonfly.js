@@ -61,3 +61,39 @@
     return g;
   });
 })();
+
+/* a firefly, held in a cupped hand: a soft-bodied beetle, its wing cases black edged with yellow, the shield over its head
+   pink-orange with a black spot, and under the tip of its abdomen the pale lantern that glows yellow-green; feathery
+   antennae, six legs. At the origin in metres, its head toward +x; about 1.5 cm long. userData.anim(t): it flashes */
+Models.add('life/firefly', () => {
+  const T = THREE, M = Models, g = new T.Group();
+  const black = [0.03, 0.028, 0.025], yellow = [0.8, 0.6, 0.08], pink = [0.85, 0.35, 0.22], pale = [0.85, 0.82, 0.55];
+  /* the wing cases: two long shells over its back, black with yellow edges */
+  /* (flat, lens-shaped in section, the pair meeting down the middle of its back in a thin seam, domed a little side
+     to side; the yellow only along the outer edge) */
+  const elytron = sd => M.loft([[-0.0088, 0, 0, 0.0017, 2.4], [-0.0074, 0.0017, 0.0006, 0.0018, 2.4], [-0.002, 0.0025, 0.00085, 0.002, 2.4], [0.0035, 0.0024, 0.0008, 0.002, 2.4], [0.0052, 0, 0, 0.0019, 2.4]], 18, 16,
+    (x, y, z, u, a) => sd * Math.sin(a) > 0.84 ? yellow : black, { shape: (x, y, z) => { const Z = z + sd * 0.0019; return [x, y - 55 * Z * Z, Z]; } });
+  const body = M.loft([[-0.0095, 0, 0, 0.0006], [-0.008, 0.0014, 0.0008, 0.0007], [-0.002, 0.0018, 0.001, 0.0009], [0.004, 0.0016, 0.0009, 0.001], [0.006, 0, 0, 0.001]], 16, 12, (x, y) => x < -0.0045 && y < 0.0008 ? pale : black);
+  const shield = M.loft([[0.0045, 0, 0, 0.0021, 2.2], [0.005, 0.0026, 0.0006, 0.0022, 2.2], [0.0068, 0.0028, 0.0007, 0.002, 2.2], [0.0083, 0, 0, 0.0016, 2.2]], 12, 16,
+    (x, y, z) => Math.hypot(x - 0.0064, z) < 0.0008 ? black : pink);
+  const shell = new T.Mesh(M.mergeC([{ geo: elytron(1) }, { geo: elytron(-1) }, { geo: shield }, { geo: body }]), M.litP('#ffffff', { vertexColors: true, roughness: 0.55, clearcoat: 0.2, clearcoatRoughness: 0.4 }));
+  g.add(shell);
+  /* the lantern: the last segments beneath, glowing */
+  const lampM = new T.MeshBasicMaterial({ color: new T.Color(0.5, 0.65, 0.12) });
+  const lamp = new T.Mesh(new T.SphereGeometry(1, 14, 10), lampM); lamp.scale.set(0.0024, 0.0011, 0.0016); lamp.position.set(-0.0075, 0.0001, 0); g.add(lamp);
+  const glow = new T.PointLight(0xc8ff60, 0, 0.05, 2); glow.position.set(-0.0075, -0.002, 0); g.add(glow);
+  /* head, eyes, antennae, legs */
+  const eyeM = M.litP('#121212', { roughness: 0.1, clearcoat: 1 });
+  for (const sd of [-1, 1]) {
+    const e = new T.Mesh(new T.SphereGeometry(0.0007, 10, 8), eyeM); e.position.set(0.0078, 0.0009, sd * 0.0008); g.add(e);
+    g.add(new T.Mesh(M.tube(new T.CatmullRomCurve3([new T.Vector3(0.0082, 0.0012, sd * 0.0005), new T.Vector3(0.011, 0.003, sd * 0.0018), new T.Vector3(0.014, 0.0038, sd * 0.0035)]), 10, 4, () => 0.00012), M.lit('#1a1a1a')));
+    for (let i = 0; i < 3; i++) { const x0 = 0.004 - i * 0.003; g.add(new T.Mesh(M.tube(new T.CatmullRomCurve3([new T.Vector3(x0, 0.0004, sd * 0.001), new T.Vector3(x0 + 0.0008, -0.0014, sd * 0.0034), new T.Vector3(x0 + 0.0014 - i * 0.001, -0.003, sd * 0.0042)]), 6, 3, () => 0.00015), M.lit('#151515'))); }
+  }
+  g.userData.anim = t => {
+    /* a flash every couple of seconds: up quick, down slow */
+    const u = (t % 2.4) / 2.4, f = u < 0.06 ? u / 0.06 : Math.exp(-(u - 0.06) / 0.12);
+    lampM.color.setRGB(0.5 + 3.5 * f, 0.65 + 4.2 * f, 0.12 + 0.9 * f); glow.intensity = 0.004 * f;
+  };
+  g.userData.anim(0);
+  return g;
+});
