@@ -202,7 +202,7 @@ void main(){
     sg.setAttribute('aFish', new T.InstancedBufferAttribute(af, 4)); sg.instanceCount = 3 * NF;
     const schools = [0, 1, 2, 3, 4].map(i => ({ x: (i - 2) * 16, s: 4 + (i % 3) * 1.5, h: 0, v: 0.7, turn: 0, k: 0 }));
     const uSchool = { value: schools.map(() => new T.Vector4()) };
-    const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uUw: U.uUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const shoal = new T.Mesh(sg, shoalM); shoal.frustumCulled = false; shoal.renderOrder = 4; root.add(shoal);
 
     /* advance: t in seconds of scene time, cx the camera's x; returns splashes to show and hear */

@@ -25,9 +25,11 @@ ok(!vis('Contact') && !vis('Blueprints') && !vis('Build notes'), 'no dots for th
 ok(await page.evaluate(() => Engine.knocked('chair0') && Engine.knocked('contact') && !Engine.knocked('board')), 'the engine knows what is down (and that the wish board is still up)');
 await shot(page, 'wreck_after');
 /* sitting in a knocked-over chair: refused, with the offer to put the camp back up */
-await page.evaluate(() => window.__cove.sit(Engine.seatIndex('chair0')));
+/* (read straight away: the note goes after a few seconds of real time, and software rendering takes longer than that
+   over a frame or two) */
+const t1 = await page.evaluate(() => { window.__cove.sit(Engine.seatIndex('chair0')); return { seated: window.__cove.seat.on, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toastText').textContent, btn: !document.getElementById('toastBtn').hidden }; });
 await frames(2);
-const t1 = await page.evaluate(() => ({ seated: window.__cove.seat.on, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toastText').textContent, btn: !document.getElementById('toastBtn').hidden }));
+t1.seated = t1.seated || await page.evaluate(() => window.__cove.seat.on);
 ok(!t1.seated && /wet sand/.test(t1.toast) && t1.btn, 'a knocked-over chair can\'t be sat in: ' + JSON.stringify(t1));
 /* the driftwood log is still up: that seat works */
 await page.evaluate(() => window.__cove.sit(Engine.seatIndex('log0')));

@@ -239,7 +239,7 @@ vec2 lastHit(float x, float z){
   float g = shoreDZv(x), s = max((shoreZv(x) - z)/sqrt(1.0 + g*g), 0.0), t = uWaveT, tr = 99.0, A = 0.0;
   for (int j = 0; j < 6; j++){ vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float d = t - (W.x + 0.9*sin(x*0.11 + W.z) + x*0.03*W.w - s/WC); if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
-  for (int k = 0; k < 3; k++){ vec4 U = uUw[k]; if (U.y <= 0.0) continue;
+  for (int k = 0; k < ${GLSL.MAXUW}; k++){ if (k >= uNUw) break; vec4 U = uwAt(k); if (U.y <= 0.0) continue;
     float T0 = U.x - s/CU, d = t - T0, a = userAmp(U, x, T0);
     if (d > -0.05 && d < 4.0 && a > 0.04){ tr = d; A = max(A, 1.0 + 2.4*a); } }
   return vec2(tr, A);
@@ -515,7 +515,7 @@ void main(){
     const far = new Map([...R.small.map((p, i) => [p, rockProto(31 + i * 17, SMALL[i], 1)]), ...R.big.map((p, i) => [p, rockProto(301 + i * 23, BIG[i], 2)]), [R.stack, rockProto(777, [1.2, 1.0, 1.1], 2, { top: 0.6 })]]);
     const rockMat = Mats.lit({ vertexColors: true, roughness: 0.86 }, 'rockw'), landMat = Mats.lit({ vertexColors: true, roughness: 0.95 }, 'land'), canMat = Mats.lit({ vertexColors: true, roughness: 0.92 }, 'canopy');
     /* foam round rocks in the water and the spray they throw up */
-    const surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uUw: U.uUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: { value: noiseTex } }, Mats.coastU);
+    const surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: { value: noiseTex } }, Mats.coastU);
     const foamM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: FOAM_VS, fragmentShader: FOAM_FS, transparent: true, depthWrite: false });
     const sprayM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: SPRAY_VS, fragmentShader: SPRAY_FS, transparent: true, depthWrite: false });
     const ring = new T.PlaneGeometry(1, 1); ring.rotateX(-Math.PI / 2);
