@@ -96,6 +96,10 @@ uniform float uCirrus, uAlto, uCumulus, uStratus, uStorm, uFlash; uniform vec4 u
 uniform sampler2D uNoise;
 uniform float uCloudT;      /* the clouds' own clock: they drift on the wind and their shapes keep changing */
 varying vec3 vDir;
+/* the cumulus layer's billows: four octaves of the noise, broad shapes with smaller heaps on them */
+float cumN(vec2 p){
+  return texture2D(uNoise, p*0.5).r*0.52 + texture2D(uNoise, p*1.07 + 0.31).g*0.27 + texture2D(uNoise, p*2.19 + 0.67).a*0.14 + texture2D(uNoise, p*4.5 + 0.13).r*0.07;
+}
 void main(){
   vec3 d = normalize(vDir);
   vec3 c = skyColor(d);
@@ -129,15 +133,28 @@ void main(){
     float a = atan(d.x, -d.z), e = asin(clamp(d.y, -1.0, 1.0));
     vec2 L2 = normalize(vec2(atan(Ld.x, -Ld.z) - a, asin(clamp(Ld.y, -1.0, 1.0)) - e) + vec2(1e-5));
     if (uCirrus > 0.001){
+      /* high cirrus: soft, thin veils drawn out along the wind, faint and smooth */
       float ct = uCloudT;
-      vec2 p = d.xz/(cy + 0.09)*0.14 + wnd*ct*0.0035;
+      vec2 p = d.xz/(cy + 0.1)*0.1 + wnd*ct*0.002;
       vec2 q = vec2(dot(p, wnd), dot(p, wnp));
-      q += 0.12*vec2(texture2D(uNoise, p*0.6 + vec2(ct*0.0021, 0.0)).r - 0.5, texture2D(uNoise, p*0.6 + 0.37 - vec2(0.0, ct*0.0017)).g - 0.5);
-      float fib = texture2D(uNoise, vec2(q.x*0.3 + ct*0.0016, q.y*2.6)).g*0.6 + texture2D(uNoise, vec2(q.x*0.8 - ct*0.0011, q.y*6.0) + 0.21).a*0.4;
-      float mask = smoothstep(0.36 - 0.18*uCirrus, 0.62, texture2D(uNoise, p*0.3 + 0.5 + vec2(-ct*0.0006, ct*0.0004)).r*0.75 + texture2D(uNoise, p*0.13 + vec2(0.3, ct*0.0005)).g*0.25);
-      float den = smoothstep(0.4, 0.66, fib)*mask*smoothstep(0.0, 0.035, cy)*uCirrus;
-      vec3 col = amb*1.9 + uCloudLit*1.9 + halo*1.2 + uGlow*1.1*pow(az, 1.5);
-      c = mix(c, col, den); cover += den*0.35;
+      float fib = texture2D(uNoise, vec2(q.x*0.32 + ct*0.0008, q.y*1.5)).g*0.75 + texture2D(uNoise, vec2(q.x*0.6, q.y*2.4) + 0.21).r*0.25;
+      float mask = smoothstep(0.42, 0.72, texture2D(uNoise, p*0.22 + 0.5 + vec2(-ct*0.0004, ct*0.0003)).r);
+      float den = smoothstep(0.5, 0.78, fib)*mask*smoothstep(0.0, 0.06, cy)*uCirrus*0.55;
+      vec3 col = amb*1.7 + uCloudLit*1.6 + halo*1.1 + uGlow*0.9*pow(az, 1.5);
+      c = mix(c, col, den); cover += den*0.3;
+    }
+    if (uCumulus > 0.001 && d.y > 0.0){
+      /* fair-weather cumulus all over the sky: puffs on a high flat layer, heaped where the billows are thickest,
+         lit on the side toward the sun (or the moon), grey at the heart, with a bright lining where they thin */
+      float ct = uCloudT;
+      vec2 p = d.xz/(d.y + 0.08)*0.2 + wnd*ct*0.0028;
+      float cov = mix(0.71, 0.47, clamp(uCumulus, 0.0, 1.0)), n = cumN(p), den = smoothstep(cov, cov + 0.15, n);
+      if (den > 0.002){
+        float nl = cumN(p + normalize(Ld.xz + vec2(1e-4))*0.03), lit = clamp(0.55 + (n - nl)*6.0, 0.0, 1.0), thick = smoothstep(cov, cov + 0.4, n);
+        vec3 col = amb*mix(1.2, 0.72, thick) + uCloudLit*mix(1.7, 0.6, thick)*(0.5 + 0.65*lit) + halo*(1.0 - thick)*0.9 + uGlow*0.5*pow(az, 2.0)*(1.0 - thick);
+        float fade = smoothstep(0.0, 0.05, d.y);
+        c = mix(c, col, den*fade*0.96); cover += den*fade*0.8;
+      }
     }
     if (uAlto > 0.001){
       float ct = uCloudT;
@@ -449,7 +466,7 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
       float onset = smoothstep(sb + 0.15, sb - 0.7, s);
       float pch = smoothstep(0.3, 0.78, tN(vec2(p.x*0.45, p.y*1.6) + vec2(k3, 0.0), 7.0).r);
       float sect = 0.35 + 0.65*smoothstep(0.2, 0.7, tN(vec2(p.x*0.11 + k3*1.9, 0.37), 5.0).g);   /* whitewater thicker where it broke hardest */
-      w.foam = max(w.foam, (exp(-dlt/1.0)*0.95 + (exp(-dlt/2.4)*0.3 + exp(-dlt/6.0)*0.14)*(0.25 + pch))*onset*min(amp, 2.5)*sect);
+      w.foam = max(w.foam, (exp(-dlt/0.9)*0.9 + exp(-dlt/2.2)*0.16*(0.25 + pch))*onset*min(amp, 2.5)*sect);
       w.lip = max(w.lip, exp(-dlt*dlt/0.02)*onset*min(amp, 2.0)*sect);
     }
   }
@@ -485,7 +502,7 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
         /* foam: thick on the running edge, thickest at the tongues' tips; where the wave stops its froth is stranded
            along the reach, and that and the sheet's own foam thin into lace and bubbles and pop away in spots. A later
            wave sweeps away what an earlier one left (the waves come oldest first) */
-        float band = exp(-behind/(0.14 + 0.16*RD.z)), film = exp(-u*2.6)*0.34*(0.3 + 1.2*nw.r);
+        float band = exp(-behind/(0.12 + 0.14*RD.z)), film = exp(-u*4.0)*0.1*(0.3 + 1.2*nw.r);
         float fs = (u < U0 ? max(band, film) : (band*0.9 + film)*exp(-tpk/mix(0.8, 5.0, nw.a*0.6 + nw.g*0.4)))*smoothstep(0.0, 0.02, behind);
         float swept = 1.0 - smoothstep(0.06, 0.2, behind);
         w.sf = max(w.sf*swept, fs);
@@ -579,7 +596,7 @@ void main(){
   if (s > -2.6){
     vec2 q = vec2(-p.y, p.x);
     float calm = mix(0.4, 1.0, smoothstep(-0.2, 3.5, s));
-    vec4 Tt = vec4(31.0, 9.3, 2.9, 0.9), Aa = vec4(0.30, 0.30, 0.267, 0.217), Ss = vec4(1.7, 0.95, 0.55, 0.3);
+    vec4 Tt = vec4(31.0, 9.3, 2.9, 0.9), Aa = vec4(0.22, 0.2, 0.14, 0.06), Ss = vec4(1.7, 0.95, 0.55, 0.3);
     vec2 g0 = tW(q + vec2(t*Ss.x, 0.0), Tt.x).rg*2.0 - 1.0;
     vec2 g1 = tW(mat2(0.94, 0.34, -0.34, 0.94)*q + vec2(t*Ss.y, 11.3), Tt.y).rg*2.0 - 1.0;
     vec2 g2 = tW(mat2(0.92, -0.39, 0.39, 0.92)*q + vec2(t*Ss.z, 5.1), Tt.z).rg*2.0 - 1.0;
@@ -677,20 +694,28 @@ void main(){
   if (uWet > 0.01 && s > -1.0 && dist < 60.0){ vec2 rr = rainRings(p, uTime*1.4)*0.35*uWet*smoothstep(60.0, 20.0, dist); Nw = normalize(Nw + vec3(rr.x, 0.0, rr.y)); }
   if (s > -2.0){
     float dz = smoothstep(-0.1, 16.0, s);
-    vec3 body = mix(vec3(0.07, 0.20, 0.205), vec3(0.010, 0.045, 0.085), pow(dz, 0.6));
+    /* clear tropical water: pale turquoise over the shallows, blue-green a little further out, deep blue at sea */
+    vec3 body = mix(mix(vec3(0.05, 0.30, 0.30), vec3(0.012, 0.13, 0.15), smoothstep(0.0, 8.0, s)), vec3(0.006, 0.042, 0.078), smoothstep(6.0, 34.0, s));
     /* slopes too small to see still tilt the water toward the eye: far out it reflects less, and sky from higher up,
        so the open sea stays a shade darker than the sky over it and the horizon remains a line */
     float tilt = sqrt(sig2)*1.3;
     float NV = max(dot(Nw, V), min(tilt, 0.35));
     float F = 0.02 + 0.98*pow(1.0 - NV, 5.0);
     vec3 R = reflect(-V, Nw); R.y = abs(R.y) + 0.002 + tilt*0.6; R = normalize(R);
-    vec3 lit = body*(uAmb*1.0 + uKeyCol*(0.2 + 0.7*max(dot(Nw, Lk), 0.0)) + art*0.5);
+    vec3 lit = body*(uAmb*1.0 + uKeyCol*(0.25 + 0.55*max(dot(Nw, Lk), 0.0)) + art*0.5);
+    /* in the shallows the sandy bottom shows through, bent a little by the ripples, tinted by the water over it and
+       laced with caustics by day; it fades out as the water deepens */
+    float clar = exp(-max(s, 0.0)*0.3)*(1.0 - 0.5*uRough);
+    if (clar > 0.01){
+      vec2 bp = p + (Nw.xz/max(Nw.y, 0.3))*0.25*clamp(s, 0.0, 4.0);
+      vec3 sandB = vec3(0.56, 0.48, 0.34)*(0.84 + 0.28*tN(bp, 18.6).r);
+      float caus = 0.0;
+      if (uDay > 0.01){ float c1 = tW(bp + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(bp - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a; caus = pow(c1*c2, 1.4)*uDay; }
+      vec3 bottom = sandB*(uAmb*0.9 + uKeyCol*(0.6*max(Lk.y, 0.0) + 0.7*caus) + art*0.6)*mix(vec3(1.0), vec3(0.55, 0.86, 0.84), smoothstep(0.0, 2.5, s));
+      lit = mix(lit, bottom, clar);
+    }
     lit = lit*(1.0 - F) + skyRefl(R)*F;
     if (glit) lit += seaSpec(Nw, V, uMoonDirV, uMoonGlit, sig2) + seaSpec(Nw, V, uSunDirV, uSunGlit, sig2);
-    if (uDay > 0.01 && s < 16.0){
-      float c1 = tW(p + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(p - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a;
-      lit += vec3(0.9, 1.0, 0.95)*pow(c1*c2, 2.0)*uDay*(1.0 - dz)*uKeyCol*0.45;
-    }
     #ifdef NEAR
       float face = clamp(dot(vNg.xz, -sn)*4.0, 0.0, 1.0), crestL = smoothstep(0.15, 0.9, vH);
       lit = lit*(1.0 - 0.5*face) + body*(uAmb*2.5 + uKeyCol*0.6)*crestL*0.6;
@@ -722,7 +747,7 @@ void main(){
     float lace = mix(net, holes, max(smoothstep(0.25, 0.75, dens), swf));
     float thr = 0.97 - dens*1.02;
     float fw = max(0.07, fwidth(lace)*1.6);
-    float foamV = mix(smoothstep(thr - fw, thr + fw, lace), clamp(dens*0.85, 0.0, 1.0), smoothstep(0.12, 0.45, fw))*smoothstep(0.03, 0.14, dens);
+    float foamV = mix(smoothstep(thr - fw, thr + fw, lace), clamp(dens*0.85, 0.0, 1.0), smoothstep(0.12, 0.45, fw))*smoothstep(0.08, 0.24, dens);
     foamV = max(foamV, w.lip*0.95*smoothstep(0.1, 0.45, holes));
     vec3 foamLit = vec3(0.9, 0.92, 0.94)*(uAmb*1.2 + uKeyCol*max(Lk.y, 0.15) + art*0.6);
     col = mix(col, foamLit, foamV*0.94);

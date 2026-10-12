@@ -391,7 +391,7 @@
 
   /* ── sky and weather: clouds in kinds, rain, storms with lightning ── */
   const WX = {
-    clear: { cirrus: 0.15, alto: 0, cumulus: 0.16, stratus: 0, storm: 0, rain: 0 },
+    clear: { cirrus: 0.1, alto: 0, cumulus: 0.24, stratus: 0, storm: 0, rain: 0 },
     wispy: { cirrus: 0.95, alto: 0.1, cumulus: 0.22, stratus: 0, storm: 0, rain: 0 },
     puffy: { cirrus: 0.22, alto: 0.08, cumulus: 1.0, stratus: 0, storm: 0, rain: 0 },
     mackerel: { cirrus: 0.4, alto: 0.95, cumulus: 0.28, stratus: 0, storm: 0, rain: 0 },
@@ -400,7 +400,7 @@
     storm: { cirrus: 0, alto: 0.05, cumulus: 0.55, stratus: 1, storm: 1, rain: 1 }
   };
   const AUTO = ['puffy', 'wispy', 'mackerel', 'clear', 'puffy', 'mackerel', 'wispy', 'overcast'];
-  const WXNOTE = { auto: 'Clouds drift through their kinds on their own.', clear: 'A clear sky, a few wisps.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus heaped along the horizon.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.' };
+  const WXNOTE = { auto: 'Clouds drift through their kinds on their own.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.' };
   st.weather = store.get('weather', 'auto'); if (st.weather !== 'auto' && !WX[st.weather]) st.weather = 'auto'; st.wx = Object.assign({}, WX.puffy, { wet: 0 }); st.flash = null; st.nextBolt = 0;
   function syncWxUI() { seg('wx', st.weather); $('wxNote').textContent = WXNOTE[st.weather] || ''; }
   document.querySelectorAll('[data-wx]').forEach(b => b.addEventListener('click', () => { st.weather = b.dataset.wx; store.set('weather', st.weather); syncWxUI(); if (st.weather === 'storm') unlock('storm'); }));
@@ -1930,5 +1930,5 @@
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt });
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX });
 })();
