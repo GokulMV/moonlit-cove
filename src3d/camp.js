@@ -156,14 +156,10 @@ void main(){
     cushion('#c4943a', 0.5, 0.14, 0.3, -0.22, -0.92, 0.06); cushion('#7d9277', 0.5, 0.14, 0.3, 0.26, 0.93, -0.08);
     cushion('#ddd0b4', 0.32, 0.21, 0.32, -1.32, 0.08); cushion('#a64d33', 0.3, 0.13, 0.3, 1.3, -0.15, 0.3);
     cushion('#6c84a6', 0.24, 0.13, 0.2, -0.78, -1.05, -0.4); cushion('#d8c9ad', 0.34, 0.06, 0.26, -1.0, 0.95, 0.4);
-    /* basket */
-    const bk = mesh(new T.BoxGeometry(0.5, 0.26, 0.34), Mats.lit({ map: Mats.tex(Paint.wicker(), { repeat: true }), roughness: 0.9 })); at(bk, 1.45, 0.13, -0.98); bk.rotation.y = 0.3; g.add(bk); refs.dyn.push({ o: bk, kind: 'tip', half: 0.17, tip: 1.35, y0: 0.13 });
-    const hd = mesh(new T.TorusGeometry(0.16, 0.012, 6, 18, Math.PI), L('#6f4e2b')); at(hd, 0, 0.13, 0); hd.rotation.y = Math.PI / 2; bk.add(hd);
-    /* the projects, packed: rolled plans and a notebook poking out of the basket */
-    { const rolls = [['#2b5b97', 0.034, 0.46, -0.12, 0.2, 0.04, 0.35], ['#c9d8e6', 0.03, 0.42, 0.02, 0.22, -0.05, -0.25], ['#ead9b4', 0.026, 0.38, 0.13, 0.19, 0.06, 0.15]];
-      for (const [hex, r, len, x, y, z, yaw] of rolls) { const o = mesh(new T.CylinderGeometry(r, r, len, 14), L(hex, { roughness: 0.9 })); o.position.set(x, y, z); o.rotation.set(0, yaw, Math.PI / 2 - 0.6); bk.add(o); if (!refs.planRoll) refs.planRoll = o;
-        const band = mesh(new T.CylinderGeometry(r * 1.04, r * 1.04, 0.025, 14), L('#9a4b1c', { roughness: 0.8 })); band.position.copy(o.position); band.rotation.copy(o.rotation); bk.add(band); }
-      const nb = mesh(new T.BoxGeometry(0.2, 0.012, 0.27), L('#2f4a3a', { roughness: 0.7 })); nb.position.set(0.05, 0.16, -0.05); nb.rotation.set(1.15, 0.1, 0); bk.add(nb); }
+    /* the picnic hamper, the blueprints standing in it (models/camp/basket.js) */
+    const bk = grp(1.45, 0.012, -0.98, 0.3); g.add(bk); bk.add(Models.make('camp/basket'));
+    refs.dyn.push({ o: bk, kind: 'tip', half: 0.17, tip: 1.35 });
+    refs.planRoll = bk.children[0].userData.planRoll;
     refs.basket = bk;
     /* book */
     const bookM = L('#efe6d1', { roughness: 0.9 });
@@ -370,7 +366,7 @@ void main(){
     { const mat = grp(0, 0, 0); g.add(mat);
       mat.add(at(mesh(new T.BoxGeometry(0.8, 0.012, 0.48), L('#b89a6c', { roughness: 1 }), false), DX, 0.006, -SZ - 0.55));
       for (const [x, z, r] of [[DX - 0.12, -SZ - 0.52, 0.2], [DX + 0.12, -SZ - 0.58, -0.15]]) { const sa = mesh(new T.BoxGeometry(0.26, 0.02, 0.1), L('#5b3a29')); at(sa, x, 0.02, z); sa.rotation.y = r; mat.add(sa); }
-      g.updateMatrixWorld(true); root.attach(mat); }
+      g.updateMatrixWorld(true); root.attach(mat); refs.vanMat = mat; }
     /* a clipboard with the packing list, hung on the van's side by the door */
     { const cb = grp(0.62, 1.22, -SZ - 0.012, Math.PI); g.add(cb);
       const bw = 0.266, bh = 0.376;
@@ -546,26 +542,11 @@ void main(){
     refs.chairs = chs; refs.chairProps = chs.map(() => []);    /* (what lies on a chair, out of sight while you sit in it) */
     /* a plaid throw over the first chair, a striped pad and a guitar at the second */
     refs.chairProps[0].push(throwOver(chs[0], Mats.tex(Paint.plaid(), { repeat: true })));
-    /* a log round beside the first chair, with the journal on it */
-    { const c1 = chs[0]; c1.updateMatrixWorld(true);
-      const pos = c1.localToWorld(new T.Vector3(0.1, 0, 0.66)), F = Layout.fire;
-      const lg = grp(pos.x, 0, pos.z, 0); root.add(lg);
-      const bark = Mats.lit({ map: Mats.tex(Paint.logBark(23), { repeat: true }), roughness: 0.95 });
-      const topC = document.createElement('canvas'); topC.width = topC.height = 256; { const a = topC.getContext('2d'); a.fillStyle = '#b48a5e'; a.fillRect(0, 0, 256, 256); for (let r = 8; r < 128; r += 7 + (r % 5)) { a.strokeStyle = `rgba(90,60,30,${0.25 + (r % 3) * 0.1})`; a.lineWidth = 2; a.beginPath(); a.arc(128, 128, r, 0, Math.PI * 2); a.stroke(); } a.fillStyle = 'rgba(60,40,20,0.35)'; a.fillRect(126, 128, 3, 120); }
-      const top = Mats.lit({ map: Mats.tex(topC), roughness: 0.9 });
-      const stump = mesh(new T.CylinderGeometry(0.22, 0.24, 0.4, 24), [bark, top, top]); at(stump, 0, 0.2, 0); lg.add(stump);
-      const face = Math.atan2(-(F.z - pos.z), F.x - pos.x);           /* page tops point at the fire */
-      const jg = grp(0, 0.4031, 0, face - Math.PI / 2); lg.add(jg);
-      refs.journal = Book.build(jg, { W: 0.17, H: 0.24, cloth: '#4a2a18', ribbon: '#a3262a', T: 0.014 }); refs.journalGroup = jg; refs.logRound = lg;
-      refs.dyn.push({ o: lg, kind: 'tip', half: 0.2, tip: 1.2 }); }
-    /* a thin striped pad on the second chair's seat, and the guitar leaning on its arm (models/camp/guitar.js) */
+    /* a thin striped pad on the second chair's seat */
     { const c2 = chs[1], { yc, phi } = c2.userData.back;
       const pad = mesh(Models.extrude(Models.rshape(-0.21, -0.25, 0.21, 0.25, [0.06, 0.06, 0.06, 0.06]), 0.03, 0.012), Mats.lit({ map: Mats.tex(Paint.stripes('#2f4d5e', '#e8dfc8', 9)), roughness: 0.95 }));
       pad.rotation.set(-Math.PI / 2, 0, 0); const pg = grp(0.08, yc(0.08) + 0.075, 0); pg.rotation.z = phi; pg.add(pad); c2.add(pg);
-      const gt = Models.make('camp/guitar'); gt.rotation.set(-0.06, 0.4, 0.3, 'YXZ'); gt.position.set(0.52, 0, -0.5); c2.add(gt);
-      /* stood on the sand, leaning */
-      c2.updateMatrixWorld(true); gt.position.y -= new T.Box3().setFromObject(gt).min.y - c2.position.y;
-      refs.chairProps[1].push(pg); refs.guitar = gt; }
+      refs.chairProps[1].push(pg); }
     towel(chs[1], refs);
   }
   /* a beach towel left over the second chair's back to dry by the fire. It is cloth: the two rows lying over the
@@ -669,15 +650,25 @@ void main(){
     refs.dyn.push({ o: g, kind: 'tip', half: 0.3, tip: 1.3 });
   }
 
-  /* ── a little valve radio on the picnic table, two-tone like the van: a speaker grille, a dial that glows amber
-     while it plays (its needle moves as it tunes), two knobs and a chrome handle ── */
-  /* the radio, on an old crate between the chairs by the fire (models/camp/radio.js, crate.js) */
-  function radio(root, refs) {
-    const K = Layout.crate, cg = grp(K.x, 0, K.z, K.rot); root.add(cg);
-    const crate = Models.make('camp/crate'); cg.add(crate);
-    const g = Models.make('camp/radio'); g.position.set(0.02, crate.userData.top, 0.01); g.rotation.y = K.radio; cg.add(g); g.userData.pick = 'radio';
-    refs.dyn.push({ o: cg, kind: 'tip', half: 0.22, tip: 1.2 }); refs.crate = cg;
+  /* ── a small table between the chairs by the fire (models/camp/sidetable.js): the valve radio at one end (models/camp/
+     radio.js), the journal at the other, its page tops toward the fire so it is read from the camp's side, and the
+     guitar leaning against the far end (models/camp/guitar.js), out of the way of whoever sits in the chairs ── */
+  function sideTable(root, refs) {
+    const K = Layout.crate, tg = grp(K.x, 0, K.z, K.rot); root.add(tg);
+    const tb = Models.make('camp/sidetable'); tg.add(tb); const top = tb.userData.top;
+    const g = Models.make('camp/radio'); g.position.set(-0.22, top, -0.09); g.rotation.y = 0.22; tg.add(g); g.userData.pick = 'radio';
     refs.radio = { group: g, set: g.userData.set };
+    const jg = grp(0.08, top + 0.0031, 0.095, -0.06); tg.add(jg);
+    refs.journal = Book.build(jg, { W: 0.17, H: 0.24, cloth: '#4a2a18', ribbon: '#a3262a', T: 0.014 }); refs.journalGroup = jg;
+    /* the guitar: its back against the radio's end of the table, its foot on the sand a hand's breadth out, tilted 15
+       degrees so the table's edge meets it just below the neck, turned a little toward the camp (resting on one end of
+       the edge) */
+    { const a = 0.26, b = 0.18, L2 = tb.userData.L / 2, gt = Models.make('camp/guitar'), pv = grp(-L2, 0, -0.02, Math.PI - b); tg.add(pv);
+      gt.quaternion.setFromAxisAngle(new T.Vector3(0, 0, 1), a).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), Math.PI / 2));
+      gt.position.set(0.112 + 0.145 * Math.tan(b), 0.252 * Math.cos(a), 0); pv.add(gt);
+      tg.updateMatrixWorld(true); gt.position.y -= new T.Box3().setFromObject(gt).min.y - tg.position.y;
+      refs.guitar = gt; }
+    refs.dyn.push({ o: tg, kind: 'tip', half: 0.3, tip: 1.2 }); refs.crate = tg;
   }
 
   /* string-light pools, top-down, sqrt-encoded (R channel) */
@@ -698,7 +689,7 @@ void main(){
   function build(root, U) {
     const refs = { candles: [], lanterns: [], dyn: [], vanHead: [], vanTail: [], vanWheels: [], fabric: [] };
     picnic(root, refs); lanterns(root, refs); stringLights(root, refs, U); van(root, refs, U); campfire(root, refs); chairs(root, refs); woodpile(root, refs); shoreBits(root, refs);
-    wishBoard(root, refs); radio(root, refs);
+    wishBoard(root, refs); sideTable(root, refs);
     /* what a click in the scene can land on: the chairs, the driftwood and the cushions at the table (all seats), the
        radio, the wish board */
     if (refs.driftwood) refs.driftwood.userData.pick = 'log0';

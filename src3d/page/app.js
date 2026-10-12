@@ -77,6 +77,8 @@
     Content.chapters.forEach(x => { x.spot.classList.toggle('on', x.id === id); x.spot.classList.toggle('dim', !!c && x.id !== id); });
     const d = $('drawer');
     if (c) { readSeen.add(c.id); if (readSeen.size >= Content.chapters.length) unlock('reader'); }
+    /* (knocked over by a wave: it is set back up where it was before it is opened) */
+    if (c && Engine.knocked && Engine.knocked(c.id)) Engine.restore(c.id);
     if (c && RD[c.id]) { d.hidden = true; document.body.classList.remove('reading'); startReading(c.id); return; }
     document.body.classList.toggle('reading', !!c);
     d.classList.toggle('menu-mode', false);
@@ -1468,11 +1470,11 @@
     updateSky(ms, S);
     syncLightsUI();
 
-    /* hotspots follow their objects */
-    if (!anchors) anchors = Engine.anchors();
+    /* hotspots follow their objects (a wave or the van can move them), and go while one lies knocked over */
+    anchors = Engine.anchors();
     /* pins: a glint on each object, hidden while something is open */
     Content.chapters.forEach(c => { const a = c.anchor === 'clipboard' ? (Engine.anchorNow('clipboard') || anchors.clipboard) : anchors[c.anchor];
-      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && !wk.on && !Engine.pitching && !Engine.knocked(c.id) && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     extras(dtR);
@@ -1589,7 +1591,7 @@
   } });
   /* the wishes open like a chapter: the camera goes to the board and the drawer lists them all */
   function openWishes() {
-    if (!ready || !st.entered) return;
+    if (!ready || !st.entered || isDown('board')) return;
     if (seat.on) leaveSeat();
     if (rd.on) stopReading(true);
     if (car.on) stopDrive();
@@ -1701,8 +1703,14 @@
     wk.on = false; wk.camK = 0; keys.clear(); touch.x = touch.y = 0;
     document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
   }
+  /* things a wave has knocked over say so, and offer to put the camp back up */
+  const downMsg = { seat: 'That seat is lying in the wet sand. Put the camp back up to sit there again.', radio: 'The radio went over with the table. Put the camp back up to play it.',
+    sketch: 'The wave took the drawing board. Put the camp back up to draw.', toolbox: 'The toolbox is lying in the wet sand. Put the camp back up to open it.', board: 'The wish board is down. Put the camp back up to read the wishes.' };
+  const isDown = (key, msgKey) => { if (!Engine.knocked || !Engine.knocked(key)) return false; toast(downMsg[msgKey || key], true, 4500); return true; };
+  const seatDown = i => { const P = Engine.seatPose(i); return !!(P && Engine.knocked && Engine.knocked(P.id)); };
   function sit(i) {
     if (!ready || !st.entered || car.on || (seat.on && seat.i === i) || !(i >= 0 && i < Engine.seatCount())) return;
+    if (seatDown(i)) { toast(downMsg.seat, true, 4500); return; }
     if (rd.on || st.chapter) openChapter(null);
     toggleSettings(false);
     const moving = seat.on, walking = wk.on;
@@ -1726,7 +1734,7 @@
     syncSeatUI(); syncRadioUI();
   }
   const seatBy = id => Engine.seatIndex(id);
-  function nextSeat(d) { if (!seat.on) return; const n = Engine.seatCount(); sit((seat.i + d + n) % n); }
+  function nextSeat(d) { if (!seat.on) return; const n = Engine.seatCount(); let j = seat.i; for (let k = 0; k < n; k++) { j = (j + d + n) % n; if (!seatDown(j)) break; } if (j !== seat.i) sit(j); }
   /* turning the chair you are in: a quarter of a right angle a press, as far as a person would shift it */
   function turnChair(d) {
     const P = seat.pose; if (!seat.on || !P || P.kind !== 'chair') return;
@@ -1906,7 +1914,7 @@
     if (!keepMsg) radio.msg = '';
     mediaInfo(null); syncRadioUI();
   }
-  const radioToggle = () => radio.on ? radioOff() : radioOn();
+  const radioToggle = () => { if (!radio.on && isDown('radio')) return; radio.on ? radioOff() : radioOn(); };
   /* the radio itself, clicked in the scene: from anywhere, it sits you down by the fire with it on */
   function radioClick() { const P = seat.on && Engine.seatPose(seat.i); if (!P || P.near !== 'fire') { sit(seatBy('chair1')); if (!radio.on) radioOn(); } else radioToggle(); }
   function step(d) { if (!radio.on) return; radio.msg = ''; if (radio.src === 'songs') playSong(radio.qi + d); else if (radio.stations) tune(radio.si + d, d); }
@@ -1984,7 +1992,7 @@
       if (!A[x.key]) { x.el.style.visibility = 'hidden'; continue; }
       const atTable = seat.on && seat.pose && seat.pose.near === 'table', p = Engine.project(A[x.key]);
       const want = !sketch.on && !tbox.on && (x.key === 'radio' ? seat.on && !atTable : x.key === 'sketch' || x.key === 'toolbox' ? !st.chapter && (!seat.on || atTable) : !seat.on && !st.chapter);
-      const vis = want && !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const vis = want && !rd.on && !car.on && !wk.on && !Engine.pitching && !Engine.knocked(x.key) && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
     }
   }
@@ -2040,7 +2048,7 @@
     return { pos, look, fov, focus: d };
   }
   function openSketch() {
-    if (!ready || !st.entered || car.on || sketch.on) return;
+    if (!ready || !st.entered || car.on || sketch.on || isDown('sketch')) return;
     if (rd.on || st.chapter) openChapter(null);
     if (tbox.on) closeToolbox(true);
     toggleSettings(false);
@@ -2160,7 +2168,7 @@
       (tbox.list ? '<p class="tb-empty">No drawings yet. Sit at the picnic table, draw on the board, and put the first one in.</p>' : '');
   }
   function openToolbox() {
-    if (!ready || !st.entered || car.on || tbox.on) return;
+    if (!ready || !st.entered || car.on || tbox.on || isDown('toolbox')) return;
     if (rd.on || st.chapter) openChapter(null);
     if (sketch.on) closeSketch(true);
     toggleSettings(false);

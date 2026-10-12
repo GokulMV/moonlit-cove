@@ -103,7 +103,7 @@ const Layout = (() => {
   const chairs = [{ x: 5.7, z: -3.1, face: [6.9, -4.5] }, { x: 8.4, z: -3.5, face: [6.9, -4.5] }];
   const driftwood = { x: 7.0, z: -6.05, len: 2.6, rot: 0.15 };
   /* an old crate between the chairs, the radio on it turned toward the first chair and the fire */
-  const crate = { x: 7.08, z: -2.92, rot: -0.12, radio: -2.35 };
+  const crate = { x: 7.05, z: -2.95, rot: 0.04 };     /* the side table between the chairs: the radio and the journal on it */
   /* the wish board: a corkboard on two posts to the right of the fire, its face turned to the chairs and the camp */
   const board = { x: 10.5, z: -3.7, rot: -1.07 };
 

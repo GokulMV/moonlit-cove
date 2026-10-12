@@ -9,8 +9,10 @@ const Engine = (() => {
   const api = {};
   let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas, cloudNoiseMs = 0;
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
-  let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = 0, skyMesh = null, groundMesh = null;
+  let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null;
   let uncork = null;
+  /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
+  const NEAR = { W: 192, D: 100, CELL: 0.4 };
   let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
@@ -50,10 +52,11 @@ const Engine = (() => {
     fin.uniforms.uSunScr = { value: new T.Vector4() }; fin.uniforms.uCloudB = { value: null }; fin.uniforms.uCloudBOn = { value: 0 };
     /* the clouds: marched at half size before the scene, each frame blended into the last (turned to where it now lies on
        screen), so the grain of a few dozen steps smooths away; the sky draws them from it */
-    const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uFrame: { value: 0 }, uEnv: { value: 0 }, uPxA: { value: 0.004 } };
+    const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uFrame: { value: 0 }, uEnv: { value: 0 }, uPxA: { value: 0.004 }, uOff: { value: new T.Vector2() }, uFull: { value: new T.Vector2(1, 1) } };
     for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uCO', 'uCQ', 'uShape', 'uDetail', 'uWeather', 'uLdM']) cloudU[k] = su0[k];
     const cloudM = mk(GLSL.CLOUD_FS, cloudU);
-    const cloudR = mk(GLSL.CLOUD_RES_FS, { uCur: { value: null }, uHist: { value: null }, uPrevVP: { value: new T.Matrix4() }, uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uHasPrev: { value: 0 }, uAlpha: { value: 0.12 }, uTexel: { value: new T.Vector2() } });
+    const cloudR = mk(GLSL.CLOUD_RES_FS, { uCur: { value: null }, uHist: { value: null }, uPrevVP: { value: new T.Matrix4() }, uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uHasPrev: { value: 0 }, uAlpha: { value: 0.3 }, uOff: cloudU.uOff, uFull: cloudU.uFull });
+    const OFFS = [[0, 0], [1, 1], [1, 0], [0, 1]];
     let clRT = [], clCur = null, ci = 0, clPrev = false, clFrame = 0, clCam = new T.Vector3(1e9, 0, 0), clT = -1e9;
     const _vr = new T.Matrix4();
     let rt = null, bl = [], dofRT = null, aoRT = null, aoBRT = null, fireRT = null, W = 0, H = 0, S = 0;
@@ -62,8 +65,9 @@ const Engine = (() => {
       W = w; H = h; S = samples;
       if (rt) { rt.dispose(); rt.depthTexture.dispose(); bl.forEach(b => b.dispose()); dofRT.dispose(); aoRT.dispose(); aoBRT.dispose(); fireRT.dispose(); clRT.forEach(c => c.dispose()); clCur.dispose(); }
       const hw = Math.max(1, w >> 1), hh = Math.max(1, h >> 1);
-      clRT = [0, 1].map(() => new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter })); clPrev = false;
-      clCur = new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter });
+      /* (the clouds: kept at the full size, marched at half, a quarter of the pixels a frame) */
+      clRT = [0, 1].map(() => new T.WebGLRenderTarget(w, h, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter })); clPrev = false;
+      clCur = new T.WebGLRenderTarget((w + 1) >> 1, (h + 1) >> 1, { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter });
       aoRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false }); aoBRT = new T.WebGLRenderTarget(hw, hh, { depthBuffer: false });
       fireRT = new T.WebGLRenderTarget(hw, hh, { type: T.HalfFloatType, depthBuffer: false });
       rt = new T.WebGLRenderTarget(w, h, { type: T.HalfFloatType, samples, depthBuffer: true });
@@ -80,10 +84,11 @@ const Engine = (() => {
         if (camera.position.distanceTo(clCam) > 40 || Math.abs(p.cloudT - clT) > 20) clPrev = false;
         clCam.copy(camera.position); clT = p.cloudT;
         const c = cloudM.uniforms; c.uInvProj.value.copy(camera.projectionMatrixInverse); c.uCamRot.value.setFromMatrix4(camera.matrixWorld);
-        c.uFrame.value = (clFrame++) % 997; c.uPxA.value = 2 * Math.tan(camera.fov * Math.PI / 360) / clCur.height;
+        const o = OFFS[clFrame % 4]; c.uOff.value.set(o[0], o[1]); c.uFull.value.set(rt.width, rt.height);
+        c.uFrame.value = (clFrame++) % 997; c.uPxA.value = 2 * Math.tan(camera.fov * Math.PI / 360) / rt.height;
         quad.material = cloudM; R.setRenderTarget(clCur); R.render(qs, qc);
         const r = cloudR.uniforms; r.uCur.value = clCur.texture; r.uHist.value = clRT[1 - ci].texture; r.uHasPrev.value = clPrev ? 1 : 0; r.uAlpha.value = p.cloudBlend;
-        r.uInvProj.value.copy(camera.projectionMatrixInverse); r.uCamRot.value.copy(c.uCamRot.value); r.uTexel.value.set(1 / clCur.width, 1 / clCur.height);
+        r.uInvProj.value.copy(camera.projectionMatrixInverse); r.uCamRot.value.copy(c.uCamRot.value);
         quad.material = cloudR; R.setRenderTarget(clRT[ci]); R.render(qs, qc);
         su0.uCB.value = clRT[ci].texture; su0.uCBOn.value = 1; su0.uCBInv.value.set(1 / rt.width, 1 / rt.height); fin.uniforms.uCloudB.value = clRT[ci].texture; fin.uniforms.uCloudBOn.value = 1;
         /* (for the next frame: where a direction lay on this frame's screen) */
@@ -287,8 +292,9 @@ const Engine = (() => {
   function clickSea(nx, ny, wt) {
     const h = seaPick(nx, ny); if (!h || h.s < 0.8) return null;
     surge.combo = wt - surge.lastT < 2.8 ? surge.combo + 1 : 1; surge.lastT = wt;
-    surge.ripples.push({ x: h.x, z: h.z, t0: wt, A: 0.9 }); if (surge.ripples.length > 6) surge.ripples.shift();
-    const s0 = Math.min(Math.max(h.s, 7), 42);
+    /* (a soft ring where it was touched; the swell itself rises there and rolls in) */
+    surge.ripples.push({ x: h.x, z: h.z, t0: wt, A: 0.35 }); if (surge.ripples.length > 6) surge.ripples.shift();
+    const s0 = Math.min(Math.max(h.s, 7), 76);
     /* clicks close together in time and place stack into one taller swell */
     let w = surge.waves.find(q => q.x - wt > 1.2 && Math.abs(q.xc - h.x) < 14 && wt - q.t0 < 4.5);
     if (w) { w.amp = Math.min(7.5, w.amp + 1.15); w.xc += (h.x - w.xc) * 0.3; }
@@ -296,7 +302,7 @@ const Engine = (() => {
     surge.waves = surge.waves.filter(q => wt - q.x < tsOf(q.amp) + 15).slice(-3);   /* as long as the shader still draws its wet sand */
     return { x: h.x, z: h.z, combo: surge.combo, amp: w.amp, eta: w.x - wt, reach: (0.85 + 0.75 * w.amp) };
   }
-  const userAmpJS = (w, x, wt) => { const sc = Math.max(w.s0 - (wt - (w.x - w.s0 / CU)) * CU, 0), hw = Math.min(4 + 0.9 * (w.s0 - sc), 46), dx = (x - w.xc) / hw;
+  const userAmpJS = (w, x, wt) => { const sc = Math.max(w.s0 - (wt - (w.x - w.s0 / CU)) * CU, 0), hw = Math.min(9 + 0.8 * (w.s0 - sc), 46), dx = (x - w.xc) / hw;
     const along = 0.82 + 0.36 * (0.5 + 0.25 * Math.sin(x * 0.31 + w.xc) + 0.25 * Math.sin(x * 0.13 + 1.7 * w.xc)); return w.amp * along * Math.exp(-dx * dx); };
   /* is (x, z) under the swash of a click-swell at time wt? (mirrors the ground shader, tongues and all) */
   function swashAt(x, z, wt) {
@@ -461,6 +467,27 @@ const Engine = (() => {
   const TAU2 = Math.PI * 2;
   /* ── the camper van, driven: pose, wheels, pack-up state, lights ── */
   const _e = new T.Euler(0, 0, 0, 'YXZ');
+  /* the van's own things on the sand (its doormat and sandals, the lantern by its door) go where it goes: packed away as
+     it closes up to drive, laid out again by its door wherever it stops and opens up */
+  let vanProps = null;
+  const _vm = new T.Matrix4(), _vp = new T.Vector3(), _vq = new T.Quaternion(), _vs = new T.Vector3();
+  function initVanProps() {
+    const g = camp.vanGroup; g.updateMatrixWorld(true); const inv = g.matrixWorld.clone().invert(); vanProps = [];
+    const add = (o, lantern) => { if (!o) return; o.updateMatrixWorld(true); vanProps.push({ o, lantern, off: inv.clone().multiply(o.matrixWorld), s: o.scale.x }); };
+    add(camp.vanMat);
+    (camp.lanternGroups || []).forEach((lg, i) => { const p = lg.getWorldPosition(new T.Vector3()); if (Math.hypot(p.x - g.position.x, p.z - g.position.z) < 3.5) add(lg, i); });
+  }
+  function placeVanProps(k) {
+    if (!vanProps) return;
+    const g = camp.vanGroup, s = 1 - sm01(0, 0.45, k);
+    for (const p of vanProps) {
+      _vm.multiplyMatrices(g.matrixWorld, p.off); _vm.decompose(_vp, _vq, _vs); _e.setFromQuaternion(_vq, 'YXZ');
+      p.o.position.set(_vp.x, 0, _vp.z); p.o.rotation.set(0, _e.y, 0); p.o.scale.setScalar(Math.max(0.001, s * p.s)); p.o.visible = s > 0.01;
+      if (p.lantern != null) { const l = camp.lanterns[p.lantern]; l.pos.set(_vp.x, l.pos.y, _vp.z); l.vis = s; Mats.U.uLant.value[p.lantern].x = _vp.x; Mats.U.uLant.value[p.lantern].z = _vp.z; }
+      /* (set out again: a wave that reaches it knocks it over where it now stands) */
+      if (s >= 1) { const d = surge.dyn.find(d => d.o === p.o); if (d && !d.hit) { d.p0.copy(p.o.position); d.P0.copy(p.o.position); d.q0.copy(p.o.quaternion); d.Q0.copy(p.o.quaternion); d.wx = _vp.x; d.wz = _vp.z; } }
+    }
+  }
   function setVan(v) {
     const g = camp.vanGroup;
     if (v.x !== undefined) { g.position.set(v.x, v.lift || 0, v.z); _e.set(v.roll || 0, v.heading, v.pitch || 0, 'YXZ'); g.quaternion.setFromEuler(_e); vanS.moved = true; }
@@ -484,6 +511,7 @@ const Engine = (() => {
     Mats.U.uVanPos.value.copy(camp.vanLightPos); Mats.U.uVanDir.value.copy(camp.vanLightDir);
     const fwd = new T.Vector3(1, 0, 0).applyQuaternion(g.quaternion), hp = new T.Vector3(2.35, 0.8, 0).applyMatrix4(g.matrixWorld);
     Mats.U.uHead.value.set(hp.x, hp.y, hp.z, 1.3 * vanS.head); Mats.U.uHeadDir.value.set(fwd.x, -0.18, fwd.z).normalize();
+    placeVanProps(k);
   }
   const vanPose = () => { const g = camp.vanGroup; _e.setFromQuaternion(g.quaternion, 'YXZ'); return { x: g.position.x, z: g.position.z, heading: _e.y }; };
   /* footprints and tyre tracks are decals pressed into the sand (marks.js) */
@@ -516,7 +544,7 @@ const Engine = (() => {
     return { fire: [F.x, 0.5, F.z], lights: [bulb.p.x, bulb.p.y, bulb.p.z], table: [Tb.x, 0.47, Tb.z], van: [camp.vanDoor.x, camp.vanDoor.y, camp.vanDoor.z],
       journal: camp.journalGroup ? (() => { const v = camp.journalGroup.localToWorld(new T.Vector3(camp.journal.W / 2, 0.02, 0)); return [v.x, v.y, v.z]; })() : [F.x - 0.6, 0.45, F.z + 1.7],
       clipboard: camp.clipboard ? wp(camp.clipboard, 0) : [Layout.van.x, 1.2, Layout.van.z],
-      bottle: camp.bottle ? wp(camp.bottle, 0.03) : [B.x, 0.08, B.z], basket: camp.basket ? wp(camp.basket, 0.2) : [Tb.x + 1.4, 0.3, Tb.z - 1] };
+      bottle: camp.bottle ? wp(camp.bottle, 0.03) : [B.x, 0.08, B.z], basket: camp.basket ? wp(camp.basket, 0.34) : [Tb.x + 1.4, 0.3, Tb.z - 1] };
   }
   /* anchors on things that move: the clipboard rides on the van */
   function anchorNow(name) {
@@ -589,6 +617,7 @@ const Engine = (() => {
     Mats.U.uVanPos.value.copy(camp.vanLightPos); Mats.U.uVanDir.value.copy(camp.vanLightDir);
     nature = Nature.build(natG);
     paper = Paper.build(scene);
+    initVanProps();
     if (camp.bottleModel) uncork = Uncork.make({ scene, camera, bottle: camp.bottle, model: camp.bottleModel, ground: 0, onPop: () => { if (api.onBottlePop) api.onBottlePop(); } });
     surge.rng = Textures.rng(4242); registerDyn(camp.dyn);
     scene.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = o.material.metalness > 0.5 ? 1.8 : 1.45; });
@@ -606,14 +635,16 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uUw: { value: [0, 1, 2].map(() => new T.Vector4()) }, uRip: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uNearRect: { value: new T.Vector4(-48, -62, 48, -2) }, uDbgG: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) }
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uUw: { value: [0, 1, 2].map(() => new T.Vector4()) }, uRip: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) }
     });
     groundMat = new T.ShaderMaterial({ uniforms: gU, vertexShader: GLSL.GROUND_VS, fragmentShader: GLSL.GROUND_FS, defines: { FAR: 1 } });
     const ground = new T.Mesh(new T.PlaneGeometry(40000, 40000, 160, 160), groundMat);   /* in cells, or depth goes ragged across one huge triangle */
     ground.rotation.x = -Math.PI / 2; ground.position.set(0, 0, -19800); ground.frustumCulled = false; scene.add(ground); groundMesh = ground;
     /* the near-shore sea is a fine mesh carrying a real wave height field (tide swells and clicked swells) */
-    const nr = gU.uNearRect.value, ng = new T.PlaneGeometry(nr.z - nr.x, nr.w - nr.y, opts.nearSegX || 320, opts.nearSegZ || 200);
-    ng.rotateX(-Math.PI / 2); ng.translate((nr.x + nr.z) / 2, 0, (nr.y + nr.w) / 2);
+    /* (192 m along the beach by 100 m out to sea, in cells of 40 cm; it is moved a whole cell at a time, so its vertices
+       always stand on the same spots and the waves they carry never shimmer) */
+    const ng = new T.PlaneGeometry(NEAR.W, NEAR.D, opts.nearSegX || Math.round(NEAR.W / NEAR.CELL), opts.nearSegZ || Math.round(NEAR.D / NEAR.CELL));
+    ng.rotateX(-Math.PI / 2);
     const nearMat = new T.ShaderMaterial({ uniforms: gU, vertexShader: GLSL.GROUND_VS, fragmentShader: GLSL.GROUND_FS, defines: { NEAR: 1 } });
     const nearSea = new T.Mesh(ng, nearMat); nearSea.frustumCulled = false; scene.add(nearSea); nearMesh = nearSea;
 
@@ -671,7 +702,17 @@ const Engine = (() => {
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
     /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
        draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
-    { const cx = Math.round(camera.position.x / 4) * 4; if (nearMesh && cx !== nearX) { nearX = cx; nearMesh.position.x = cx; gU.uNearRect.value.set(cx - 48, -62, cx + 48, -2); } }
+    /* (the surf is meshed round what is being looked at, and round any swell that has been sent in, so a swell clicked far
+       along the beach rises where it was clicked; its landward edge just above the shore there) */
+    if (nearMesh) {
+      const lk = (o.cam || Layout.cameras.wide).look, keep = NEAR.W / 2 - 52;
+      let cx = (camera.position.x + lk[0]) / 2;
+      const wtn = o.waveT ?? (o.t || 0); for (const w of surge.waves) if (wtn < w.x + 8) { if (w.xc - cx > keep) cx = w.xc - keep; if (cx - w.xc > keep) cx = w.xc + keep; }
+      cx = Math.round(cx / NEAR.CELL) * NEAR.CELL;
+      let zt = -1e9; for (let i = 0; i <= 8; i++) zt = Math.max(zt, Layout.shoreZ(cx - NEAR.W / 2 + i * NEAR.W / 8));
+      zt = Math.round((zt + 4) / NEAR.CELL) * NEAR.CELL;
+      if (cx !== nearX || zt !== nearZ) { nearX = cx; nearZ = zt; nearMesh.position.set(cx, 0, zt - NEAR.D / 2); gU.uNearRect.value.set(cx - NEAR.W / 2, zt - NEAR.D, cx + NEAR.W / 2, zt); }
+    }
     skyMesh.position.copy(camera.position);
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
     coastFollow(camera.position.x);
@@ -726,7 +767,7 @@ const Engine = (() => {
     if (o.lightK) Mats.U.uLightK.value.set(...o.lightK);
     uBulb.uProg.value = L.string; uFairy.uProg.value = L.fairy > 0 ? 1 : 0; uFairy.uI.value = 0.5 * L.fairy * vf;
     uBulb.uOff.value.set(S.amb[0] * 0.6 + 0.002, S.amb[1] * 0.55 + 0.002, S.amb[2] * 0.45 + 0.002); uFairy.uOff.value.copy(uBulb.uOff.value);
-    camp.lanterns.forEach((l, i) => { const lo = flickOut(surge.lantOut[i], wt, 0.6), k = 0.42 * L.lantern * candleFlicker(t, i) * lo; Mats.U.uLant.value[i].w = l.s * lo; l.mat.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.55 * k + S.amb[1] * 0.5, 0.22 * k + S.amb[2] * 0.5); });
+    camp.lanterns.forEach((l, i) => { const lo = flickOut(surge.lantOut[i], wt, 0.6), k = 0.42 * L.lantern * candleFlicker(t, i) * lo; Mats.U.uLant.value[i].w = l.s * lo * (l.vis ?? 1); l.mat.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.55 * k + S.amb[1] * 0.5, 0.22 * k + S.amb[2] * 0.5); });
     camp.candles.forEach((m, i) => { const k = 0.5 * L.lantern * candleFlicker(t, i + 5) * flickOut(surge.candleOut, wt, 0.5); m.color.setRGB(1.0 * k + 0.01, 0.6 * k + 0.01, 0.28 * k + 0.01); });
     { const k = 0.085 * L.van * vf; camp.vanInside.color.setRGB(1.0 * k + S.amb[0] * 0.5, 0.6 * k + S.amb[1] * 0.5, 0.3 * k + S.amb[2] * 0.5); }
     (camp.vanGlow || []).forEach(v => { v.m.emissiveIntensity = v.k * L.van * vf; });
@@ -790,7 +831,7 @@ const Engine = (() => {
       const on = sw.z < 1 && Math.abs(sw.x) < 1.3 && Math.abs(sw.y) < 1.3 ? up * (1 - ov) * 0.9 : 0;
       pp.sunScr = sunScr4.set(sw.x * 0.5 + 0.5, sw.y * 0.5 + 0.5, on, 0); }
     pp.clouds = o.cloudBuf !== false; pp.cloudT = o.cloudT ?? t;
-    pp.cloudBlend = (su.uFlash.value > 0.05 ? 0.6 : 0.14) + Math.min(0.4, Math.abs((o.cloudT ?? t) - (lastCloudT ?? (o.cloudT ?? t))) * 0.8); lastCloudT = o.cloudT ?? t;
+    pp.cloudBlend = (su.uFlash.value > 0.05 ? 0.8 : 0.22) + Math.min(0.4, Math.abs((o.cloudT ?? t) - (lastCloudT ?? (o.cloudT ?? t))) * 0.8); lastCloudT = o.cloudT ?? t;
     pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);
@@ -939,6 +980,21 @@ const Engine = (() => {
       sketch: camp.sketch ? at(camp.sketch, 0, 0.06, 0) : null, toolbox: camp.toolbox ? at(camp.toolbox, 0, 0.3, 0) : null };
   }
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
+  /* what a wave (or the van) has knocked over: its dot and what it offers wait until the camp is put back up. Names are
+     the chapters' and the dots' own: a chair, a seat, the radio, the board, the drawing board, the toolbox, the bottle… */
+  function knockedObj(name) {
+    if (!camp) return null;
+    return { chair0: camp.chairs && camp.chairs[0], chair1: camp.chairs && camp.chairs[1], board: camp.board && camp.board.group, radio: camp.crate, notes: camp.crate,
+      sketch: camp.table, toolbox: camp.toolbox, contact: camp.bottle, plans: camp.basket, log0: camp.driftwood, log1: camp.driftwood,
+      rug0: camp.cushions && camp.cushions[1], rug1: camp.cushions && camp.cushions[0] }[name] || null;
+  }
+  const knocked = name => { const o = knockedObj(name); return !!o && surge.dyn.some(d => d.o === o && d.hit); };
+  /* one thing set back up where it was (a chapter opened from the dock brings its object back) */
+  function restore(name) {
+    const o = knockedObj(name), d = o && surge.dyn.find(q => q.o === o); if (!d || !d.hit) return;
+    d.p0.copy(d.P0); d.q0.copy(d.Q0); d.o.position.copy(d.P0); d.o.quaternion.copy(d.Q0); d.hit = null; canDone = false;
+  }
+  Object.assign(api, { knocked, restore });
 
   const dbg = { scene: () => scene, key: () => keyLight, ground: () => groundMat, post: () => post, cloudNoiseMs: () => cloudNoiseMs, sky: () => skyMat, camp: () => camp };
   Object.assign(api, { init, warm, render, project, book, books, origin, prop, bottle: bottleApi, paintClip, strandBulbs, finish, blendCam, vanFlicker, dbg, clickSea, rebuildCamp, surgeInfo, seaPick, waveSchedule, rockHits, surgeState, lantern, anchors, anchorNow, setVan, vanPose, knock });

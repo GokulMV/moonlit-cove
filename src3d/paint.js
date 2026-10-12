@@ -195,9 +195,7 @@ const Paint = (() => {
       AO.x.strokeRect(-R0.w / 2, -R0.d / 2, R0.w, R0.d);
     }
     AO.x.restore();
-    soft(AO.x, Layout.van.x, Layout.van.z, 2.55, 1.15, -Layout.van.rot, 0.9, 0.55);
-    { const vr = Layout.van.rot, fx = Math.cos(vr), fz = -Math.sin(vr);
-      for (const lx of [-1.42, 1.42]) for (const lz of [-0.8, 0.8]) soft(AO.x, Layout.van.x + fx * lx - fz * lz, Layout.van.z + fz * lx + fx * lz, 0.3, 0.3, 0, 1.0, 0.3); }
+    /* (the van's own shadow under it is drawn by the ground shader, where the van is: it drives off with it) */
     soft(AO.x, Layout.fire.x, Layout.fire.z, 0.78, 0.78, 0, 0.75, 0.55);
     for (const ch of Layout.chairs) soft(AO.x, ch.x, ch.z, 0.5, 0.45, 0, 0.45);
     soft(AO.x, Layout.driftwood.x, Layout.driftwood.z, 1.45, 0.24, Layout.driftwood.rot, 0.8, 0.5);

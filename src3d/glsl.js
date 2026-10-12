@@ -119,20 +119,24 @@ float remapC(float x, float a, float b){ return clamp((x - a)/(b - a), 0.0, 1.0)
 /* how much of the sky can cloud over: a few fair-weather heaps at the low end, a full deck in rain */
 float cloudCover(){ return clamp(max(max(0.08 + 0.24*uCumulus, 1.05*uStratus), 0.9*uStorm), 0.0, 1.0); }
 vec4 cloudWeather(vec2 q, float lod){ return textureLod(uWeather, q*(1.0/WT), lod); }
-/* how dense the cloud is at q (in the wind's frame), hf of the way up the layer, under the weather w */
-float cloudDen(vec3 q, float hf, vec4 w, float cv, float lodS, float lodD){
+/* where the weather lets cloud grow at hf of the way up the layer, and how much (before the noise carves it); h is the
+   height within that cloud's own column */
+float cloudRoom(vec4 w, float hf, float cv, out float h){
   /* each cloud's own top: low heaps where little grows, towers where more does; a deck in rain; a storm's towers reach the top */
   float topK = mix(0.3, 1.0, w.g*w.g*(0.25 + 0.75*cv));
   topK = mix(topK, 0.62, uStratus*(1.0 - uStorm));
   topK = mix(topK, 1.0, uStorm*smoothstep(0.3, 0.7, w.g));
-  float h = hf/topK;
+  h = hf/topK;
   if (h >= 1.0) return 0.0;
   /* widest low down, rounded toward the top; a storm's tallest towers spread into an anvil */
   float x = clamp(pow(h, 0.35)*2.0 - 1.0, -1.0, 1.0), hs = 1.0 - x*x;
   hs = max(hs, uStorm*smoothstep(0.5, 0.9, w.g)*smoothstep(0.78, 0.9, h)*(1.0 - smoothstep(0.95, 1.0, h))*1.2);
   float f = 1.0 - cv*mix(0.75, 1.2, w.b)*hs;
-  float d = remapC(mix(w.r, 1.0, 0.6), f, f + 0.6);
-  d *= 1.0 - 0.3*max(uStratus, uStorm)*(1.0 - w.r);          /* (a deck still has its thinner and thicker parts) */
+  return remapC(mix(w.r, 1.0, 0.6), f, f + 0.6)*(1.0 - 0.3*max(uStratus, uStorm)*(1.0 - w.r));   /* (a deck still has thinner and thicker parts) */
+}
+/* how dense the cloud is at q (in the wind's frame), hf of the way up the layer, under the weather w */
+float cloudDen(vec3 q, float hf, vec4 w, float cv, float lodS, float lodD){
+  float h, d = cloudRoom(w, hf, cv, h);
   if (d <= 0.0) return 0.0;
   /* the body: billows carve it */
   d = remapC(d, 1.0 - textureLod(uShape, q*SHR, lodS).r, 1.0);
@@ -153,8 +157,8 @@ vec4 cloudLayer(vec3 d, vec3 Ld, vec3 haze, float jit){
   float t0 = shellT(h0, dy, cb), tTop = shellT(h0, dy, ct);
   if (t0 > 60000.0) return vec4(0.0, 0.0, 0.0, 1.0);
   float L0 = tTop - t0, L = min(L0, 10000.0);        /* a long grazing path: only its near part shows, the rest is haze */
-  int N = int(clamp(L/70.0, 24.0, 72.0)*uCQ);
-  float ds = L/float(N), cv = cloudCover();
+  int N = int(clamp(L/45.0, 32.0, 128.0)*uCQ);
+  float ds = L/float(N), cv = cloudCover(), t1 = t0 + L;
   /* drifting on the wind, and slowly boiling */
   vec2 drift = uWind*uCloudT*9.0; vec3 boil = vec3(0.0, uCloudT*1.2, 0.0);
   /* scattered many times over: each order of scattering reaches deeper and spreads more evenly (its phase computed once a ray) */
@@ -166,17 +170,20 @@ vec4 cloudLayer(vec3 d, vec3 Ld, vec3 haze, float jit){
   vec3 Lm = normalize(uLdM + vec3(0.0, 1e-3, 0.0));
   vec2 bolt = uCO.xz + vec2(sin(uBolt.x), -cos(uBolt.x))*9000.0;
   vec3 S = vec3(0.0); float T = 1.0, t = t0 + ds*jit, wd = 0.0, ws = 0.0;
-  for (int i = 0; i < 72; i++){
-    if (i >= N || T < 0.015) break;
+  for (int i = 0; i < 150; i++){
+    if (t > t1 || T < 0.015) break;
     float hf = (t - t0)/L0;
     vec3 P = vec3(uCO.x + d.x*t, cb + hf*(ct - cb), uCO.z + d.z*t), q = vec3(P.x - drift.x, P.y, P.z - drift.y);
     float fp = t*uPxA, lodW = log2(max(fp/70.0, 1.0));
     vec4 w = cloudWeather(q.xz, lodW);
+    /* (where the weather lets nothing grow, stride on: the steps are spent inside the clouds) */
+    float hr; if (cloudRoom(w, hf, cv, hr) <= 0.0){ t += ds*2.0; continue; }
     float lodS = log2(max(fp/26.0, 1.0)), lodD = log2(max(fp/10.6, 1.0));
     float den = cloudDen(q + boil, hf, w, cv, lodS, lodD);
     if (den > 0.002){
-      /* toward the light: four looks, each further than the last, at how much cloud is in the way */
-      float tau = 0.0, sl = 60.0; vec3 lq = q;
+      /* toward the light: four looks, each further than the last, at how much cloud is in the way (started a little
+         nearer or further each step and each frame, so the looks blend into a smooth shadow rather than bands) */
+      float tau = 0.0, sl = 60.0*(0.7 + 0.6*fract(jit + float(i)*0.6180339)); vec3 lq = q;
       for (int k = 0; k < 4; k++){
         lq += Lm*sl; float hq = (lq.y - cb)/(ct - cb); if (hq > 1.0 || hq < 0.0) break;
         tau += cloudDen(lq + boil, hq, cloudWeather(lq.xz, lodW + 1.0), cv, lodS + 1.0, 9.0)*sl; sl *= 2.2;
@@ -267,7 +274,7 @@ void main(){
       c = mix(c, col, den); cover += den*0.65;
     }
     /* the cumulus layer (or, in rain, a deck of stratus), in front of the high cloud */
-    { vec4 cl = uCBOn > 0.5 && uEnv < 0.5 ? catmullRom(uCB, gl_FragCoord.xy*uCBInv) : cloudLayer(d, Ld, sky0, 0.5 + 0.7*(hash12(gl_FragCoord.xy) - 0.5));
+    { vec4 cl = uCBOn > 0.5 && uEnv < 0.5 ? texelFetch(uCB, ivec2(gl_FragCoord.xy), 0) : cloudLayer(d, Ld, sky0, 0.5 + 0.7*(hash12(gl_FragCoord.xy) - 0.5));
       cl = vec4(max(cl.rgb, vec3(0.0)), clamp(cl.a, 0.0, 1.0));
       c = c*cl.a + cl.rgb; cover = max(cover, 1.0 - cl.a); }
     {
@@ -389,11 +396,11 @@ ${shoreGL('v', { head: 'headv', headD: 'headDv', z: 'shoreZv', dz: 'shoreDZv' })
 }
 float userAmp(vec4 U, float a, float t){
   float sc = max(U.w - (t - (U.x - U.w/CU))*CU, 0.0);
-  float hw = 4.0 + 0.9*(U.w - sc);
+  float hw = 9.0 + 0.8*(U.w - sc);
   float dx = (a - U.z)/min(hw, 46.0);
   /* a crest that rises and falls along its length: peaks and shoulders, not a level wall */
   float along = 0.82 + 0.36*(0.5 + 0.25*sin(a*0.31 + U.z) + 0.25*sin(a*0.13 + 1.7*U.z));
-  return U.y*along*exp(-dx*dx)*smoothstep(U.x - U.w/CU, U.x - U.w/CU + 1.2, t);
+  return U.y*along*exp(-dx*dx)*smoothstep(U.x - U.w/CU, U.x - U.w/CU + 1.8, t);
 }
 /* where a clicked swell breaks: further out the bigger it is, varying gently along the beach so it peels */
 float userSb(float amp, float nA, vec4 U){ return min((3.0 + 4.6*amp)*(0.88 + 0.24*nA), max(4.0, 0.5*U.w*(0.9 + 0.2*nA))); }
@@ -422,7 +429,7 @@ void main(){
   vec4 wp = modelMatrix*vec4(position, 1.0);
   vNg = vec3(0.0, 1.0, 0.0); vH = 0.0;
   #ifdef NEAR
-    float fade = smoothstep(uNearRect.x, uNearRect.x + 7.0, wp.x)*smoothstep(uNearRect.z, uNearRect.z - 7.0, wp.x)*smoothstep(uNearRect.y, uNearRect.y + 9.0, wp.z);
+    float fade = smoothstep(uNearRect.x, uNearRect.x + 18.0, wp.x)*smoothstep(uNearRect.z, uNearRect.z - 18.0, wp.x)*smoothstep(uNearRect.y, uNearRect.y + 16.0, wp.z);
     if (fade > 0.0){
       float e = 0.22, h = waveH(wp.xz), hx = waveH(wp.xz + vec2(e, 0.0)), hz = waveH(wp.xz + vec2(0.0, e));
       vNg = normalize(vec3(-(hx - h)/e*fade, 1.0, -(hz - h)/e*fade));
@@ -440,6 +447,15 @@ ${SKY_FN}
 ${ART}
 uniform float uTime, uDay, uShadowK, uShadowOn;
 uniform sampler2D uNoise, uWater, uSand, uDecal, uRelief, uShadowMap;
+uniform mat4 uVanInv;
+/* the dark under the van where the sky can't reach, and under each wheel: in the van's own frame, so it goes where it goes */
+float vanAO(vec3 wp){
+  vec3 lp = (uVanInv*vec4(wp, 1.0)).xyz;
+  if (abs(lp.x) > 3.0 || abs(lp.z) > 1.6 || abs(lp.y) > 0.8) return 0.0;
+  float a = 0.9*(1.0 - smoothstep(0.55, 1.0, length(lp.xz/vec2(2.55, 1.15))));
+  vec2 q = vec2(abs(lp.x) - 1.42, abs(lp.z) - 0.8);
+  return max(a, 1.0 - smoothstep(0.09, 0.3, length(q)));
+}
 uniform vec4 uDecalRect; uniform vec2 uShadowSize; uniform mat4 uShadowMatrix;
 uniform vec3 uAmb, uKeyDir, uKeyCol, uMoonGlit, uSunGlit;
 ${WAVEH}
@@ -727,7 +743,7 @@ void main(){
     vec3 a = alb*mix(1.0, 0.46, wet);
     a = mix(a, alb*1.2, mark*0.45);
     a = mix(a, dec.rgb/max(dec.a, 1e-3), dec.a);
-    float ao = 1.0 - rel.b*0.85;
+    float ao = (1.0 - rel.b*0.85)*(1.0 - 0.85*vanAO(wp));
     if (camp) art = artLight(wp, N);
     vec3 lit = a*(uAmb*(0.7 + 0.3*N.y)*ao + uKeyCol*max(dot(N, Lk), 0.0)*shK + art*mix(1.0, ao, 0.6));
     /* quartz glints in dry sand */
@@ -1053,6 +1069,9 @@ vec3 flyPath(vec3 home, float t, float h, float lift){
                      sin(t*0.17 + h*7.0)*0.32 + sin(t*0.43 + h*3.0)*0.08 + 0.07*lift*lift,
                      cos(t*0.11 + h*9.0)*1.1 + cos(t*0.29 + h*2.0)*0.35);
 }`;
+  /* the clouds are marched a quarter of the screen's pixels at a time: each frame one pixel of every two-by-two block
+     (which one turns round over four frames), at the full resolution; the resolve below fills in the rest from the
+     frames before, so they come out as sharp as the screen at the cost of a half-size march */
   const CLOUD_FS = `
 ${COMMON}
 ${SKY_FN}
@@ -1060,37 +1079,42 @@ uniform float uTime, uStars, uCloud, uEnv; uniform vec3 uCloudLit;
 uniform float uCirrus, uAlto, uCumulus, uStratus, uStorm, uFlash; uniform vec4 uBolt; uniform vec2 uWind;
 uniform sampler2D uNoise; uniform float uCloudT;
 uniform vec3 uCO; uniform float uCQ;
-uniform mat4 uInvProj; uniform mat3 uCamRot; uniform float uFrame;
+uniform mat4 uInvProj; uniform mat3 uCamRot; uniform float uFrame; uniform vec2 uOff, uFull;
 varying vec2 vUv;
 ${CLOUD_FN}
 void main(){
-  vec4 v = uInvProj*vec4(vUv*2.0 - 1.0, 1.0, 1.0);
+  vec2 fp = (floor(gl_FragCoord.xy)*2.0 + uOff + 0.5)/uFull;
+  vec4 v = uInvProj*vec4(fp*2.0 - 1.0, 1.0, 1.0);
   vec3 d = normalize(uCamRot*(v.xyz/v.w));
   vec3 Ld = dot(uSunDisc, uSunDisc) > dot(uMoonDisc, uMoonDisc)*40.0 ? uSunDirV : uMoonDirV;
   /* a fresh jitter each frame: averaged over frames, the steps' grain smooths away */
-  gl_FragColor = d.y < -0.012 ? vec4(0.0, 0.0, 0.0, 1.0) : cloudLayer(d, Ld, skyColor(d), fract(hash12(gl_FragCoord.xy) + uFrame*0.6180339));
+  gl_FragColor = d.y < -0.012 ? vec4(0.0, 0.0, 0.0, 1.0) : cloudLayer(d, Ld, skyColor(d), fract(hash12(gl_FragCoord.xy + uOff*17.0) + uFrame*0.6180339));
 }`;
-  /* the clouds kept over frames: last frame's (turned to where each direction now lies on screen, read sharply) blended
-     with this frame's, but never straying outside what this frame's neighbourhood allows (variance clipping, as in
-     three-clouds), so a cloud that moves leaves no ghost */
+  /* the clouds kept over frames, at the full resolution: each pixel is last frame's (turned to where its direction now
+     lies on screen, read sharply), never straying outside what this frame's marched neighbourhood allows (variance
+     clipping, as in three-clouds) so nothing ghosts; the pixels marched this frame blend their new look in */
   const CLOUD_RES_FS = `
-uniform sampler2D uCur, uHist; uniform mat4 uPrevVP, uInvProj; uniform mat3 uCamRot; uniform float uHasPrev, uAlpha; uniform vec2 uTexel;
+uniform sampler2D uCur, uHist; uniform mat4 uPrevVP, uInvProj; uniform mat3 uCamRot; uniform float uHasPrev, uAlpha; uniform vec2 uOff, uFull;
 varying vec2 vUv;
 ${CATMULL}
 void main(){
-  vec4 cur = texture2D(uCur, vUv);
-  if (uHasPrev < 0.5){ gl_FragColor = cur; return; }
-  vec4 v = uInvProj*vec4(vUv*2.0 - 1.0, 1.0, 1.0); vec3 d = normalize(uCamRot*(v.xyz/v.w));
+  ivec2 ip = ivec2(gl_FragCoord.xy), blk = ip/2, cs = textureSize(uCur, 0) - 1;
+  bool fresh = ip.x - blk.x*2 == int(uOff.x) && ip.y - blk.y*2 == int(uOff.y);
+  vec4 now = texelFetch(uCur, clamp(blk, ivec2(0), cs), 0);
+  /* (this frame's march, spread over the pixels it skipped: what a pixel with no past shows) */
+  vec4 smooth4 = texture2D(uCur, (vec2(ip) + 0.5 - (uOff - 0.5))/uFull);
+  if (uHasPrev < 0.5){ gl_FragColor = fresh ? now : smooth4; return; }
+  vec4 v = uInvProj*vec4((vec2(ip) + 0.5)/uFull*2.0 - 1.0, 1.0, 1.0); vec3 d = normalize(uCamRot*(v.xyz/v.w));
   vec4 pc = uPrevVP*vec4(d, 0.0);
-  if (pc.w <= 1e-4){ gl_FragColor = cur; return; }
-  vec2 pu = pc.xy/pc.w*0.5 + 0.5;
-  if (pu.x < 0.0 || pu.y < 0.0 || pu.x > 1.0 || pu.y > 1.0){ gl_FragColor = cur; return; }
+  vec2 pu = pc.w > 1e-4 ? pc.xy/pc.w*0.5 + 0.5 : vec2(-1.0);
+  if (pu.x < 0.0 || pu.y < 0.0 || pu.x > 1.0 || pu.y > 1.0){ gl_FragColor = fresh ? now : smooth4; return; }
   vec4 hist = max(catmullRom(uHist, pu), vec4(0.0));
   vec4 m1 = vec4(0.0), m2 = vec4(0.0);
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec4 s = texture2D(uCur, vUv + vec2(float(i), float(j))*uTexel); m1 += s; m2 += s*s; }
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec4 s = texelFetch(uCur, clamp(blk + ivec2(i, j), ivec2(0), cs), 0); m1 += s; m2 += s*s; }
   m1 /= 9.0; vec4 sd = sqrt(max(m2/9.0 - m1*m1, vec4(0.0)));
-  hist = clamp(hist, m1 - 1.4*sd, m1 + 1.4*sd);
-  gl_FragColor = mix(hist, cur, uAlpha);
+  hist = clamp(hist, m1 - 1.6*sd - 0.002, m1 + 1.6*sd + 0.002);
+  /* (a fresh look is steadied a little by its neighbours' before it is blended in: the march's grain settles sooner) */
+  gl_FragColor = fresh ? mix(hist, mix(now, m1, 0.3), uAlpha) : hist;
 }`;
   return { FLY, COMMON, SKY_FN, SKY_VS, SKY_FS, CLOUD_FS, CLOUD_RES_FS, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
 })();
