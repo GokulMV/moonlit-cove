@@ -12,6 +12,7 @@ const Mats = (() => {
     uTime: { value: 0 }, uKeyDirT: { value: V3(0, 1, 0) }, uKeyColT: { value: V3() },
     uVanInv: { value: new THREE.Matrix4() }, uHead: { value: V4() }, uHeadDir: { value: V3(1, 0, 0) }, uFireSh: { value: null }, uCanSh: { value: null }, uFireShM: { value: new THREE.Matrix4() }, uCanShM: { value: new THREE.Matrix4() }, uShOn: { value: 0 },
     uFog: { value: V4(0, 0, 0, 1) },
+    uTorch: { value: V4() }, uTorchDir: { value: V3(0, 0, -1) }, uTorchSh: { value: null }, uTorchShM: { value: new THREE.Matrix4() }, uTorchShS: { value: new THREE.Vector2(1024, 1024) },
     /* the key light's shadow map, for shaders of our own that take shadows (the grown trees' leaves): the map, its matrix,
        where it is centred (x, z) and how far it reaches, whether it is ready; its size */
     uLeafShM: { value: null }, uLeafShX: { value: new THREE.Matrix4() }, uLeafShA: { value: V4() }, uLeafShS: { value: new THREE.Vector2(2048, 2048) }
@@ -29,15 +30,29 @@ vec3 fogIt(vec3 c, vec3 wp){
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }`;
   const PREFIX = GLSL.COMMON + GLSL.ART + FOG;
+  /* a rough surface: three sizes of bumps, the finest a sandpaper grain (faded with distance, so it doesn't sparkle) */
   const bump = `
   #include <normal_fragment_maps>
-  { vec3 bp = vWPos*1.9, bq = vWPos*7.3; const float e = 0.07;
-    float b0 = vnz(bp), c0 = vnz(bq);
+  { vec3 bp = vWPos*1.9, bq = vWPos*7.3, br = vWPos*23.0; const float e = 0.07;
+    float b0 = vnz(bp), c0 = vnz(bq), d0 = vnz(br), far = smoothstep(18.0, 6.0, distance(vWPos, cameraPosition));
     vec3 g = vec3(vnz(bp + vec3(e, 0.0, 0.0)) - b0, vnz(bp + vec3(0.0, e, 0.0)) - b0, vnz(bp + vec3(0.0, 0.0, e)) - b0)/e
-           + 0.45*vec3(vnz(bq + vec3(e, 0.0, 0.0)) - c0, vnz(bq + vec3(0.0, e, 0.0)) - c0, vnz(bq + vec3(0.0, 0.0, e)) - c0)/e;
+           + 0.55*vec3(vnz(bq + vec3(e, 0.0, 0.0)) - c0, vnz(bq + vec3(0.0, e, 0.0)) - c0, vnz(bq + vec3(0.0, 0.0, e)) - c0)/e
+           + 0.35*far*vec3(vnz(br + vec3(e, 0.0, 0.0)) - d0, vnz(br + vec3(0.0, e, 0.0)) - d0, vnz(br + vec3(0.0, 0.0, e)) - d0)/e;
     vec3 gv = mat3(viewMatrix)*g;
     normal = normalize(normal - BUMPK*(gv - dot(gv, normal)*normal)); }`;
 
+  /* the stone's relief, in metres: broad swells, a ridged roughness, a fine grain up close, and its cracks (sharp
+     grooves along where a noise crosses its middle) */
+  const ROCK = `
+/* (jagged, where a finer noise pushes the line about; and only here and there, coming and going along their length) */
+float rkCrack(vec3 p){
+  float w = 0.036*smoothstep(0.4, 0.7, vnz(p*0.8 + 3.0)); if (w < 0.002) return 0.0;
+  return 1.0 - smoothstep(0.0, w, abs(vnz(p*vec3(1.5, 1.0, 1.5) + 21.0 + 0.35*(vnz(p*9.0) - 0.5)) - 0.5));
+}
+float rkH(vec3 p, float nk, float ck){
+  float a = vnz(p*2.1), b = 1.0 - abs(2.0*vnz(p*5.7 + 3.0) - 1.0), c = vnz(p*15.0 + 7.0), d = vnz(p*41.0 + 1.0);
+  return 0.026*a + 0.02*b*b + 0.014*c + 0.006*nk*d - 0.022*ck*rkCrack(p);
+}`;
   function patch(m, key) {
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
@@ -52,17 +67,44 @@ vec3 fogIt(vec3 c, vec3 wp){
   vWPos = (modelMatrix*wpp).xyz;`);
       if (key === 'rock') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   diffuseColor.rgb *= 0.72 + 0.42*vnz(vWPos*31.0) + 0.16*vnz(vWPos*97.0) - 0.1*smoothstep(0.6, 0.9, vnz(vWPos*13.0 + 4.0));`);
-      /* sea rocks: grain and lichen, dark and glossy where the waves keep them wet, a band of weed at the waterline */
+      /* sea rocks: blotched and iron-stained, speckled with their crystals up close, split by fine dark cracks, crusted
+         with lichen high up out of the spray; dark and glossy where the waves keep them wet, a band of weed at the
+         waterline */
       if (key === 'rockw') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  diffuseColor.rgb *= 0.78 + 0.34*vnz(vWPos*6.0) + 0.14*vnz(vWPos*29.0) - 0.08*smoothstep(0.62, 0.9, vnz(vWPos*2.3 + 4.0));
+  float rkD = distance(vWPos, cameraPosition), rkN = smoothstep(12.0, 3.0, rkD), rkM = smoothstep(4.0, 1.2, rkD);
+  diffuseColor.rgb *= 0.74 + 0.34*vnz(vWPos*6.0) + 0.16*vnz(vWPos*29.0) - 0.08*smoothstep(0.62, 0.9, vnz(vWPos*2.3 + 4.0));
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*vec3(1.3, 0.96, 0.72), 0.55*smoothstep(0.6, 0.82, vnz(vWPos*1.7 + 13.0)));
+  { float gr = vnz(vWPos*63.0 + 5.0), gs = vnz(vWPos*150.0);
+    diffuseColor.rgb *= 1.0 + rkN*(0.28*smoothstep(0.7, 0.8, gr) - 0.32*smoothstep(0.3, 0.2, gr)) + rkM*(0.24*smoothstep(0.72, 0.8, gs) - 0.3*smoothstep(0.28, 0.2, gs)); }
+  diffuseColor.rgb *= 1.0 - 0.5*rkCrack(vWPos)*smoothstep(22.0, 5.0, rkD);
+  /* streaks where the rain runs down the faces */
+  diffuseColor.rgb *= 1.0 - 0.14*smoothstep(0.55, 0.8, vnz(vec3(vWPos.x*9.0, vWPos.y*0.8, vWPos.z*9.0)));
   vec3 nWl = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz);
-  float lich = smoothstep(0.58, 0.82, vnz(vWPos*4.3 + 9.0)*0.6 + vnz(vWPos*13.0)*0.4)*smoothstep(0.9, 2.0, vWPos.y)*smoothstep(0.2, 0.7, nWl.y);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.33), lich*0.3);
+  { float lg = smoothstep(0.65, 0.69, vnz(vWPos*3.9 + 2.0)*0.6 + vnz(vWPos*12.0)*0.4)*smoothstep(0.8, 1.8, vWPos.y)*smoothstep(0.1, 0.6, nWl.y);
+    float lo = smoothstep(0.69, 0.73, vnz(vWPos*2.7 + 9.0)*0.6 + vnz(vWPos*9.0 + 4.0)*0.4)*smoothstep(1.3, 2.6, vWPos.y)*smoothstep(0.35, 0.8, nWl.y);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.31, 0.28)*(0.85 + 0.3*vnz(vWPos*40.0)), lg*0.4);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.37, 0.19, 0.05)*(0.8 + 0.4*vnz(vWPos*33.0)), lo*0.5); }
   float sea = smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x));
   float wetl = smoothstep(0.55 + 1.0*sea, 0.05, vWPos.y)*mix(0.3, 1.0, sea), weed = smoothstep(0.32, 0.0, abs(vWPos.y - 0.12))*smoothstep(0.35, 0.65, vnz(vWPos*5.0))*sea;
   diffuseColor.rgb *= mix(1.0, 0.42, wetl); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), weed*0.7);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, 0.5, smoothstep(0.55 + 1.0*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)), 0.05, vWPos.y)*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)));`);
-      if (key === 'rockw' || key === 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', key === 'land' ? '0.08*vRock' : '0.11')}`);
+  roughnessFactor *= mix(1.0, 0.5, smoothstep(0.55 + 1.0*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)), 0.05, vWPos.y)*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)));`)
+        /* its relief, a few centimetres deep: the surface's own slope, worked out from the height of the stone round the point */
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  { float rkD2 = distance(vWPos, cameraPosition), nk = smoothstep(9.0, 3.0, rkD2), ck = smoothstep(16.0, 4.0, rkD2); const float e = 0.006;
+    float h0 = rkH(vWPos, nk, ck);
+    vec3 g = vec3(rkH(vWPos + vec3(e, 0.0, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, e, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, 0.0, e), nk, ck) - h0)/e;
+    vec3 gv = mat3(viewMatrix)*(g*smoothstep(70.0, 12.0, rkD2));
+    normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
+      if (key === 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', '0.08*vRock')}
+  /* where it is bare rock, the boulders' relief, and the joints between its blocks */
+  if (vRock > 0.02){ float rkD2 = distance(vWPos, cameraPosition);
+    if (rkD2 < 90.0){ float nk = smoothstep(9.0, 3.0, rkD2), ck = smoothstep(16.0, 4.0, rkD2), cl = smoothstep(110.0, 12.0, rkD2); const float e = 0.008;
+      #define RKL(p) (rkH(p, nk, ck) - 0.045*cl*rkCrack(p*0.35 + 7.0))
+      float h0 = RKL(vWPos);
+      vec3 g = vec3(RKL(vWPos + vec3(e, 0.0, 0.0)) - h0, RKL(vWPos + vec3(0.0, e, 0.0)) - h0, RKL(vWPos + vec3(0.0, 0.0, e)) - h0)/e;
+      #undef RKL
+      vec3 gv = mat3(viewMatrix)*(g*vRock*smoothstep(90.0, 20.0, rkD2));
+      normal = normalize(normal - (gv - dot(gv, normal)*normal)); } }`);
       /* hills and headlands: rock on the steep and seaward parts, leaf litter and scrub elsewhere */
       if (key === 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   float wetK = 0.0;
@@ -70,6 +112,20 @@ vec3 fogIt(vec3 c, vec3 wp){
     vec3 rockC = diffuseColor.rgb*(0.72 + 0.42*n2 + 0.16*n3 - 0.14*smoothstep(0.6, 0.85, vnz(vWPos*vec3(1.2, 4.0, 1.2))));
     float lich = smoothstep(0.64, 0.8, vnz(vWPos*1.7 + 9.0))*smoothstep(2.0, 4.0, vWPos.y);
     rockC = mix(rockC, vec3(0.5, 0.48, 0.38)*0.6, lich*0.35);
+    /* the bare rock up close as the boulders are: its crystals' speckle, its cracks (and wider joints between the
+       blocks, seen from further off), iron stains and crusts of lichen */
+    if (vRock > 0.02){
+      float rkD = distance(vWPos, cameraPosition), rkN = smoothstep(12.0, 3.0, rkD), gr = vnz(vWPos*63.0 + 5.0);
+      rockC *= 1.0 + rkN*(0.26*smoothstep(0.7, 0.8, gr) - 0.3*smoothstep(0.3, 0.2, gr));
+      float ck = rkCrack(vWPos)*smoothstep(22.0, 5.0, rkD) + 0.85*rkCrack(vWPos*0.35 + 7.0)*smoothstep(110.0, 12.0, rkD);
+      rockC *= 1.0 - 0.45*min(1.0, ck);
+      rockC = mix(rockC, rockC*vec3(1.3, 0.96, 0.72), 0.5*smoothstep(0.6, 0.82, vnz(vWPos*1.7 + 13.0)));
+      vec3 nWr = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz);
+      float lg = smoothstep(0.67, 0.71, vnz(vWPos*3.9 + 2.0)*0.6 + vnz(vWPos*12.0)*0.4)*smoothstep(1.2, 2.5, vWPos.y)*smoothstep(0.15, 0.6, nWr.y);
+      float lo = smoothstep(0.7, 0.74, vnz(vWPos*2.7 + 9.0)*0.6 + vnz(vWPos*9.0 + 4.0)*0.4)*smoothstep(1.8, 3.2, vWPos.y)*smoothstep(0.35, 0.8, nWr.y);
+      rockC = mix(rockC, vec3(0.3, 0.29, 0.26)*(0.85 + 0.3*vnz(vWPos*40.0)), lg*0.3);
+      rockC = mix(rockC, vec3(0.36, 0.19, 0.05)*(0.8 + 0.4*vnz(vWPos*33.0)), lo*0.45);
+    }
     vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3);
     diffuseColor.rgb = mix(vegC, rockC, vRock);
     float sea = smoothstep(5.0, -0.5, vWPos.z - shoreZc(vWPos.x));
@@ -95,7 +151,7 @@ vec3 fogIt(vec3 c, vec3 wp){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' ? 'varying float vRock;\n' : '') + PREFIX)
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' ? ROCK : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};
@@ -182,7 +238,7 @@ void main(){
   vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vWPos);
   float ndl = dot(n, uKeyDirT);
   vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + uKeyColT*(max(ndl, 0.0) + 0.06);
-  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) L += artLight(vWPos, n);
+  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) L += artLight(vWPos, n);
   /* light through the leaflets from behind, yellower, strongest looking toward the sun; the waxy shine of their tops */
   float thru = max(-ndl, 0.0)*(0.3 + 0.7*pow(max(dot(-V, uKeyDirT), 0.0), 2.0));
   vec3 c = a*L + a*vec3(0.95, 1.08, 0.45)*uKeyColT*thru*0.85;

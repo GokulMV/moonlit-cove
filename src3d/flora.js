@@ -146,7 +146,7 @@ void main(){
   /* (a blade is thin: lit from either side, the light from behind coming through it yellower) */
   vec3 L = uAmbF*(0.65 + 0.35*max(n.y, 0.0))*ao + uKeyColT*sh*(0.3 + max(ndl, 0.0)*0.7 + max(-ndl, 0.0)*0.5*vec3(0.95, 1.05, 0.5))*(0.5 + 0.5*ao);
   L += uKeyColT*sh*0.25*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 24.0)*ao;
-  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0) L += artLight(vWPos, n)*ao;
+  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || torchNear(vWPos)) L += artLight(vWPos, n)*ao;
   vec3 c = vC*L; float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
   gl_FragColor = vec4(c, 1.0);
@@ -211,7 +211,7 @@ void main(){
       let best = null, bd = maxPx * maxPx;
       for (const [, L] of live) {
         for (const it of L.items) {
-          if (it.gone) continue;
+          if (it.gone || it.held) continue;
           const head = KINDS[it.k].head * it.s;
           _v.set(it.x, it.y + head, it.z); const d = _v.distanceTo(camera.position); if (d > maxD) continue;
           _v.project(camera); if (_v.z > 1) continue;
@@ -223,10 +223,10 @@ void main(){
     }
     /* pick one: it shrinks away over a moment; the bouquet gets it */
     const going = [];
-    function pluck(it, t) {
+    function pluck(it, t, quiet) {
       if (!it || it.gone) return null;
-      it.gone = true; picked.add(it.id); keep();
-      going.push({ it, t0: t });
+      it.gone = true; it.held = false; picked.add(it.id); keep();
+      if (!quiet) going.push({ it, t0: t });
       return { kind: KINDS[it.k].id, name: KINDS[it.k].name, at: [it.x, it.y + KINDS[it.k].head * it.s, it.z] };
     }
     function update(t, camera) {
@@ -237,9 +237,23 @@ void main(){
         if (u >= 1) going.splice(i, 1);
       }
     }
+    /* the flowers near the camera, for picking up and holding (inspect.js): hidden while held; kept for the bouquet, it
+       is picked; thrown back, it lies in the grass where it fell (inspect.js keeps that one) and this one stays gone */
+    const KIND_OF = ['daisy', 'glory', 'frangi'], REAL = [0.11, 0.05, 0.045];
+    function setFlower(it, s) { const L = live.get(+it.id.split(':')[0]), im = L && L.meshes[it.mk]; if (!im) return; e.set(0, it.ry, 0); q.setFromEuler(e); sc.setScalar(s); pos.set(it.x, it.y, it.z); m4.compose(pos, q, sc); im.setMatrixAt(it.mi, m4); im.instanceMatrix.needsUpdate = true; }
+    function pickables(list, cam) {
+      for (const [, L] of live) for (const it of L.items) {
+        if (it.gone || it.held) continue;
+        const dx = it.x - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 900) continue;
+        const head = KINDS[it.k].head * it.s;
+        list.push({ kind: KIND_OF[it.k], x: it.x, y: it.y + head * 0.6, z: it.z, r: Math.max(0.06, head * 0.45), yaw: it.ry, size: it.s * (it.k === 0 ? 0.245 : it.k === 1 ? 0.1 : 0.06) / REAL[it.k], flower: it,
+          take() { it.held = true; setFlower(it, 0); },
+          give(how) { it.held = false; if (how === 'back') setFlower(it, it.s); else { it.gone = true; picked.add(it.id); keep(); } } });
+      }
+    }
     /* how many flowers lie about near x, picked or not (for the test bench) */
     const count = () => { let n = 0, p = 0; for (const [, L] of live) for (const it of L.items) { n++; if (it.gone) p++; } return { flowers: n, picked: p, chunks: live.size }; };
-    return { nearest, pluck, update, count, KINDS, jar: list => jar(list, flowerM) };
+    return { nearest, pluck, update, count, KINDS, pickables, jar: list => jar(list, flowerM) };
   }
   return { build, KINDS };
 })();

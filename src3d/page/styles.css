@@ -143,6 +143,17 @@ body.driving #hud .walkbar, body.walking #hud .walkbar, body.reading-book #hud .
 .bqrow button { border: 0; padding: 8px 12px; border-radius: 9px; background: var(--amber); color: var(--night); font-weight: 600; cursor: pointer; }
 .bqrow button.ghost { background: rgba(255, 255, 255, 0.08); color: var(--fg); border: 1px solid var(--line); }
 
+/* holding one of the cove's small lives up close */
+.insp { position: absolute; left: 0; right: 0; margin: 0 auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); width: min(450px, calc(100% - 2 * var(--gut))); box-sizing: border-box; padding: 16px 18px 14px; background: var(--glass-hi); pointer-events: auto; animation: rise .35s ease-out; z-index: 6; }
+.insp .eyebrow { font-style: italic; text-transform: none; letter-spacing: 0.04em; font-size: 12px; }
+.insp h2 { margin: 4px 0 6px; font: 500 26px/1.1 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; }
+.insp .itext { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: var(--dim); }
+.insp .bqrow kbd { font: 500 10px/1 var(--mono); padding: 2px 5px; margin-left: 4px; border-radius: 4px; border: 1px solid var(--line); }
+.insp .ihint { margin: 10px 0 0; font-size: 12px; color: var(--faint); }
+body.inspecting #hud .dock, body.inspecting #hud #spots, body.inspecting #hud .hint, body.inspecting #hud .walkhud, body.inspecting #hud .walkbar, body.inspecting #hud .bqpanel { opacity: 0; pointer-events: none; }
+body.inspecting #scene { cursor: grab; }
+body.inspecting.insp-grab #scene { cursor: grabbing; }
+
 /* driving */
 .drivehud { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 82px); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; font-size: 13px; color: var(--dim); max-width: calc(100% - 2 * var(--gut)); animation: rise .35s ease-out; }
 #hud .drivehud { pointer-events: auto; }

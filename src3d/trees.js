@@ -335,6 +335,46 @@ const Trees = (() => {
     return { map: mk(col, true), normalMap: mk(nor, false) };
   }
 
+  /* a coconut palm's bark: the scars of fallen fronds as raised rings round the trunk, each a little wavy, a groove
+     under each; between them grey-brown fibrous bark, split here and there by fine cracks running up it; patches of
+     pale lichen. A normal map from the same heights. It tiles round the trunk and every half metre up it (seven rings) */
+  let palmBarkC = null;
+  function palmBark() {
+    if (palmBarkC) return palmBarkC;
+    const w = 256, h = 512, r = rng(4711), G = 64, lat = Float32Array.from({ length: G * G }, () => r());
+    const pn = (x, y, px, py) => {
+      const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+      const L = (i, j) => lat[(((iy + j) % py + py) % py) * G + (((ix + i) % px + px) % px)];
+      return (L(0, 0) * (1 - u) + L(1, 0) * u) * (1 - v) + (L(0, 1) * (1 - u) + L(1, 1) * u) * v;
+    };
+    const nR = 7, ringV = Array.from({ length: nR }, (_, k) => (k + 0.5 + 0.3 * (r() - 0.5)) / nR), ph = ringV.map(() => r() * TAU), amp = ringV.map(() => 0.003 + 0.005 * r()), fr = ringV.map(() => 1 + Math.floor(r() * 3));
+    const H = new Float32Array(w * h), K = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const u = x / w, v = y / h; let dmin = 1;
+      for (let k = 0; k < nR; k++) { let d = v - ringV[k] - amp[k] * Math.sin(u * TAU * fr[k] + ph[k]) - 0.004 * (pn(u * 16, v * 8, 16, 8) - 0.5); d -= Math.round(d); if (Math.abs(d) < Math.abs(dmin)) dmin = d; }
+      const dv = dmin * nR;                                                   /* (in ring spacings: 0 on a ring) */
+      const ridge = Math.exp(-(((dv + 0.02) / 0.075) ** 2)), groove = Math.exp(-(((dv - 0.1) / 0.045) ** 2));
+      const fib = pn(u * 64, v * 6, 64, 6), crackLine = Math.abs(((u * 9 + 0.35 * pn(u * 4, v * 24, 4, 24)) % 1) - 0.5), crack = Math.max(0, 1 - crackLine / 0.025) * (pn(u * 9, v * 14, 9, 14) > 0.55 ? 1 : 0);
+      H[y * w + x] = 0.45 + 0.4 * ridge - 0.35 * groove + 0.12 * fib - 0.3 * crack;
+      K[y * w + x] = (1 + 0.14 * ridge - 0.38 * groove - 0.35 * crack) * (0.93 + 0.14 * pn(u * 7, v * 9, 7, 9)) * (0.92 + 0.16 * fib);
+    }
+    const col = new Uint8ClampedArray(w * h * 4), nor = new Uint8ClampedArray(w * h * 4), base = [0.47, 0.42, 0.36];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, u = x / w, v = y / h, k = K[i];
+      const lc = Math.max(0, pn(u * 6 + 3, v * 4, 6, 4) - 0.64) * 3 * (0.6 + 0.4 * pn(u * 40, v * 40, 40, 40));
+      for (let c = 0; c < 3; c++) col[i * 4 + c] = ((base[c] * k) * (1 - lc) + [0.62, 0.63, 0.55][c] * lc) * 255;
+      col[i * 4 + 3] = 255;
+      const hx = H[y * w + (x + 1) % w] - H[y * w + (x + w - 1) % w], hy = H[((y + 1) % h) * w + x] - H[((y + h - 1) % h) * w + x], nx = -hx * 2.4, ny = -hy * 4.0, l = Math.hypot(nx, ny, 1);
+      nor[i * 4] = (nx / l * 0.5 + 0.5) * 255; nor[i * 4 + 1] = (ny / l * 0.5 + 0.5) * 255; nor[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255; nor[i * 4 + 3] = 255;
+    }
+    const mk = (d, srgb) => { const t = new T.DataTexture(d, w, h, T.RGBAFormat, T.UnsignedByteType); t.wrapS = t.wrapT = T.RepeatWrapping; t.magFilter = T.LinearFilter; t.minFilter = T.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4; if (srgb) t.colorSpace = T.SRGBColorSpace; t.needsUpdate = true; return t; };
+    return (palmBarkC = { map: mk(col, true), normalMap: mk(nor, false) });
+  }
+  /* the palms' bark material (its trunks carry vertex colours: weathered grey at the foot, browner up high, the roots
+     reddish) */
+  let palmBarkM = null;
+  const palmBarkMat = () => palmBarkM || (palmBarkM = Mats.lit({ map: palmBark().map, normalMap: palmBark().normalMap, normalScale: new T.Vector2(1.6, 1.6), vertexColors: true, roughness: 0.93 }));
+
   /* ── growing one: species, how its trunk and branches go, where its leaves are ── */
   const SPECIES = {
     /* tiers of level limbs off a straight trunk, branchlets turned up at their ends, big leaves in flat rosettes */
@@ -523,7 +563,7 @@ void main(){
   c += uAmbF*uLeafK.x*0.25*pow(1.0 - max(dot(nl, V), 0.0), 4.0)*max(nl.y, 0.0)*(0.25 + 0.75*ao);
   /* and the light the crown scatters about inside itself, green from leaf to leaf */
   c += alb*uKeyColT*vec3(0.8, 1.0, 0.6)*0.05*(0.4 + 0.6*ao)*(0.3 + 0.7*sh);
-  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
+  if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
@@ -634,5 +674,5 @@ void main(){
     for (const k of ['uWeather', 'uDriftW', 'uWind', 'uAltoD', 'uLdM', 'uCumulus', 'uStratus', 'uStorm', 'uAlto']) u[k] = U[k];
     return new T.ShaderMaterial({ uniforms: u, vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
   }
-  return { grow, materials, card, paint, crownAtlas, crownMaterial, SPECIES };
+  return { grow, materials, card, paint, crownAtlas, crownMaterial, palmBark, palmBarkMat, SPECIES };
 })();

@@ -35,7 +35,7 @@ vec3 fogIt(vec3 c, vec3 wp){
 vec3 shade(vec3 alb, vec3 n, vec3 wp, float thin, float gloss){
   float ndl = dot(n, uKeyDirT);
   vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + uKeyColT*(max(ndl, 0.0) + thin*max(-ndl, 0.0) + 0.05);
-  if (length(wp.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(wp.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(wp.xz - uHead.xz) < 34.0)) L += artLight(wp, n);
+  if (length(wp.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(wp.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(wp.xz - uHead.xz) < 34.0) || torchNear(wp)) L += artLight(wp, n);
   vec3 c = alb*L;
   if (gloss > 0.0) c += uKeyColT*pow(max(dot(reflect(normalize(wp - cameraPosition), n), uKeyDirT), 0.0), 40.0)*gloss;
   return fogIt(c, wp);
@@ -131,11 +131,63 @@ void main(){
   const DOLPHIN_VS = `
 ${ORIENT}
 attribute vec4 iP, iQ;   /* where (x, y, z, heading) · pitch, bank, tail-beat phase, size */
+varying vec3 vL;          /* where the point lies on the animal itself (its own frame, as built) */
 void main(){
   /* the tail stock and flukes beat up and down, more toward the tail */
-  vec3 p = position; float u = aW.z;
+  vec3 p = position; float u = aW.z; vL = position;
   p.y += sin(iQ.z - u*2.4)*u*u*FLEX;
   place(p, normal, iP.xyz, iP.w, iQ.x, iQ.y, iQ.w);
+}`;
+  /* a dolphin's and a whale's markings, worked out on the animal itself: the eye, the line of the mouth, and for the
+     dolphin its pale cape and belly; for the humpback the grooves of its throat, the knobs on its head, its white
+     flippers mottled grey, the black and white patterns under its flukes (each whale its own) */
+  const SEA_FS = `
+${LIGHT}
+varying vec3 vN, vW, vC, vL; varying vec4 vP;
+uniform float uSeed;
+float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+void main(){
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), alb = vC, L = vL;
+  float side = abs(L.z);
+  #ifdef WHALE
+    if (vP.x < 0.5){
+      /* throat grooves: pale pleats under the chin and back along the belly */
+      float under = smoothstep(-0.03, -0.075, L.y)*smoothstep(-0.12, 0.02, L.x)*smoothstep(0.49, 0.4, L.x);
+      float pleat = smoothstep(0.3, 0.5, abs(fract(L.z*70.0 + 0.3*sin(L.x*9.0)) - 0.5));
+      alb = mix(alb, alb*0.45, under*(1.0 - pleat)*0.9);
+      /* the mouth: a line from the snout curving back down to below the eye */
+      float mx = clamp((0.5 - L.x)/0.22, 0.0, 1.0), my = -0.012 - 0.042*mx*mx;
+      alb *= 1.0 - 0.75*smoothstep(0.006, 0.0015, abs(L.y - my))*step(0.27, L.x)*step(0.025, side);
+      /* the eye, just above the mouth's corner */
+      float e = length(vec2(L.x - 0.272, (L.y + 0.032)*1.5));
+      alb = mix(alb, vec3(0.006), smoothstep(0.0085, 0.0055, e)*step(0.05, side));
+      alb = mix(alb, vec3(0.25), smoothstep(0.0115, 0.0095, e)*(1.0 - smoothstep(0.0085, 0.0055, e))*step(0.05, side));
+      /* knobs on the head */
+      vec2 kq = vec2(L.x*55.0, L.z*55.0), kc = floor(kq) + 0.5; float kn = smoothstep(0.32, 0.18, length(kq - kc - 0.2*(vec2(hsh(kc), hsh(kc + 7.1)) - 0.5)));
+      alb *= 1.0 - 0.45*kn*smoothstep(0.3, 0.42, L.x)*smoothstep(-0.01, 0.03, L.y)*step(0.5, hsh(kc + uSeed));
+    } else if (vP.x < 1.5){
+      /* the long flippers: white, mottled grey above */
+      alb = mix(vec3(0.62, 0.63, 0.64), vec3(0.2, 0.21, 0.23), gl_FrontFacing ? 0.0 : 0.55*step(0.55, hsh(floor(L.xz*80.0))));
+    } else {
+      /* the flukes: dark above; below, white with black blotches and a dark trailing edge */
+      if (!gl_FrontFacing){
+        vec2 q = floor(vec2(L.x*40.0, side*40.0) + uSeed*3.1); float b = hsh(q)*0.6 + hsh(floor(q*0.5) + 9.0)*0.4;
+        alb = mix(vec3(0.66, 0.67, 0.68), vec3(0.04), step(0.62, b));
+        alb = mix(alb, vec3(0.04), smoothstep(-0.555, -0.58, L.x - side*0.1));
+      }
+    }
+  #else
+    /* a bottlenose: dark cape along the back, grey flanks, a pale belly; the eye, the mouth along the beak */
+    float cape = smoothstep(0.04, 0.12, L.y - 0.06*sin(L.x*2.5 + 0.7));
+    alb = mix(vec3(0.38, 0.4, 0.43), vec3(0.15, 0.17, 0.2), cape);
+    alb = mix(alb, vec3(0.72, 0.73, 0.74), smoothstep(-0.06, -0.16, L.y)*smoothstep(-0.8, -0.3, L.x));
+    if (vP.x > 0.5) alb = vec3(0.16, 0.18, 0.21);
+    float mouth = smoothstep(0.012, 0.004, abs(L.y + 0.02 + 0.03*smoothstep(1.05, 0.88, L.x)))*smoothstep(0.86, 0.9, L.x)*step(0.02, side);
+    alb *= 1.0 - 0.6*mouth;
+    float e = length(vec2(L.x - 0.83, (L.y - 0.005)*1.4));
+    alb = mix(alb, vec3(0.01), smoothstep(0.022, 0.015, e)*step(0.05, side));
+  #endif
+  gl_FragColor = vec4(shade(alb, n, vW, 0.1, GLOSS), 1.0);
 }`;
   /* a whale's blow and the spray of its breaching: soft puffs of mist, each its own world size, rising and spreading
      (a blow: a bushy column off the blowhole, drifting downwind) or thrown up and out and falling back (a splash),
@@ -196,19 +248,20 @@ void main(){
     p = wing(side, aW.z, aW.w, a1, a2, SWEEP + SWEEPK*max(cos(ph), 0.0));
     float a = aW.z > WR ? a2 : a1; n = vec3(0.0, cos(a), -side*sin(a));
   }
-  place(p, n, iH.xyz + p1, yaw, pitch, roll, clamp(uN - iK.x, 0.0, 1.0)*(0.9 + 0.25*fract(s*3.7)));
+  place(p, n, iH.xyz + p1, yaw, pitch, roll, clamp(uN - iK.x, 0.0, 1.0)*(0.9 + 0.25*fract(s*3.7))*(1.0 - iK.w));
 }`;
   const DFLY_VS = `
 ${ORIENT}
 attribute vec4 iH, iK;   /* home (x, y, z, seed) · which one, colour */
 uniform float uTime, uN;
 varying vec3 vK;
-float hh(float n){ return fract(sin(n*91.7 + 0.3)*43758.5453); }
+/* (an integer hash of (k, j), the same here as in fauna.js's dPick, so where each one hovers can be known there) */
+float hk(float k, float j){ uint x = uint(int(k) + 100003)*747796405u + uint(int(j))*2891336453u; x ^= x >> 16u; x *= 0x45d9f3bu; x ^= x >> 16u; return float(x & 0xffffffu)/16777216.0; }
 /* the spots it hovers at, a few metres round its home */
-vec3 spot(float k, float s){ return vec3(hh(k*1.7 + s*13.1) - 0.5, hh(k*2.3 + s*7.9), hh(k*3.1 + s*5.3) - 0.5)*vec3(5.0, 1.3, 3.2) + vec3(0.0, 0.45, 0.0); }
+vec3 spot(float k, float i){ return vec3(hk(k, i*3.0) - 0.5, hk(k, i*3.0 + 1.0), hk(k, i*3.0 + 2.0) - 0.5)*vec3(5.0, 1.3, 3.2) + vec3(0.0, 0.45, 0.0); }
 void main(){
-  float s = iH.w, P = 1.6 + 1.6*hh(s*3.3), Tt = uTime/P + s*17.0, k = floor(Tt), f = Tt - k;
-  vec3 A = spot(k, s), B = spot(k + 1.0, s), Z = spot(k - 1.0, s);
+  float s = iH.w, P = 1.6 + 1.6*hk(7.0, iK.x), Tt = uTime/P + s*17.0, k = floor(Tt), f = Tt - k;
+  vec3 A = spot(k, iK.x), B = spot(k + 1.0, iK.x), Z = spot(k - 1.0, iK.x);
   /* it hovers most of the time, then darts to the next spot, turning to face it just before */
   float m = smoothstep(0.76, 0.93, f);
   vec3 at = iH.xyz + mix(A, B, m) + vec3(sin(uTime*5.1 + s*9.0), sin(uTime*7.3 + s*3.0), cos(uTime*4.3 + s*5.0))*0.02;
@@ -222,7 +275,7 @@ void main(){
   }
   int ci = int(iK.y + 0.5);
   vK = ci == 0 ? vec3(0.1, 0.32, 0.95) : ci == 1 ? vec3(0.14, 0.6, 0.22) : ci == 2 ? vec3(0.85, 0.12, 0.05) : vec3(0.85, 0.52, 0.1);
-  place(p, n, at, yaw, 0.04, 0.0, clamp(uN - iK.x, 0.0, 1.0)*1.15);
+  place(p, n, at, yaw, 0.04, 0.0, clamp(uN - iK.x, 0.0, 1.0)*1.15*(1.0 - iK.w));
 }`;
   const DFLY_FS = `
 ${LIGHT}
@@ -474,13 +527,13 @@ void main(){
     return b.geo();
   }
   function dolphinGeo() {
-    const b = Build(), dark = [0.16, 0.18, 0.21], pale = [0.6, 0.62, 0.64], U = p => [0, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0];
+    const b = Build(), dark = [0.16, 0.18, 0.21], pale = [0.6, 0.62, 0.64], U = p => [0, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0], UF = p => [1, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0];
     b.lathe([[1.13, 0.012, 0.012, -0.02], [1.04, 0.045, 0.04, -0.03], [0.96, 0.07, 0.065, -0.02], [0.88, 0.13, 0.12, 0.02], [0.72, 0.2, 0.19, 0.02], [0.45, 0.26, 0.24, 0.01], [0.1, 0.26, 0.24, 0], [-0.3, 0.19, 0.17, 0], [-0.62, 0.11, 0.09, 0], [-0.86, 0.055, 0.045, 0], [-1.0, 0.035, 0.03, 0]], 10,
       (p, a) => mix3(dark, pale, sm(-0.2, -0.7, Math.cos(a))), U);
-    b.panel([[0.18, 0.22, 0], [-0.1, 0.42, 0], [-0.36, 0.5, 0], [-0.22, 0.2, 0]], dark, U, [0, 0, 1]);
+    b.panel([[0.18, 0.22, 0], [-0.1, 0.42, 0], [-0.36, 0.5, 0], [-0.22, 0.2, 0]], dark, UF, [0, 0, 1]);
     for (const sd of [-1, 1]) {
-      b.panel([[0.62, -0.1, sd * 0.18], [0.44, -0.12, sd * 0.18], [0.36, -0.24, sd * 0.42]], dark, U, [0, -1, 0]);
-      b.panel([[-0.95, 0, sd * 0.01], [-1.13, 0, sd * 0.34], [-1.23, 0, sd * 0.31], [-1.12, 0, sd * 0.02]], dark, U, [0, 1, 0]);
+      b.panel([[0.62, -0.1, sd * 0.18], [0.44, -0.12, sd * 0.18], [0.36, -0.24, sd * 0.42]], dark, UF, [0, -1, 0]);
+      b.panel([[-0.95, 0, sd * 0.01], [-1.13, 0, sd * 0.34], [-1.23, 0, sd * 0.31], [-1.12, 0, sd * 0.02]], dark, UF, [0, 1, 0]);
     }
     return b.geo();
   }
@@ -488,14 +541,14 @@ void main(){
   /* a humpback: a long, deep body with a blunt, knobbly head, long pale flippers, a small hump of a dorsal fin, broad
      notched flukes; dark above, pale below (length 1, nose toward +x; aW.z how far back along it, for the tail's flex) */
   function whaleGeo() {
-    const b = Build(), dark = [0.05, 0.055, 0.062], belly = [0.36, 0.37, 0.39], U = p => [0, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0];
+    const b = Build(), dark = [0.05, 0.055, 0.062], belly = [0.36, 0.37, 0.39], U = p => [0, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0], UF = p => [1, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0], UT = p => [2, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0];
     b.lathe([[0.5, 0.01, 0.012, -0.006], [0.49, 0.036, 0.042, -0.012], [0.46, 0.066, 0.075, -0.014], [0.4, 0.092, 0.1, -0.012], [0.3, 0.11, 0.118, -0.008], [0.16, 0.118, 0.122, -0.004],
       [0.02, 0.113, 0.115, 0], [-0.12, 0.097, 0.095, 0.004], [-0.24, 0.072, 0.067, 0.006], [-0.34, 0.049, 0.042, 0.006], [-0.42, 0.031, 0.024, 0.004], [-0.48, 0.02, 0.014, 0.002], [-0.52, 0.013, 0.009, 0]], 14,
       (p, a) => mix3(dark, belly, sm(-0.2, -0.8, Math.cos(a)) * sm(-0.4, 0.15, p[0])), U);
     b.panel([[-0.1, 0.092, 0], [-0.15, 0.124, 0], [-0.19, 0.13, 0], [-0.2, 0.085, 0]], dark, U, [0, 0, 1]);
     for (const sd of [-1, 1]) {
-      b.panel([[0.22, -0.065, sd * 0.1], [0.14, -0.07, sd * 0.11], [-0.05, -0.11, sd * 0.39], [-0.01, -0.105, sd * 0.4]], [0.32, 0.33, 0.35], U, [0, -1, 0]);
-      b.panel([[-0.5, 0, sd * 0.004], [-0.53, 0, sd * 0.1], [-0.565, 0, sd * 0.2], [-0.6, 0, sd * 0.19], [-0.575, 0, sd * 0.08], [-0.565, 0, sd * 0.012]], dark, U, [0, 1, 0]);
+      b.panel([[0.22, -0.065, sd * 0.1], [0.14, -0.07, sd * 0.11], [-0.05, -0.11, sd * 0.39], [-0.01, -0.105, sd * 0.4]], [0.62, 0.63, 0.64], UF, [0, -1, 0]);
+      b.panel([[-0.5, 0, sd * 0.004], [-0.53, 0, sd * 0.1], [-0.565, 0, sd * 0.2], [-0.6, 0, sd * 0.19], [-0.575, 0, sd * 0.08], [-0.565, 0, sd * 0.012]], dark, UT, [0, 1, 0]);
     }
     return b.geo();
   }
@@ -645,6 +698,48 @@ void main(){
       return false;
     }, (K, i) => { K[i * 4 + 1] = Math.floor(rnd() * 4); K[i * 4 + 2] = 1.3 + rnd() * 0.5; });
 
+    /* (where butterfly i is at time t: BFLY_VS's own path, the same sums here) */
+    const fr = x => x - Math.floor(x);
+    const bPath = (t, s) => [2.4 * Math.sin(t * 0.31 + s * 5.0) + 0.6 * Math.sin(t * 1.7 + s * 2.0), 0.3 * Math.sin(t * 0.9 + s * 3.0) + 0.15 * Math.sin(t * 2.3 + s), 1.1 * Math.sin(t * 0.23 + s * 4.0) + 0.4 * Math.sin(t * 1.3 + s * 6.0)];
+    /* (where dragonfly i hovers at time t: DFLY_VS's own hash and spots) */
+    const hk = (k, j) => { let x = (Math.imul((k | 0) + 100003, 747796405) + Math.imul(j | 0, 2891336453 | 0)) >>> 0; x ^= x >>> 16; x = Math.imul(x, 0x45d9f3b) >>> 0; x ^= x >>> 16; return (x & 0xffffff) / 16777216; };
+    const dSpot = (k, i) => [(hk(k, i * 3) - 0.5) * 5, hk(k, i * 3 + 1) * 1.3 + 0.45, (hk(k, i * 3 + 2) - 0.5) * 3.2];
+    function dflyPickables(list) {
+      const A = dragon.A, t = Mats.U.uTime.value, n = dragon.H.mesh.material.uniforms.uN.value, sm2 = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+      for (let i = 0; i < dragon.H.g.instanceCount; i++) {
+        const q = i * 4, idx = A.iK[q]; if (idx >= n - 0.2 || A.iK[q + 3] > 0.5) continue;
+        const s = A.iH[q + 3], P = 1.6 + 1.6 * hk(7, idx), Tt = t / P + s * 17, k = Math.floor(Tt), f = Tt - k, m = sm2(0.76, 0.93, f);
+        const a = dSpot(k, idx), b = dSpot(k + 1, idx), z = dSpot(k - 1, idx);
+        const y0 = Math.atan2(-(a[2] - z[2]), a[0] - z[0]), y1 = Math.atan2(-(b[2] - a[2]), b[0] - a[0]), yaw = y0 + Math.atan2(Math.sin(y1 - y0), Math.cos(y1 - y0)) * sm2(0.62, 0.76, f);
+        list.push({ kind: 'dragonfly', x: A.iH[q] + a[0] + (b[0] - a[0]) * m, y: A.iH[q + 1] + a[1] + (b[1] - a[1]) * m, z: A.iH[q + 2] + a[2] + (b[2] - a[2]) * m, r: 0.09, yaw, size: 1.15 * 1.4, opts: { kind: A.iK[q + 1] | 0 },
+          take() { A.iK[q + 3] = 1; dragon.H.g.attributes.iK.needsUpdate = true; },
+          give() { A.iK[q + 3] = 0; dragon.H.g.attributes.iK.needsUpdate = true; } });
+      }
+    }
+    /* (where bat i is: BAT_VS's own jinking path) */
+    const batPath = (t, s) => [5.5 * Math.sin(t * 0.37 + s * 6.1) + 2.6 * Math.sin(t * 1.13 + s * 2.3) + 0.9 * Math.sin(t * 3.7 + s * 9.4), 0.8 * Math.sin(t * 0.71 + s * 4.7) + 0.35 * Math.sin(t * 2.9 + s * 1.9),
+      3.5 * Math.sin(t * 0.43 + s * 3.3) + 1.8 * Math.sin(t * 1.31 + s * 7.7) + 0.8 * Math.sin(t * 4.1 + s * 5.2)];
+    function batPickables(list) {
+      const A = bats.A, n = bats.H.mesh.material.uniforms.uN.value;
+      for (let i = 0; i < bats.H.g.instanceCount; i++) {
+        const q = i * 4; if (A.iK[q] >= n - 0.2 || A.iK[q + 3] > 0.5) continue;
+        const s = A.iH[q + 3], t = Mats.U.uTime.value + s * 50, p = batPath(t, s), a = batPath(t - 0.05, s), b = batPath(t + 0.05, s);
+        list.push({ kind: 'bat', x: A.iH[q] + p[0], y: A.iH[q + 1] + p[1], z: A.iH[q + 2] + p[2], r: 0.3, yaw: Math.atan2(-(b[2] - a[2]), b[0] - a[0]), size: 1,
+          take() { A.iK[q + 3] = 1; bats.H.g.attributes.iK.needsUpdate = true; }, give() { A.iK[q + 3] = 0; bats.H.g.attributes.iK.needsUpdate = true; } });
+      }
+    }
+    function bflyPickables(list) {
+      const A = butter.A, t = Mats.U.uTime.value, n = butter.H.mesh.material.uniforms.uN.value;
+      for (let i = 0; i < butter.H.g.instanceCount; i++) {
+        const q = i * 4; if (A.iK[q] >= n - 0.2 || A.iK[q + 2] <= 0) continue;
+        const s = A.iH[q + 3], tt = t * (0.8 + 0.4 * fr(s * 3.1)) + s * 40, ph = t * TAU * (7 + 3 * fr(s * 5.7)) + s * 20;
+        const p = bPath(tt, s), a = bPath(tt - 0.05, s), b = bPath(tt + 0.05, s), size = A.iK[q + 2];
+        list.push({ kind: 'butterfly', x: A.iH[q] + p[0], y: A.iH[q + 1] + p[1] + 0.035 * Math.sin(ph - 1), z: A.iH[q + 2] + p[2], r: 0.07 * size, yaw: Math.atan2(-(b[2] - a[2]), b[0] - a[0]), size: size * 1.5, opts: { kind: A.iK[q + 1] | 0 },
+          take() { A.iK[q + 2] = 0; butter.H.g.attributes.iK.needsUpdate = true; },
+          give() { A.iK[q + 2] = size; butter.H.g.attributes.iK.needsUpdate = true; } });
+      }
+    }
+
     /* ── gulls: wheeling over the surf, cruising along the coast, standing on the sand in small groups facing into the breeze;
        a group lifts off when the van or a walker comes near, flies off, and lands somewhere further along ── */
     const gulls = (() => {
@@ -742,6 +837,7 @@ void main(){
           for (const g of L) {
             const want = g.i < n;
             if (cut && !want) g.mode = 'off';
+            if (g.mode === 'held') { const k = g.i * 4; A.iC[k + 2] = 0; top = Math.max(top, g.i + 1); continue; }
             if (g.mode === 'off' && want) { if (g.role === 'W') wheel(g, cam.x, near); else if (g.role === 'C') cruise(g, cam.x, near); else stand(g, cam.x, near); }
             else if (!want && (g.mode === 'wheel' || g.mode === 'cruise')) { g.mode = 'leave'; g.alt = g.y + 6; }
             else if (!want && g.mode === 'stand') lift(g, t, rnd() * 1.5, cam.x, cam.z);
@@ -754,6 +850,20 @@ void main(){
           this.n = live; H.draw(top);
         },
         shift(dx, dz) { for (const g of L) { g.x += dx; g.z += dz; g.cx += dx; g.cz += dz; g.lx += dx; g.lz += dz; } for (const q of grp) { q.x += dx; q.z += dz; } },
+        /* for picking up (inspect.js): a standing one, or one going over low; let go, it flies off from where it was
+           tossed, away over the sea */
+        pickables(list) {
+          for (const g of L) {
+            if (g.mode === 'off' || g.mode === 'held') continue;
+            list.push({ kind: 'gull', x: g.x, y: g.y + LEGH * g.legs + 0.16, z: g.z, r: 0.3, yaw: g.yaw, size: 1, reach: g.mode === 'stand' ? 40 : 60,
+              take() { g.prev = g.mode; g.mode = 'held'; if (g.grp >= 0 && g.prev === 'stand') grp[g.grp].fresh = false; },
+              give(how, p) {
+                if (how === 'back') { g.mode = g.prev === 'stand' ? 'stand' : g.prev; if (g.mode === 'stand') { g.y = 0; g.legs = 1; g.fold = 1; } return; }
+                Object.assign(g, { x: p.x, y: p.y, z: p.z, mode: 'leave', alt: p.y + 6 + rnd() * 6, v: 7, flap: true, cyc: 1, fold: 0, legs: 0, amp: 0.8, pitch: 0.2 });
+                const cx = th.cx, cz = th.cz; g.yaw = Math.atan2(-((g.z - cz) - 0.7), g.x - cx);
+              } });
+          }
+        },
         L
       };
     })();
@@ -793,7 +903,7 @@ void main(){
               if ((f.tx - f.x) * f.dir <= 0 || Math.abs(f.x - cam.x) > 130) f.mode = want && Math.abs(f.x - cam.x) < 110 ? 'feed' : 'off';
             }
             for (let k = 0; k < PER; k++) {
-              const i = fi * PER + k, b = B[i], q = i * 4, on = f.mode !== 'off' && k < f.n;
+              const i = fi * PER + k, b = B[i], q = i * 4, on = f.mode !== 'off' && k < f.n && !b.held;
               if (on) {
                 const g = Layout.shoreDZ(b.x), sq = Math.sqrt(1 + g * g);
                 if (f.mode === 'feed') {
@@ -822,6 +932,19 @@ void main(){
           this.n = live; H.draw(top);
         },
         shift(dx) { for (const f of F) { f.x += dx; f.tx += dx; } for (const b of B) b.x += dx; },
+        /* for picking up (inspect.js): one of a flock out feeding; tossed back, it and the rest of them are off along the
+           beach */
+        pickables(list) {
+          F.forEach((f, fi) => {
+            if (f.mode === 'off') return;
+            for (let k = 0; k < f.n; k++) {
+              const b = B[fi * PER + k]; if (b.held) continue;
+              const g = Layout.shoreDZ(b.x), x = b.x, z = Layout.shoreZ(b.x) + b.r * Math.sqrt(1 + g * g);
+              list.push({ kind: 'sandpiper', x, y: b.y + 0.06, z, r: 0.12, yaw: b.yaw, size: 1, reach: 35,
+                take() { b.held = true; }, give(how) { b.held = false; if (how !== 'back') away(f, th.cx, false); } });
+            }
+          });
+        },
         F, B
       };
     })();
@@ -860,6 +983,8 @@ void main(){
           let top = 0, live = 0;
           for (let i = 0; i < MAX; i++) {
             const c = C[i], want = i < n;
+            /* (one picked up and held, or in the air: not drawn here, its burrow kept for it) */
+            if (c.st === 'held') { const q = i * 4; A.iQ[q + 3] = 0; Ho.A.iP[q + 3] = 1; top = i + 1; continue; }
             if (cut && !want) c.st = 'off';
             if (c.st === 'off' && want) dig(c, cam.x, true);
             /* left far behind: down its burrow, and a new burrow dug ahead */
@@ -894,6 +1019,19 @@ void main(){
           this.n = live; H.draw(live ? top : 0); Ho.draw(top);
         },
         shift(dx, dz) { for (const c of C) { c.bx += dx; c.bz += dz; c.x += dx; c.z += dz; } },
+        /* the ones out on the sand, for picking up (inspect.js): hidden while held; thrown in the sea, one comes out of
+           the shallows where it landed and runs for home */
+        pickables(list) {
+          for (const c of C) {
+            if (c.st === 'off' || c.st === 'held' || c.st === 'hidden' || c.sink > 0.5) continue;
+            list.push({ kind: 'crab', x: c.x, y: 0.03, z: c.z, r: 0.06 * c.size, yaw: c.face, size: c.size * 1.2,
+              take() { c.prev = c.st; c.st = 'held'; },
+              give(how, p) {
+                if (how === 'back') { c.st = 'still'; c.tm = 0.6 + rnd() * 1.5; c.sink = 0; return; }
+                c.x = p.x; c.z = Layout.shoreZ(p.x) + 0.4; c.sink = 0; c.mx = 0; c.mz = 1; square(c); home(c, 2.8);
+              } });
+          }
+        },
         C
       };
     })();
@@ -914,7 +1052,7 @@ void main(){
     /* ── dolphins: now and then by day or dusk, a small pod passes along the coast offshore, each one rolling up through the
        surface in an arc every few seconds (and sometimes leaping clear), with a splash as it breaks the water and goes back in ── */
     const dolphins = (() => {
-      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, GEN_FS, { GLOSS: 0.5, FLEX: 0.13 }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.5, FLEX: 0.13 }, { uSeed: { value: 0 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
       const D = Array.from({ length: MAX }, () => ({ lat: 0, lag: 0, per: 4, ph: 0, size: 1, beat: 0, up: -1, down: -1 }));
       const pod = { on: false, n: 0, x: 0, x0: 0, dir: 1, off: 30, v: 4, t0: 0, next: 50 + rnd() * 70 };
       function start(t, cx, x) {
@@ -924,7 +1062,14 @@ void main(){
         D.forEach((d, i) => Object.assign(d, { lat: (rnd() - 0.5) * 7, lag: i * 2.2 + rnd() * 2, per: 3.2 + rnd() * 2.2, ph: rnd() * 4, size: 0.85 + rnd() * 0.3, up: -1, down: -1 }));
       }
       return {
-        pod, start,
+        pod, start, H,
+        /* for holding up close (inspect.js): one of the pod while it is up out of the water; let go, back it goes */
+        pickables(list) {
+          if (!pod.on) return;
+          for (let i = 0; i < pod.n; i++) { const d = D[i], q = i * 4; if (d.held || A.iQ[q + 3] <= 0) continue;
+            list.push({ kind: 'dolphin', x: A.iP[q], y: A.iP[q + 1], z: A.iP[q + 2], r: 1.1 * d.size, yaw: A.iP[q + 3], size: d.size, reach: 160,
+              take() { d.held = true; }, give() { d.held = false; } }); }
+        },
         get n() { return pod.on ? pod.n : 0; },
         update(t, dt, cam, k, dens, calm, splash) {
           if (!pod.on && !calm && k > 0.3 && dens > 0.02 && t > pod.next) start(t, cam.x);
@@ -934,7 +1079,7 @@ void main(){
             pod.x += pod.dir * pod.v * dt;
             for (let i = 0; i < MAX; i++) {
               const d = D[i], q = i * 4; A.iQ[q + 3] = 0;
-              if (i >= pod.n) continue;
+              if (i >= pod.n || d.held) { if (d.held) top = Math.max(top, i + 1); continue; }
               const x = pod.x - pod.dir * d.lag, g = Layout.shoreDZ(x), z = Layout.shoreZ(x) - pod.off + d.lat + 2 * Math.sin(t * 0.07 + i);
               const tt = t - pod.t0 + d.ph, cyc = Math.floor(tt / d.per), leap = hash2(cyc, i * 7.7 + 3.1) < 0.14;
               const dur = leap ? 1.5 : 1.15 + 0.2 * hash2(cyc, i), hh = (leap ? 1.7 : 0.55 + 0.25 * hash2(i, cyc)) + 0.45, u = (tt - cyc * d.per) / dur;
@@ -976,7 +1121,7 @@ void main(){
        arches, lifts its flukes clear of the water and slides down deep for a while; now and then it bursts right out
        of the sea instead, turns in the air and crashes back on its side ── */
     const whales = (() => {
-      const H = herd(whaleGeo(), 1, mat(DOLPHIN_VS, GEN_FS, { GLOSS: 0.65, FLEX: 0.045 }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const H = herd(whaleGeo(), 1, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.65, FLEX: 0.045, WHALE: 1 }, { uSeed: { value: rnd() * 50 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
       const w = { on: false, x: 0, off: 200, dir: 1, v: 1.6, size: 13, st: 'under', t0: 0, dur: 0, left: 0, first: true, beat: 0, next: 35 + rnd() * 60, blown: false, hit: false, top: false, pitch: 0, roll: 0, y: -6 };
       const B = { breath: 7.5, dive: 7, breach: 5.5 };
       function start(t, cx, x) {
@@ -987,7 +1132,14 @@ void main(){
       return {
         w, start,
         get n() { return w.on && w.y > -5 ? 1 : 0; },
+        /* for holding up close (inspect.js), while it is up at the surface; let go, it goes back where it was */
+        pickables(list) {
+          if (!w.on || w.held || A.iQ[3] <= 0) return;
+          list.push({ kind: 'whale', x: A.iP[0], y: A.iP[1] + 0.12 * w.size, z: A.iP[2], r: 0.4 * w.size, yaw: A.iP[3], size: w.size / 13, reach: 450,
+            take() { w.held = true; }, give() { w.held = false; } });
+        },
         update(t, dt, cam, k, dens, calm) {
+          if (w.held) { H.draw(0); return; }
           if (!w.on && !calm && k > 0.3 && dens > 0.02 && t > w.next) start(t, cam.x);
           if (dens <= 0.02) w.on = false;
           if (!w.on) { H.draw(0); return; }
@@ -1078,7 +1230,11 @@ void main(){
       /* a whale now, off x (or coming along toward the camera) */
       whale(x) { whales.start(Mats.U.uTime.value, lastCx ?? 0, x); },
       get counts() { return { fireflies: flies.n, gnats: gnats.n, dragonflies: dragon.n, butterflies: butter.n, bats: bats.n, gulls: gulls.n, sandpipers: pipers.n, crabs: crabs.n, dolphins: dolphins.n, whales: whales.n }; },
-      debug: { gulls, pipers, crabs, dolphins, whales, mist, flies, gnats, bats, dragon, butter }
+      debug: { gulls, pipers, crabs, dolphins, whales, mist, flies, gnats, bats, dragon, butter },
+      /* what can be picked up and held (inspect.js) */
+      pickables(list) { crabs.pickables(list); gulls.pickables(list); pipers.pickables(list); bflyPickables(list); dflyPickables(list); batPickables(list); dolphins.pickables(list); whales.pickables(list); },
+      /* a splash thrown up off the water at (x, z), s metres across (inspect.js: something thrown in) */
+      splash(x, z, s) { spray.add(x, z, nowT, s); }
     };
   }
   return { build };

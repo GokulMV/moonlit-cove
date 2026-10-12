@@ -22,6 +22,11 @@ await shot('edge', { pos: [P.cx + 24, 1.7, P.sz + 4], look: [P.cx + 34, 3.5, P.v
 await shot('coast', { pos: [P.cx + 10, 6, P.sz - 60], look: [P.cx + 10, 8, P.vz + 30], fov: 55, focus: 60 });
 await shot('tree', { pos: [P.cx + 30, 3, P.vz - 7], look: [P.cx + 32, 4.5, P.vz + 6], fov: 50, focus: 10 });
 await shot('camp', { pos: [P.cx - 6, 2.2, P.cz + 9], look: [P.cx + 2, 2.4, P.cz - 2], fov: 60, focus: 10 });
+await shot('trunk', { pos: [10.2, 1.3, -1.8], look: [12.6, 0.9, 1.0], fov: 50, focus: 3.5 });
+await shot('trunks', { pos: [P.cx + 18, 1.6, P.sz + 6], look: [P.cx + 24, 2.5, P.vz + 6], fov: 60, focus: 8 });
+/* the foot of the camp's palm by the water, from where a walker stands beside it, and from closer */
+await shot('foot', { pos: [15.4, 1.55, -4.2], look: [17.4, 0.3, -2.0], fov: 58, focus: 3 });
+await shot('footc', { pos: [16.5, 0.85, -3.1], look: [17.4, 0.2, -2.0], fov: 55, focus: 1.6 });
 await shot('hills', { pos: [P.cx + 40, 1.7, P.sz + 0.5], look: [P.cx + 70, 26, P.vz + 160], fov: 62, focus: 120 });
 await shot('far', { pos: [P.cx + 60, 14, P.sz - 220], look: [P.cx + 60, 30, P.vz + 150], fov: 50, focus: 300 }, 30);
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));

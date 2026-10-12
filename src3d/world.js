@@ -109,7 +109,8 @@ const World = (() => {
   }
   const corrTop = x => Co.shoreZ(x) + 6.6;
 
-  /* ── rocks: a noisy sphere cut by random planes into flat fractured faces, with creased normals ── */
+  /* ── rocks: a noisy sphere cut by random planes into flat fractured faces, with creased normals; weathered into
+     layers (strata, ledges a few centimetres deep), split by cracks, rough-grained, darker down in its cracks ── */
   const PAL = [[0.150, 0.138, 0.122], [0.092, 0.088, 0.084], [0.168, 0.116, 0.082], [0.128, 0.122, 0.112], [0.112, 0.104, 0.094]];
   function rockProto(seed, shape, detail, opt = {}) {
     const r = rng(seed), o = seed * 0.713;
@@ -119,23 +120,32 @@ const World = (() => {
       let id = map.get(k); if (id === undefined) { id = v.length / 3; map.set(k, id); v.push(x, y, z); } idx.push(id);
     }
     src.dispose();
-    const planes = [], nCut = 5 + Math.floor(r() * 5);
+    const planes = [], nCut = 7 + Math.floor(r() * 7);
     for (let i = 0; i < nCut; i++) {
       let x, y, z, l; do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; l = Math.hypot(x, y, z); } while (l > 1 || l < 0.25);
       x /= l; y /= l; z /= l; if (y < -0.2) y = -y * 0.6; l = Math.hypot(x, y, z);
       planes.push([x / l, y / l, z / l, 0.5 + r() * 0.38]);
     }
     if (opt.top) { const a = r() * TAU, t = 0.12; planes.push([Math.cos(a) * t, Math.sqrt(1 - t * t), Math.sin(a) * t, opt.top]); }
+    /* and chips knocked off its corners and edges: small faces where the block stood out furthest */
+    for (let i = 0, nc = 6 + Math.floor(r() * 5); i < nc; i++) {
+      let x, y, z, l; do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; l = Math.hypot(x, y, z); } while (l > 1 || l < 0.25);
+      planes.push([x / l, Math.abs(y / l), z / l, 0.8 + r() * 0.16]);
+    }
     const nv = v.length / 3, aux = new Float32Array(nv * 3);
     for (let i = 0; i < nv; i++) {
       let x = v[i * 3], y = v[i * 3 + 1], z = v[i * 3 + 2];
       const big = fbm(x * 1.1 + o, y * 1.1, z * 1.1 - o, 3), k = 0.86 + 0.32 * big; x *= k; y *= k; z *= k;
       for (const [px, py, pz, d] of planes) { const t = x * px + y * py + z * pz - d; if (t > 0) { x -= px * t * 0.96; y -= py * t * 0.96; z -= pz * t * 0.96; } }
       const det = fbm(x * 3.3 + 2.1, y * 3.3 - o, z * 3.3, 3), rid = 1 - Math.abs(2 * vn(x * 2.4 + o, y * 2.4, z * 2.4 + 5) - 1);
-      const kk = 1 + (det - 0.5) * 0.13 - 0.07 * Math.pow(rid, 6);
+      /* cracks (sharp grooves along a ridged noise), the bedding's ledges, and a rough grain over everything */
+      const cr = 1 - Math.abs(2 * vn(x * 4.6 - o, y * 4.6 + 3, z * 4.6) - 1), crack = Math.pow(cr, 12) + 0.5 * Math.pow(1 - Math.abs(2 * vn(x * 9 + o, y * 9, z * 9 - 2) - 1), 16);
+      const sy = y * (opt.strata || 7) + 0.9 * fbm(x * 1.7 + o, y * 0.6, z * 1.7, 2), ledge = (sy - Math.floor(sy)), strat = 0.025 * (ledge < 0.18 ? ledge / 0.18 : 1) - 0.0125;
+      const grain = fbm(x * 11 + o, y * 11, z * 11 - o, 2) - 0.5;
+      const kk = 1 + (det - 0.5) * 0.13 - 0.07 * Math.pow(rid, 6) - 0.055 * crack + strat + 0.03 * grain;
       x *= kk * shape[0]; y *= kk * shape[1]; z *= kk * shape[2];
       const fl = -0.22 * shape[1]; if (y < fl) y = fl + (y - fl) * 0.2;      /* bedded in the sand */
-      v[i * 3] = x; v[i * 3 + 1] = y; v[i * 3 + 2] = z; aux[i * 3] = big; aux[i * 3 + 1] = det; aux[i * 3 + 2] = rid;
+      v[i * 3] = x; v[i * 3 + 1] = y; v[i * 3 + 2] = z; aux[i * 3] = big; aux[i * 3 + 1] = det; aux[i * 3 + 2] = Math.max(rid, Math.min(1, crack * 1.4));
     }
     const F = idx.length / 3, fn = new Float32Array(F * 3), fa = new Float32Array(F * 3), adj = Array.from({ length: nv }, () => []);
     for (let f = 0; f < F; f++) {
@@ -452,31 +462,36 @@ void main(){
 
   /* ── the front rows of the forest: merged prototypes of palms, broadleaf trees, bushes and ferns ── */
   function merge(parts) {
-    let nv = 0, ni = 0; for (const { g } of parts) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
-    const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), UV = new Float32Array(nv * 2), I = new Uint32Array(ni);
+    let nv = 0, ni = 0, col = false; for (const { g } of parts) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; if (g.attributes.color) col = true; }
+    const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), UV = new Float32Array(nv * 2), I = new Uint32Array(ni), CO = col ? new Float32Array(nv * 3).fill(1) : null;
     let ov = 0, oi = 0; const v = new T.Vector3(), nm = new T.Matrix3();
     for (const { g, m } of parts) {
-      const pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv; nm.getNormalMatrix(m);
+      const pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ca = g.attributes.color; nm.getNormalMatrix(m);
       for (let i = 0; i < pa.count; i++) {
         v.fromBufferAttribute(pa, i).applyMatrix4(m); P[(ov + i) * 3] = v.x; P[(ov + i) * 3 + 1] = v.y; P[(ov + i) * 3 + 2] = v.z;
         if (na) { v.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N[(ov + i) * 3] = v.x; N[(ov + i) * 3 + 1] = v.y; N[(ov + i) * 3 + 2] = v.z; }
         if (ua) { UV[(ov + i) * 2] = ua.getX(i); UV[(ov + i) * 2 + 1] = ua.getY(i); }
+        if (CO && ca) { CO[(ov + i) * 3] = ca.getX(i); CO[(ov + i) * 3 + 1] = ca.getY(i); CO[(ov + i) * 3 + 2] = ca.getZ(i); }
       }
       if (g.index) for (let i = 0; i < g.index.count; i++) I[oi + i] = g.index.getX(i) + ov; else for (let i = 0; i < pa.count; i++) I[oi + i] = ov + i;
       ov += pa.count; oi += g.index ? g.index.count : pa.count;
     }
     const out = new T.BufferGeometry(); out.setAttribute('position', new T.BufferAttribute(P, 3)); out.setAttribute('normal', new T.BufferAttribute(N, 3)); out.setAttribute('uv', new T.BufferAttribute(UV, 2)); out.setIndex(new T.BufferAttribute(I, 1));
+    if (CO) out.setAttribute('color', new T.BufferAttribute(CO, 3));
     out.computeBoundingSphere(); return out;
   }
   const M = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, s = 1) => new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromEuler(new T.Euler(rx, ry, rz, 'YXZ')), new T.Vector3(s, s, s));
 
   /* a coconut palm: each shape its own height, lean (now and then a long curve out over the sand), crown, how its
      fronds hang, how many dead ones hang below them */
+  /* (the fibrous boot under a palm's crown, where the old frond bases wrap the trunk; drawn with the bark) */
+  const bootGeo = (() => { const g = new T.CylinderGeometry(0.17, 0.25, 0.6, 10, 1, true), n = g.attributes.position.count; g.setAttribute('color', new T.BufferAttribute(new Float32Array(n * 3).fill(0.62), 3)); return g; })();
   function palmProto(seed, tall, lite) {
     const r = rng(seed), h = tall ? 10.5 + r() * 4.5 : 5.8 + r() * 5.2, bend = r() < 0.3 ? 1.9 : 0.6 + 0.6 * r(), lx = (r() - 0.5) * (tall ? 3.2 : 2.4) * bend, lz = (r() - 0.5) * (tall ? 3.2 : 2.4) * bend, cr = (tall ? 2.5 : 2.7) + r() * 1.0;
     const droopK = 0.7 + 0.65 * r(), nDry = Math.floor(r() * r() * 5.5);
     const curve = new T.CatmullRomCurve3([new T.Vector3(0, 0, 0), new T.Vector3(lx * 0.1, h * 0.34, lz * 0.1), new T.Vector3(lx * 0.48, h * 0.7, lz * 0.48), new T.Vector3(lx, h, lz)]);
-    const bark = [{ g: Nature.taperTube(curve, lite ? 6 : 14, lite ? 5 : 7, t => (0.26 - 0.1 * t) * (1 + 0.5 * Math.exp(-t * 14)), 0.5), m: M() }];
+    const bark = [{ g: Nature.palmTrunk(curve, { r0: 0.2 + 0.03 * r(), rTop: 0.135 + 0.02 * r(), bole: 0.1 + 0.05 * r(), seed, segs: lite ? 8 : 20, radial: lite ? 6 : 12, roots: lite ? 0 : 14, rootSegs: 3, rootRadial: 4 }), m: M() }];
+    if (!lite) bark.push({ g: bootGeo, m: M(lx, h - 0.22, lz) });
     const fA = [], fB = [], dry = [];
     const nf = 13 + Math.floor(r() * 10);
     /* far away: every other frond, a little wider, in fewer segments, all on one texture (same draws, so it matches up close) */
@@ -567,8 +582,8 @@ void main(){
   /* ── the coast, chunk by chunk ── */
   function build(root, U, noiseTex) {
     /* rocks: a few shapes, shared by every chunk, and the same in fewer facets for further off */
-    const R = { small: SMALL.map((sh, i) => rockProto(31 + i * 17, sh, 2)), big: BIG.map((sh, i) => rockProto(301 + i * 23, sh, 3)), stack: rockProto(777, [1.2, 1.0, 1.1], 3, { top: 0.6 }) };
-    const far = new Map([...R.small.map((p, i) => [p, rockProto(31 + i * 17, SMALL[i], 1)]), ...R.big.map((p, i) => [p, rockProto(301 + i * 23, BIG[i], 2)]), [R.stack, rockProto(777, [1.2, 1.0, 1.1], 2, { top: 0.6 })]]);
+    const R = { small: SMALL.map((sh, i) => rockProto(31 + i * 17, sh, 6)), big: BIG.map((sh, i) => rockProto(301 + i * 23, sh, 8)), stack: rockProto(777, [1.2, 1.0, 1.1], 10, { top: 0.6, strata: 11 }) };
+    const far = new Map([...R.small.map((p, i) => [p, rockProto(31 + i * 17, SMALL[i], 2)]), ...R.big.map((p, i) => [p, rockProto(301 + i * 23, BIG[i], 3)]), [R.stack, rockProto(777, [1.2, 1.0, 1.1], 3, { top: 0.6, strata: 11 })]]);
     const rockMat = Mats.lit({ vertexColors: true, roughness: 0.86 }, 'rockw'), landMat = Mats.lit({ vertexColors: true, roughness: 0.95 }, 'land'), canMat = Mats.lit({ vertexColors: true, roughness: 0.92 }, 'canopy');
     /* foam round rocks in the water and the spray they throw up */
     const surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: { value: noiseTex } }, Mats.coastU);
@@ -579,7 +594,7 @@ void main(){
     const crownMat = Trees.crownMaterial(U);
     /* the forest: shapes near and far, and their materials */
     const frondT = [Mats.tex(Paint.frond(31)), Mats.tex(Paint.frond(47)), Mats.tex(Paint.frond(59, 1))].map(t => Mats.foliage(t, 0.4, [1, 1, 1], true));
-    const barkP = Mats.lit({ map: Mats.tex(Paint.bark(5), { repeat: true }), roughness: 0.95 });
+    const barkP = Trees.palmBarkMat();
     /* the crowns' greens: a lighter top, two in the ring round it; the bushes' and the low scrub's their own */
     const TREES = [['almond', 51], ['casuarina', 67], ['hibiscus', 89], ['casuarina', 131], ['almond', 157], ['hibiscus', 173]];
     const PALMS = [11, 23, 37, 71, 97, 113], TALL = [43, 61, 83];

@@ -650,7 +650,9 @@
 
   /* the hand on it: pointers, the wheel, the keys */
   const ex = { ptrs: new Map(), kind: 'turn', dragged: false, multi: false, two: null, ax: 0, ay: 0, wheelT: -1e9 };
-  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on && !sketch.on && !tbox.on;
+  /* (something held up close, inspect.js: everything else waits while it is; see openInspect) */
+  const insp = { on: false, info: null, c: null, drag: null, seen: new Set(store.get('seenLife', [])) };
+  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on && !sketch.on && !tbox.on && !insp.on;
   const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
   if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
   /* a new swipe (or pinch, or burst of scrolling): straight after the last one it goes further, each time up to four
@@ -739,14 +741,14 @@
   }
   cv.addEventListener('contextmenu', e => { if (st.entered && !rd.on) e.preventDefault(); });
   cv.addEventListener('pointerdown', e => {
-    if (!st.entered || rd.on) return;
+    if (!st.entered || rd.on || insp.on) return;
     if (!ex.ptrs.size) { ex.dragged = ex.multi = false; ex.two = null; }
     ex.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
     if (ex.ptrs.size === 1) ex.kind = e.pointerType === 'mouse' && (e.button > 0 || e.shiftKey || e.ctrlKey || e.metaKey) ? 'pan' : 'turn';
     else { const going = ex.dragged; ex.multi = ex.dragged = true; if (ex.ptrs.size === 2 && canExplore()) twoStart(going, e.timeStamp); }
   });
   cv.addEventListener('pointermove', e => {
-    if (wk.on && e.pointerType === 'mouse' && !e.buttons) hoverAt(e);
+    if (wk.on && !insp.on && e.pointerType === 'mouse' && !e.buttons) hoverAt(e);
     const p = ex.ptrs.get(e.pointerId); if (!p) return;
     if (e.pointerType === 'mouse' && !e.buttons) { exUp(e); return; }
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -1248,6 +1250,22 @@
   }
   /* the eye: at head height, bobbing a little with each step and swaying from foot to foot, more as the pace quickens
      (and not at all for those who would rather things kept still) */
+  /* ── the torch: in hand when walking after dark. It comes on by itself as the light goes (F, or the button, switches it
+     on or off), sways with each step, and lags a moment behind a turn of the head ── */
+  const tch = { user: null, k: 0, lagY: 0, lagP: 0, lastY: null, lastP: null };
+  const torchWanted = () => tch.user === null ? !!(st.S && st.S.night > 0.5) : tch.user;
+  function syncTorchBtn() { const b = $('bTorch'); if (b) b.setAttribute('aria-pressed', String(wk.on && torchWanted())); }
+  function torchState(dt) {
+    const want = wk.on && wk.camK > 0.6 && torchWanted();
+    tch.k += ((want ? 1 : 0) - tch.k) * Math.min(1, dt / 0.22);
+    if (!want && tch.k < 0.003) { tch.k = 0; tch.lastY = null; return null; }
+    const v = Math.min(1, Math.abs(wk.v) / 1.4), ph = wk.phase, yaw = wk.h + wk.hy.v + wk.my, pitch = wk.hp.v + wk.mp;
+    if (tch.lastY === null) { tch.lastY = yaw; tch.lastP = pitch; }
+    const dy = wrapA(yaw - tch.lastY), dp = pitch - tch.lastP; tch.lastY = yaw; tch.lastP = pitch;
+    tch.lagY += (clamp(-dy / Math.max(dt, 1e-3) * 0.05, -0.14, 0.14) - tch.lagY) * Math.min(1, dt * 7);
+    tch.lagP += (clamp(-dp / Math.max(dt, 1e-3) * 0.05, -0.1, 0.1) - tch.lagP) * Math.min(1, dt * 7);
+    return { k: tch.k, off: [0.215, 0.19 + 0.012 * v * Math.sin(2 * ph), 0.46], sway: [0.022 * v * Math.sin(ph) + tch.lagY, 0.018 * v * Math.sin(2 * ph) + tch.lagP], held: !insp.on };
+  }
   function walkCamera() {
     const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
     const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
@@ -1305,15 +1323,79 @@
     document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
   }
   $('bWalk').addEventListener('click', () => wk.on ? stopWalk() : startWalk());
+  $('bTorch').addEventListener('click', () => { tch.user = !torchWanted(); syncTorchBtn(); });
   $('bWalkExit').addEventListener('click', stopWalk);
   $('bWalkAuto').addEventListener('click', () => setAuto(!wk.auto));
   document.querySelectorAll('[data-pace]').forEach(b => b.addEventListener('click', () => { wk.pace = b.dataset.pace; store.set('walkPace', wk.pace); seg('pace', wk.pace); }));
   seg('pace', wk.pace);
+  /* ── holding one of the cove's small lives up close (inspect.js): a click on a crab, a shell, a starfish, a flower
+     picks it up; drag to turn it over, scroll to look closer; flick it away (or the button) and it is thrown back where
+     it belongs, the sea's to the sea and the land's to the land; or put it down where it was ── */
+  const throwWords = h => h === 'sea' ? 'Throw it back in the sea' : h === 'land' ? 'Toss it back in the grass' : 'Let it fly';
+  function openInspect(c) {
+    if (insp.on || !c) return false;
+    const info = Engine.inspect.hold(c); if (!info) return false;
+    insp.on = true; insp.info = info; insp.c = c; keys.clear(); touch.x = touch.y = 0;
+    if (wk.on && wk.auto) setAuto(false);
+    $('iName').textContent = info.name; $('iLatin').textContent = info.latin; $('iNote').textContent = info.note;
+    $('iThrow').textContent = info.big ? 'Let it go' : throwWords(info.home); $('iKeep').hidden = !info.flower; $('iPut').hidden = !!info.big;
+    $('insp').hidden = false; document.body.classList.add('inspecting');
+    if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
+    insp.seen.add(info.kind); store.set('seenLife', [...insp.seen]); if (insp.seen.size >= 5) unlock('naturalist');
+    return true;
+  }
+  function closeInspect() { insp.on = false; insp.drag = null; $('insp').hidden = true; document.body.classList.remove('inspecting', 'insp-grab'); }
+  function inspThrow(dir) {
+    if (!insp.on) return; const home = insp.info.home, kind = insp.info.kind;
+    if (!Engine.inspect.throwIt(undefined, dir)) return;
+    closeInspect();
+    if (home === 'sea' && kind === 'crab') unlock('crab_home');
+  }
+  function inspPut() { if (insp.on && Engine.inspect.putBack()) closeInspect(); }
+  function inspKeep() {
+    if (!insp.on || !insp.info.flower) return; const f = insp.c.flower;
+    if (!Engine.inspect.keep()) return;
+    closeInspect(); f.held = false; pickFlower(f, true);
+  }
+  $('iThrow').addEventListener('click', () => inspThrow(0));
+  $('iPut').addEventListener('click', inspPut);
+  $('iKeep').addEventListener('click', inspKeep);
+  /* (a drag on the view turns it; let go fast, upward, and it is thrown — a little to the side the flick went) */
+  cv.addEventListener('pointerdown', e => { if (!insp.on || !e.isPrimary) return; insp.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, vx: 0, vy: 0, t: performance.now(), moved: 0 }; document.body.classList.add('insp-grab'); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* a nicety */ } });
+  cv.addEventListener('pointermove', e => {
+    const d = insp.drag; if (!insp.on || !d || d.id !== e.pointerId) return;
+    const now = performance.now(), dx = e.clientX - d.x, dy = e.clientY - d.y, dtm = Math.max(1, now - d.t);
+    d.vx = 0.6 * d.vx + 0.4 * dx / dtm; d.vy = 0.6 * d.vy + 0.4 * dy / dtm; d.x = e.clientX; d.y = e.clientY; d.t = now; d.moved += Math.hypot(dx, dy);
+    Engine.inspect.turn(dx, dy);
+  });
+  const inspUp = e => {
+    const d = insp.drag; if (!d || d.id !== e.pointerId) return; insp.drag = null; document.body.classList.remove('insp-grab');
+    if (!insp.on) return;
+    const fresh = performance.now() - d.t < 90, v = Math.hypot(d.vx, d.vy);
+    if (fresh && d.moved > 40 && d.vy < -1.1 && v > 1.3) inspThrow(Math.max(-1, Math.min(1, d.vx / v)) * 0.6);
+  };
+  cv.addEventListener('pointerup', inspUp); cv.addEventListener('pointercancel', inspUp);
+  cv.addEventListener('wheel', e => { if (!insp.on) return; e.preventDefault(); e.stopImmediatePropagation(); Engine.inspect.zoom(Math.exp(e.deltaY * 0.0012)); }, { passive: false, capture: true });
+  addEventListener('keydown', e => {
+    if (!insp.on || (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]'))) return;
+    const k = e.key.toLowerCase();
+    if (k === 'escape' || k === 'e' || k === 'backspace') inspPut();
+    else if (k === ' ' || k === 'enter' || k === 't') { if (e.target && e.target.closest && e.target.closest('button')) return; inspThrow(0); }
+    else if (k === 'b' && insp.info && insp.info.flower) inspKeep();
+    else if (k === 'arrowleft' || k === 'a') Engine.inspect.turn(-24, 0);
+    else if (k === 'arrowright' || k === 'd') Engine.inspect.turn(24, 0);
+    else if (k === 'arrowup' || k === 'w') Engine.inspect.turn(0, -24);
+    else if (k === 'arrowdown' || k === 's') Engine.inspect.turn(0, 24);
+    else if (k === 'f') return;
+    else return;
+    e.preventDefault(); e.stopImmediatePropagation();
+  }, true);
   const WALK_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', 'shift'];
   addEventListener('keydown', e => {
     if (!wk.on || (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]'))) return;
     const k = e.key.toLowerCase();
     if (k === 'e' || k === 'escape') { stopWalk(); e.preventDefault(); return; }
+    if (k === 'f' && !e.repeat) { tch.user = !torchWanted(); syncTorchBtn(); e.preventDefault(); return; }
     if (WALK_KEYS.includes(k)) { keys.add(k); e.preventDefault(); }
   });
   /* ── finds: small things to discover, kept in this browser ── */
@@ -1323,7 +1405,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1480,7 +1562,9 @@
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const fade = stepPitch();
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
+    if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
@@ -1985,10 +2069,15 @@
   addEventListener('pointerup', e => {
     const d = pdown; pdown = null;
     if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || sketch.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+    if (insp.on) { down = null; return; }
     const hit = pickAt(e);
     if (!hit) {
+      /* one of the small lives near where it was touched (a crab, a shell, a flower …): picked up and held */
+      const r = cv.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height;
+      const c = Engine.inspect.pick(nx, ny);
+      if (c && openInspect(c)) { down = null; return; }
       /* a wild flower near where it was touched: picked into the bouquet */
-      const r = cv.getBoundingClientRect(), f = Engine.pickFlower((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+      const f = Engine.pickFlower(nx, ny);
       if (f) { down = null; pickFlower(f); }
       return;
     }
@@ -1998,7 +2087,8 @@
   cv.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return;
     const now = performance.now(); if (now - hoverT < 80) return; hoverT = now;
-    const hit = ready && st.entered && !rd.on && !car.on ? pickAt(e) : null;
+    let hit = ready && st.entered && !rd.on && !car.on && !insp.on ? pickAt(e) : null;
+    if (!hit && ready && st.entered && !rd.on && !car.on && !insp.on && !sketch.on) { const r = cv.getBoundingClientRect(); if (Engine.inspect.pick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)) hit = 'life'; }
     document.body.classList.toggle('pick-hover', !!hit && hit !== (seat.on && seat.pose ? seat.pose.id : ''));
   });
   /* ── the bouquet: wild flowers picked at the forest's edge, kept in this browser; put in a jar on the picnic table,
@@ -2033,8 +2123,8 @@
     if (!n) $('bqPanel').hidden = true;
     Engine.setBouquetJar(bouquet.jar ? bouquet.list : []);
   }
-  function pickFlower(f) {
-    const p = Engine.pluckFlower(f, st.t); if (!p) return;
+  function pickFlower(f, quiet) {
+    const p = Engine.pluckFlower(f, st.t, quiet); if (!p) return;
     bouquet.list.push(p.kind); store.set('bouquet', bouquet.list.slice(-60));
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
     toast(bouquet.list.length === 1 ? `You picked a ${p.name}. It's the start of a bouquet.` : `A ${p.name} for the bouquet: ${bqWords(bouquet.list)}.`, false, 2600);

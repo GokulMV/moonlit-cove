@@ -491,7 +491,7 @@ const Engine = (() => {
   function moveCamp(ox, oz, camX) {
     Layout.setOrigin(ox, oz);
     rebuildCamp(); registerDyn(surge.dyn); surge.ripples.length = 0;
-    if (marks) marks.clear();
+    if (marks) marks.clear(); if (inspect) inspect.clear();
     coastFollow(camX ?? Layout.camp.x);
     /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
     if (world) world.update(camX ?? Layout.camp.x, 250);
@@ -509,7 +509,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null; const faunaIn = {};
+  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -659,6 +659,7 @@ const Engine = (() => {
     keyLight.target.position.set(Layout.camp.x, 0, Layout.camp.z);
     scene.add(keyLight, keyLight.target);
     hemi = new T.HemisphereLight(0xffffff, 0x000000, Math.PI); scene.add(hemi);
+    torch = makeTorch(opts.torchShadow || (opts.shadowSize && opts.shadowSize < 1024 ? 512 : 1024));
     /* the lights are on the local shadow cameras' layers too (2, 3; see localShadow): those depth passes then find the
        same lights as the main pass, instead of none, and three no longer looks every material's program over again
        twice a frame whenever the fire is lit */
@@ -737,12 +738,17 @@ const Engine = (() => {
     coastFollow(Layout.cameras.wide.pos[0]);
     world = World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
+    shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
     world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
+    /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js) */
+    inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
+      sources: [L => fauna.pickables(L), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c)],
+      splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
     post = makePost(); gU.uSunVis.value = post.visTex;
     return { casters: nCast };
@@ -772,6 +778,81 @@ const Engine = (() => {
     return { pos: L(a.pos, b.pos), look: L(a.look, b.look), fov: lerp(a.fov, b.fov, t), focus: lerp(a.focus || 25, b.focus || 25, t) };
   }
 
+  /* ── the walker's torch: a small aluminium torch held low in the right hand, its rubber grip rings, the switch, a
+     chrome bezel round the lens and the reflector behind it. Its light is a spot light's: three renders its shadow map
+     (everything that casts a shadow, leaves cut out of their cards), and the scene's own shaders light with it
+     (artLight: a bright hotspot in a softer spill, shadowed), so the palms, the rocks and the camp throw shadows across
+     the sand that swing as the beam does. A faint cone of light shows in the night air ── */
+  let torch = null;
+  function makeTorch(size) {
+    const L = new T.SpotLight(0xffffff, 0, 34, 0.52, 0.4, 2);
+    L.castShadow = true; L.shadow.mapSize.set(size, size); L.shadow.bias = -0.0004; L.shadow.normalBias = 0.02;
+    Object.assign(L.shadow.camera, { near: 0.12, far: 34 }); L.shadow.autoUpdate = false;
+    scene.add(L, L.target);
+    /* the torch itself (models/camp/torch.js): its metal takes the sky's light from the scene's own environment map, so
+       it shows the night it is held up in */
+    const g = Models.make('camp/torch'), { lens, lensM, ledM } = g.userData;
+    /* (the torch in hand is drawn over the finished frame, in a little scene of its own with the night's light on it:
+       held this close it would otherwise be lost in the depth of field's blur) */
+    const tS = new T.Scene(), amb = new T.AmbientLight(0xffffff, 0), key = new T.DirectionalLight(0xffffff, 0), glow = new T.PointLight(0xfff0d8, 0, 0.6, 2);
+    /* (and the light its own beam throws back off the ground ahead, on its underside) */
+    const bounce = new T.DirectionalLight(0xffeedd, 0);
+    /* (and a soft light from over your shoulder, the way an eye used to the dark still makes out what is in its hand) */
+    const view = new T.DirectionalLight(0xdfe8ff, 0);
+    tS.add(g, amb, key, key.target, glow, bounce, bounce.target, view, view.target); g.visible = false;
+    /* the beam in the air: an open cone, brightest along its axis and near the lens, fading out with distance */
+    const bg = new T.ConeGeometry(Math.tan(0.4) * 14, 14, 32, 1, true); bg.translate(0, -7, 0); bg.rotateX(Math.PI / 2);
+    const beamM = new T.ShaderMaterial({ uniforms: { uK: { value: 0 }, uFog: Mats.U.uFog }, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide,
+      vertexShader: `varying vec3 vL; varying vec3 vW; void main(){ vL = position; vec4 w = modelMatrix*vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
+      fragmentShader: `uniform float uK; varying vec3 vL; varying vec3 vW;
+void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = normalize(cameraPosition - vW);
+  float a = uK*exp(-d/5.5)*pow(max(0.0, 1.0 - r), 1.6)*smoothstep(0.0, 0.6, d)*0.05;
+  gl_FragColor = vec4(vec3(1.0, 0.94, 0.84)*a, 1.0); }` });
+    const beam = new T.Mesh(bg, beamM); beam.frustumCulled = false; beam.visible = false; scene.add(beam);
+    return { L, g, lens, lensM, ledM, beam, beamM, k: 0, tS, amb, key, glow, bounce, view };
+  }
+  const _tq = new T.Quaternion(), _te = new T.Euler(), _tv = new T.Vector3(), _tf = new T.Vector3();
+  /* o.torch: { k: how far on (0..1), off: [right, down, forward] in the camera's frame, sway: [yaw, pitch] } */
+  function stepTorch(o, S) {
+    if (!torch) return;
+    const tt = o.torch, k = tt ? tt.k : 0, on = k > 0.001;
+    torch.g.visible = on && (tt.held !== false); torch.beam.visible = on; torch.L.shadow.autoUpdate = on;
+    Mats.U.uTorch.value.w = 0; torch.lensM.color.setRGB(0.08, 0.08, 0.08); torch.lensM.opacity = 0.55; torch.ledM.color.setRGB(0.25, 0.24, 0.2);
+    if (!on) return;
+    const off = tt.off || [0.19, 0.21, 0.44], sw = tt.sway || [0, 0];
+    _tv.set(off[0], -off[1], -off[2]).applyQuaternion(camera.quaternion).add(camera.position);
+    _te.set(-0.15 + sw[1], 0.04 + sw[0], 0, 'YXZ'); _tq.setFromEuler(_te); torch.g.quaternion.copy(camera.quaternion).multiply(_tq); torch.g.position.copy(_tv);
+    torch.g.updateMatrixWorld(true);
+    const lp = torch.lens.getWorldPosition(new T.Vector3()); _tf.set(0, 0, -1).applyQuaternion(torch.g.quaternion);
+    torch.L.position.copy(lp); torch.L.target.position.copy(lp).addScaledVector(_tf, 10); torch.L.target.updateMatrixWorld(); torch.L.updateMatrixWorld();
+    torch.beam.position.copy(lp); torch.beam.quaternion.copy(torch.g.quaternion);
+    /* (as bright to the eye whatever the night: the eye that has got used to a dark night finds the torch brighter, so it
+       is turned down as far as the frame's exposure is turned up) */
+    const flick = 0.985 + 0.015 * Math.sin(o.t * 37.0) * Math.sin(o.t * 11.0), ex = Math.max(0.05, S.exposure * (o.expMul || 1)), adapt = Math.min(1.6, Math.max(0.3, 5 / ex));
+    Mats.U.uTorch.value.set(lp.x, lp.y, lp.z, 0.62 * k * flick * adapt); Mats.U.uTorchDir.value.copy(_tf);
+    if (torch.L.shadow.map) { Mats.U.uTorchSh.value = torch.L.shadow.map.texture; Mats.U.uTorchShM.value = torch.L.shadow.matrix; Mats.U.uTorchShS.value.copy(torch.L.shadow.mapSize); }
+    torch.lensM.color.setRGB(1.6 * k, 1.5 * k, 1.35 * k); torch.lensM.opacity = 0.55 + 0.4 * k; torch.ledM.color.setRGB(6 * k, 5.7 * k, 5.1 * k); torch.beamM.uniforms.uK.value = k;
+    /* the night's light on the torch in hand: the sky's, the moon's, and a little of its own spill on the bezel */
+    torch.tS.environment = scene.environment; torch.amb.color.setRGB(S.amb[0], S.amb[1], S.amb[2]); torch.amb.intensity = scene.environment ? 0 : Math.PI;
+    torch.key.color.setRGB(S.keyCol[0], S.keyCol[1], S.keyCol[2]); torch.key.intensity = Math.PI * campShade; torch.key.position.copy(torch.g.position).add(_tv.set(S.keyDir[0], S.keyDir[1], S.keyDir[2]).multiplyScalar(5)); torch.key.target.position.copy(torch.g.position); torch.key.target.updateMatrixWorld();
+    /* the lit sand ahead, a couple of metres off and below: what it gives back */
+    _tv.set(0, -1, 0).addScaledVector(_tf, 1.4); torch.bounce.position.copy(torch.g.position).addScaledVector(_tv, 3); torch.bounce.target.position.copy(torch.g.position); torch.bounce.target.updateMatrixWorld();
+    torch.bounce.intensity = 0.45 * k * adapt;
+    _tv.set(0.25, 0.7, 0.9).applyQuaternion(camera.quaternion); torch.view.position.copy(torch.g.position).addScaledVector(_tv, 3); torch.view.target.position.copy(torch.g.position); torch.view.target.updateMatrixWorld();
+    torch.view.intensity = 1.1 * k / ex;
+    torch.glow.position.copy(lp).addScaledVector(_tf, -0.02); torch.glow.intensity = 0.04 * k;
+  }
+  /* the torch in hand, over the finished frame, tone-mapped near enough as the frame was */
+  function drawTorch(exp) {
+    if (!torch || !torch.g.visible) return;
+    /* (the frame itself is tone-mapped and encoded by the post pass; this is drawn straight to the screen, so it must be
+       encoded here) */
+    const tm = R.toneMapping, te = R.toneMappingExposure, ac = R.autoClear, cs = R.outputColorSpace;
+    R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = exp; R.autoClear = false; R.outputColorSpace = T.SRGBColorSpace; R.setRenderTarget(null);
+    R.clearDepth(); R.render(torch.tS, camera);
+    R.toneMapping = tm; R.toneMappingExposure = te; R.autoClear = ac; R.outputColorSpace = cs;
+  }
+
   let lastCW = 0, lastCH = 0, fabT = null;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
@@ -784,6 +865,10 @@ const Engine = (() => {
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
+    stepTorch(o, S);
+    /* what is held up close, or thrown and on its way (its own clock: real time, whatever time of day is doing) */
+    waveNow = o.waveT ?? t;
+    if (inspect) inspect.update(iClock(), S);
     /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
        draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     /* (the surf is meshed round what is being looked at, and round any swell that has been sent in, so a swell clicked far
@@ -821,6 +906,7 @@ const Engine = (() => {
       const twilight = Math.exp(-Math.pow((S.sAlt - 2) / 9, 2));
       if (o.dens) life.setShells(o.dens.shells);
       splashes = life.update(t, dt, camera.position.x, { day: S.day, twilight, calm: o.calm, realT: performance.now() / 1000, fish: o.dens ? o.dens.fish : 0.5 });
+      if (shallows) shallows.update(t, camera.position);
       for (const sp of splashes) { surge.ripples.push({ x: sp.x, z: sp.z, t0: o.waveT ?? t, A: 0.35 * sp.k / 0.4 }); }
     }
     if (flora) flora.update(t, camera);
@@ -922,6 +1008,8 @@ const Engine = (() => {
     if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
     pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;
     pp.dofK = o.dof === false ? 0 : 4.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.003 + 0.008 * soft; pp.veil = 0.05 * soft;
+    /* (with something held up close the eye is on it: the world behind goes soft) */
+    if (inspect && inspect.k > 0.001) { const ik = inspect.k; pp.focus += (0.6 - pp.focus) * ik; pp.dofK = Math.max(pp.dofK, 7 * ik); }
     { const sd = S.sunDirV, sw = R3.sun.set(camera.position.x + sd[0] * 1000, camera.position.y + sd[1] * 1000, camera.position.z + sd[2] * 1000).project(camera);
       const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, up = Math.max(0, Math.min(1, (S.sAlt + 1.5) / 3));
       const on = sw.z < 1 && Math.abs(sw.x) < 1.3 && Math.abs(sw.y) < 1.3 ? up * (1 - ov) * 0.9 : 0;
@@ -936,6 +1024,8 @@ const Engine = (() => {
     pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);
+    drawTorch(pp.exp * (pp.fade ?? 1));
+    if (inspect) inspect.draw(R, pp.exp * (pp.fade ?? 1), canvas.width / Math.max(1, canvas.height));
     if (o.prof) { const a = pp.prof; S.prof = { cpu: Math.round(a[0] - tc), scene: Math.round(a[1] - a[0]), bloom: Math.round(a[2] - a[1]), final: Math.round(a[3] - a[2]) }; }
     S.splashes = splashes;
     return S;
@@ -1084,7 +1174,7 @@ const Engine = (() => {
   /* the wild flowers at the forest's edge: which one a touch at (nx, ny) would pick (null if none is near enough), and
      picking it (it shrinks away; what was picked comes back: { kind, name, at }) */
   const pickFlower = (nx, ny) => flora ? flora.nearest(camera, nx, ny, canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height) : null;
-  const pluckFlower = (f, t) => flora ? flora.pluck(f, t) : null;
+  const pluckFlower = (f, t, quiet) => flora ? flora.pluck(f, t, quiet) : null;
   /* the bouquet in a jar on the picnic table (an empty list takes it away) */
   function setBouquetJar(list) {
     if (bouquetJar) { bouquetJar.parent && bouquetJar.parent.remove(bouquetJar); bouquetJar.traverse(m => { if (m.isMesh && m.geometry && !m.geometry.userData.shared) m.geometry.dispose(); }); bouquetJar = null; }
@@ -1092,6 +1182,19 @@ const Engine = (() => {
     bouquetJar = flora.jar(list); bouquetJar.position.set(-0.53, 0.425, 0.24); camp.table.add(bouquetJar);
   }
   Object.assign(api, { pickFlower, pluckFlower, setBouquetJar, flora: () => flora });
+  /* picking up one of the small lives near where the screen was touched, holding it, turning it, letting it go */
+  /* (real time; or, for the test bench, a clock it steps a frame at a time: __coveInspStep seconds a frame) */
+  const iClock = () => window.__coveInspStep ? (window.__coveInspT || 0) : performance.now() / 1000;
+  const inspectApi = {
+    pick: (nx, ny) => inspect ? inspect.pick(nx, ny, canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height) : null,
+    hold: (c, t) => inspect ? inspect.hold(c, t ?? iClock()) : null,
+    turn: (dx, dy) => inspect && inspect.turn(dx, dy), zoom: f => inspect && inspect.zoom(f),
+    throwIt: (t, dir) => inspect ? inspect.throwIt(t ?? iClock(), dir) : false,
+    putBack: t => inspect ? inspect.putBack(t ?? iClock()) : false, keep: t => inspect ? inspect.keep(t ?? iClock()) : false,
+    get held() { return inspect ? inspect.held : null; }, get busy() { return !!inspect && inspect.busy; }, get flying() { return inspect ? inspect.flying : 0; },
+    candidates: () => inspect ? inspect.candidates() : []
+  };
+  Object.assign(api, { inspect: inspectApi });
   /* what a wave (or the van) has knocked over: its dot and what it offers wait until the camp is put back up. Names are
      the chapters' and the dots' own: a chair, a seat, the radio, the board, the drawing board, the toolbox, the bottle… */
   function knockedObj(name) {

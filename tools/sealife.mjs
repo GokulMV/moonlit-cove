@@ -32,11 +32,24 @@ await W('breath', 0.55); await step(3); await snap('whale_back');
 await W('dive', 0.5); await step(3); await snap('whale_flukes');
 await W('breach', 0.42); await step(3); await snap('whale_breach');
 await W('breach', 0.79); await step(20); await snap('whale_crash');
+/* the whale's head, close (a long lens), as it breaches: the eye, the mouth, the throat's grooves, the knobs */
+await page.evaluate(() => { const w = Engine.fauna.debug.whales.w, now = Mats.U.uTime.value; Object.assign(w, { st: 'breach', t0: now - 0.4 * 5.5, dur: 5.5, blown: true, hit: false, top: false });
+  const z = Layout.shoreZ(w.x) - w.off; window.__coveCamFix = { pos: [w.x - 25, 3.2, Layout.shoreZ(w.x - 25) + 3], look: [w.x + 4, 6, z], fov: 5, focus: w.off }; });
+await step(2); await snap('whale_head');
+await page.evaluate(() => { Engine.fauna.debug.whales.w.on = false; });
+/* dolphins: a pod called up close, the camera on one as it rolls up through the surface */
+await page.evaluate(() => { Engine.fauna.pod(20); const p = Engine.fauna.debug.dolphins.pod; p.off = 26; p.v = 0.6; });
+for (let k = 0; k < 90; k++) {
+  const up = await page.evaluate(() => { window.__cove.filmStep(1 / 30); const D = Engine.fauna.debug.dolphins, A = D.H.A; for (let i = 0; i < 5; i++) if (A.iQ[i * 4 + 3] > 0 && A.iP[i * 4 + 1] > -0.05) return [A.iP[i * 4], A.iP[i * 4 + 1], A.iP[i * 4 + 2]]; return null; });
+  if (up) { await page.evaluate(up => { window.__coveCamFix = { pos: [up[0] - 9, 1.6, up[2] + 14], look: up, fov: 14, focus: 16 }; }, up); await snap('dolphin'); break; }
+}
 /* a turtle: its shadow, then up for a breath */
 const P = await page.evaluate(() => { const Tu = Engine.life.turtleAt(8); Tu.next = 1e15; Tu.up = -1e9; const sz = Layout.shoreZ(8); window.__coveCamFix = { pos: [6, 4.5, sz + 3], look: [8, 0, sz - 6], fov: 45, focus: 9 }; return { sz }; });
 await step(6); await snap('turtle');
 await page.evaluate(() => { const Tu = Engine.life.turtles[0]; Tu.next = Mats.U.uTime.value; });
 await step(45); await snap('turtle_up');
+await page.evaluate(() => { const Tu = Engine.life.turtles[0]; window.__coveCamFix = { pos: [Tu.x - 1.6, 1.0, Tu.z + 2.4], look: [Tu.x, 0.05, Tu.z], fov: 30, focus: 2.9 }; });
+await step(2); await snap('turtle_close');
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));
 console.log(errs.length ? 'page errors:\n  ' + errs.slice(0, 6).join('\n  ') : 'no page errors');
 await browser.close();

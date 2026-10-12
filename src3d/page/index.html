@@ -36,7 +36,7 @@
     <div class="dbody" id="dBody"></div>
   </aside>
 
-  <p class="hint" id="hint">Click a glowing dot to open it. Click the sea to send a wave. Drag to look around, right-drag to move, scroll to zoom.</p>
+  <p class="hint" id="hint">Click a glowing dot to open it. Click the sea to send a wave, or a crab, a shell, a flower to pick it up. Drag to look around, right-drag to move, scroll to zoom.</p>
   <div class="walkbar" id="walkBar"><button type="button" class="glass" id="bWalkCamp" hidden>Back to camp</button><button type="button" class="glass" id="bWalkVan" hidden>Go to the van</button><button type="button" class="glass pitch" id="bPitch" hidden>Pitch camp here</button></div>
   <div class="toast glass" id="toast" hidden><span id="toastText"></span><button type="button" id="toastBtn" hidden>Rebuild camp</button></div>
   <!-- the bouquet: wild flowers picked at the forest's edge -->
@@ -49,6 +49,15 @@
     <div class="bqrow"><button type="button" id="bqJar">Put them in a jar on the table</button><button type="button" class="ghost" id="bqFree">Let them go</button><button type="button" class="ghost" id="bqClose">Close</button></div>
   </aside>
 
+  <!-- one of the cove's small lives, held up close (inspect.js) -->
+  <aside class="insp glass" id="insp" hidden aria-live="polite" aria-label="Held up close">
+    <p class="eyebrow" id="iLatin"></p>
+    <h2 id="iName"></h2>
+    <p class="itext" id="iNote"></p>
+    <div class="bqrow"><button type="button" id="iThrow">Throw it back</button><button type="button" id="iKeep" hidden>Add it to the bouquet</button><button type="button" class="ghost" id="iPut">Put it down <kbd>Esc</kbd></button></div>
+    <p class="ihint">Drag to turn it over · scroll to look closer · flick it up and away to throw it</p>
+  </aside>
+
   <div class="drivehud glass" id="driveHud" hidden>
     <span class="dh-keys"><kbd>W A S D</kbd> or arrows to drive · <kbd>Shift</kbd> boost · <kbd>Space</kbd> brake · <kbd>H</kbd> horn · <kbd>R</kbd> unstick</span>
     <button type="button" id="bPark">Park here <kbd>E</kbd></button>
@@ -56,6 +65,7 @@
   <div class="drivehud walkhud glass" id="walkHud" hidden>
     <span class="dh-keys"><kbd>W A S D</kbd> walk · drag, or rest the pointer near an edge, to look · <kbd>Shift</kbd> jog</span>
     <button type="button" class="wh-auto" id="bWalkAuto" aria-pressed="false" title="Walk on, looking about, on your own">Auto</button>
+    <button type="button" class="wh-auto wh-torch" id="bTorch" aria-pressed="false" title="A torch, for after dark">Torch <kbd>F</kbd></button>
     <div class="seg wh-pace" role="radiogroup" aria-label="Pace"><button type="button" role="radio" data-pace="stroll" aria-checked="false">Stroll</button><button type="button" role="radio" data-pace="walk" aria-checked="true">Walk</button><button type="button" role="radio" data-pace="jog" aria-checked="false">Jog</button></div>
     <button type="button" id="bWalkExit">Exit <kbd>E</kbd></button>
   </div>

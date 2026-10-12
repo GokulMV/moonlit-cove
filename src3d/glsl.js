@@ -396,6 +396,18 @@ uniform vec4 uLightK, uLights, uFire; uniform vec3 uFirePos;
 uniform vec4 uLant[3]; uniform vec3 uVanPos, uVanDir;
 uniform vec4 uHead; uniform vec3 uHeadDir;
 uniform highp sampler2DShadow uFireSh, uCanSh; uniform mat4 uFireShM, uCanShM; uniform float uShOn;
+/* the walker's torch: where its lens is and how bright (0 off), which way it points; its shadow map (depth packed in
+   RGBA, as three renders a spot light's), the matrix into it, its size */
+uniform vec4 uTorch; uniform vec3 uTorchDir; uniform sampler2D uTorchSh; uniform mat4 uTorchShM; uniform vec2 uTorchShS;
+bool torchNear(vec3 wp){ return uTorch.w > 0.001 && distance(wp, uTorch.xyz) < 32.0; }
+float torchShadow(vec3 wp){
+  vec4 sc = uTorchShM*vec4(wp, 1.0); if (sc.w <= 0.0) return 1.0; sc.xyz /= sc.w;
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+  const vec4 UF = vec4(255.0/256.0)/vec4(16777216.0, 65536.0, 256.0, 1.0);
+  vec2 tx = 1.2/uTorchShS; float z = sc.z - 0.0006;
+  return 0.25*(step(z, dot(texture2D(uTorchSh, sc.xy + vec2(-tx.x, -tx.y)), UF)) + step(z, dot(texture2D(uTorchSh, sc.xy + vec2(tx.x, -tx.y)), UF))
+             + step(z, dot(texture2D(uTorchSh, sc.xy + vec2(-tx.x, tx.y)), UF)) + step(z, dot(texture2D(uTorchSh, sc.xy + vec2(tx.x, tx.y)), UF)));
+}
 const vec2 PD[8] = vec2[8](vec2(-0.7071, 0.7071), vec2(0.0, -0.875), vec2(0.5303, 0.5303), vec2(-0.625, 0.0),
                            vec2(0.3536, -0.3536), vec2(0.0, 0.375), vec2(-0.1768, -0.1768), vec2(0.125, 0.0));
 /* 8 hardware-PCF taps in a spiral; fades out toward the map edge */
@@ -433,6 +445,15 @@ vec3 artLight(vec3 wp, vec3 n){
     vec3 d = uHead.xyz - wp; float r2 = dot(d, d); vec3 l = d*inversesqrt(r2 + 1e-4);
     float cone = smoothstep(0.80, 0.95, dot(-l, uHeadDir));
     L += vec3(1.0, 0.9, 0.74)*uHead.w*cone*max(dot(n, l)*0.8 + 0.2, 0.0)*5.0/(r2 + 1.5);
+  }
+  if (uTorch.w > 0.001){ /* the torch: a bright hotspot inside a wider, softer spill, its shadows behind everything it lights */
+    vec3 d = uTorch.xyz - wp; float r2 = dot(d, d);
+    if (r2 < 1024.0){
+      vec3 l = d*inversesqrt(r2 + 1e-4); float ca = dot(-l, uTorchDir);
+      /* (a faint bright ring round the hotspot, where the reflector's light piles up) */
+      float cone = smoothstep(0.86, 0.93, ca)*0.45 + smoothstep(0.955, 0.982, ca)*0.85 + 0.14*exp(-pow((ca - 0.951)/0.0055, 2.0));
+      if (cone > 0.001){ float nl = max(dot(n, l), 0.0); if (nl > 0.0) L += vec3(1.0, 0.94, 0.84)*uTorch.w*cone*nl*torchShadow(wp + n*0.025)*4.0/(r2 + 4.0); }
+    }
   }
   if (uFire.x > 0.001){
     vec3 d = uFirePos + vec3(0.0, 0.6, 0.0) - wp; float r2 = dot(d, d);
@@ -766,7 +787,7 @@ void main(){
   gSunK = visS;
   vec3 sunG = uSunGlit*visS*(0.35 + 0.65*cs), moonG = uMoonGlit*visM*(0.35 + 0.65*cs);
   /* artificial light only where there is any: round the camp, round the van, and in its headlights' reach */
-  bool camp = (uDbgG & 32) == 0 && (length(p - CAMP) < 24.0 || length(p - uVanPos.xz) < 14.0 || (uHead.w > 0.001 && length(p - uHead.xz) < 36.0));
+  bool camp = (uDbgG & 32) == 0 && (length(p - CAMP) < 24.0 || length(p - uVanPos.xz) < 14.0 || (uHead.w > 0.001 && length(p - uHead.xz) < 36.0) || torchNear(wp));
   vec3 art = vec3(0.0);
   float shK = length(p - uShC.xy) < uShC.z ? mix(1.0, shadowAt(wp), uShadowK) : 1.0;
   bool glit = dot(moonG + sunG, vec3(1.0)) > 1e-6;
