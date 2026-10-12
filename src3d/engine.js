@@ -808,7 +808,7 @@ const Engine = (() => {
     Mats.U.uFog.value.set(S.hor[0], S.hor[1], S.hor[2], gU.uMist.value);
     if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
     pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;
-    pp.dofK = o.dof === false ? 0 : 7.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.008 + 0.026 * soft; pp.veil = 0.07 * soft;
+    pp.dofK = o.dof === false ? 0 : 4.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.003 + 0.008 * soft; pp.veil = 0.05 * soft;
     pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);

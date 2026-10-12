@@ -767,7 +767,7 @@ void main(){
 uniform sampler2D uScene, uDepth; uniform vec2 uTexel; uniform float uK, uZf, uNear, uFar, uMax;
 varying vec2 vUv;
 float linZ(float d){ return uNear*uFar/(uFar - d*(uFar - uNear)); }
-float coc(float z){ float c = uK*abs(1.0 - uZf/z); if (z > uZf) c *= mix(1.0, 0.35, smoothstep(120.0, 700.0, z)); return min(c, uMax); }
+float coc(float z){ float c = uK*abs(1.0 - uZf/z); if (z > uZf) c *= mix(1.0, 0.35, smoothstep(120.0, 700.0, z)); else c *= 0.3; return min(c, uMax); }
 void main(){
   float zc = linZ(texture2D(uDepth, vUv).r), cc = coc(zc);
   vec3 acc = texture2D(uScene, vUv).rgb; float ws = 1.0, fg = 0.0;

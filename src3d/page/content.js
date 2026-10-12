@@ -54,7 +54,7 @@ const Content = {
     { course: 'At the camp', title: 'Things you can open', lead: 'Everything at the camp is modelled in code: the van, the rug, the chairs, the fire, the bottle.',
       points: ['The books are real books, with boards, a spine, and pages that bend into the gutter and pile up on the left as you read.', 'Every page is typeset onto a canvas in Fraunces, Caveat and JetBrains Mono, then laid onto the paper in 3D.', 'Tap either half of a page to turn it, or take hold of it and drag.'] },
     { course: 'On the side', title: 'Sound', lead: 'Recorded ocean, crickets, birds, gulls, an owl, the fire, rain and thunder, mixed live.',
-      points: ['They follow the time of day: no crickets in the morning, and the fire crackles only while it is lit.', 'The mix is centred on 111 Hz, with a soft 111 Hz tone you can switch off.', 'The van’s engine is a recorded loop pitched by its speed and throttle.'] },
+      points: ['They follow the time of day: no crickets in the morning, and the fire crackles only while it is lit.', 'Only real recordings, each at its own pitch and a clean bitrate: no tones, no synthesised noises. A wave reaching the sand swells a second take of the surf in under the first.', 'The van’s engine is a recorded loop pitched by its speed and throttle.'] },
     { course: 'To finish', title: 'Shipping it', lead: 'One page, cached hard, served by a server with no dependencies.',
       points: ['The build puts the engine, styles and fonts into one HTML file; three.js and the sounds get content-hashed names and are cached for a year.', 'A Node server serves it with brotli, ETags and a strict content-security policy, and keeps the wish board.', 'Docker builds it on Railway; Cloudflare sits in front. Every push to GitHub ships.', 'Tested headless: Chromium renders every chapter and drives the van, with software graphics.'] }
   ],
@@ -67,7 +67,7 @@ const Content = {
     { title: 'A book of loose paper', problem: 'The menu looked like sheets thrown on a pad.', fix: 'Now it has boards larger than the pages, a spine that stands up as it shuts, page blocks that thicken as you read, and pages that dive into a shaded gutter.' },
     { title: 'Tyre tracks that slid', problem: 'Tracks drew off to one side, and stayed after the sea came over them.', fix: 'They are stamped every 12 cm into a window of sand that follows the van, and each wave smooths them away where it actually reached.' },
     { title: 'The engine', problem: 'The first engine was synthesised, and it was rude.', fix: 'A recorded engine loop, pitched by speed and throttle, with a starter crank before it catches.' },
-    { title: '111 Hz', problem: 'Every sound should sit around one frequency.', fix: 'The whole mix is EQ’d around 111 Hz, with a quiet 111 Hz tone underneath that you can switch off.' },
+    { title: 'Robotic on headphones', problem: 'The surf, the crickets and the birds sounded garbled and robotic, and a 111 Hz tone hummed underneath like a beep.', fix: 'The recordings had been squeezed to low bitrates, then chopped and pitch-shifted. Now the originals are cut into seamless loops at clean bitrates and played whole, at their own pitch; the tone and every synthesised sound are gone.' },
     { title: 'Stuck van', problem: 'The van hit a rock and couldn’t get out.', fix: 'The van is three circles. Anything it touches pushes it out sideways, so it slides along rocks instead of sticking, and R puts it back on open sand.' },
     { title: 'The end of the beach', problem: 'The beach stopped at a wall.', fix: 'The coast is built in 128-metre chunks around you, a few milliseconds a frame, and every stretch rolls its own headland.' },
     { title: 'A flickering horizon', problem: 'With softness at zero the horizon shimmered.', fix: 'Ripples fade before they can alias, ambient occlusion fades out far away, and the ground is cut into cells so depth doesn’t tear.' },
@@ -79,7 +79,7 @@ const Content = {
     { group: 'In your browser', items: ['JavaScript, no framework', 'GLSL shaders', 'three.js r160', 'WebGL 2', 'Web Audio API', 'Canvas 2D'] },
     { group: 'Type', items: ['Fraunces', 'Instrument Sans', 'Caveat', 'JetBrains Mono', 'via Fontsource'] },
     { group: 'Sky', items: ['SunCalc’s sun and moon formulas', 'your time zone, for where you are'] },
-    { group: 'Sound', items: ['Ocean clips made with ElevenLabs', 'Moodist ambience library', 'Kenney’s engine and knocks', 'a 111 Hz mix'] },
+    { group: 'Sound', items: ['Moodist field recordings', 'Kenney’s engine and knocks', 'Web Audio, mixed live'] },
     { group: 'Server', items: ['Node.js 22', 'a server with no dependencies', 'brotli, ETags, CSP'] },
     { group: 'Shipping', items: ['GitHub', 'Docker', 'Railway', 'Cloudflare'] },
     { group: 'Tools', items: ['Playwright + headless Chromium', 'ffmpeg', 'Git', 'Claude, as pair programmer'] }
@@ -88,8 +88,7 @@ const Content = {
   /* ── who made what: every sound, typeface, library and idea that came from someone else ── */
   credits: [
     { group: 'Sound', items: [
-      { what: 'Breaking waves: swell, lap and crash', who: 'Made by GokulMV with ElevenLabs', link: ['elevenlabs.io', 'https://elevenlabs.io'], licence: 'ElevenLabs terms; credit: elevenlabs.io' },
-      { what: 'Ocean bed, crickets, birds, seagulls, owl, campfire, rain and thunder', who: 'The Moodist sound library by MAZE (remvze)', link: ['github.com/remvze/moodist', 'https://github.com/remvze/moodist'], licence: 'Each sound under the Pixabay Content License or CC0' },
+      { what: 'Surf, crickets, birds, seagulls, owl, campfire, rain, thunder and turning pages', who: 'The Moodist sound library by MAZE (remvze)', link: ['github.com/remvze/moodist', 'https://github.com/remvze/moodist'], licence: 'Each sound under the Pixabay Content License or CC0' },
       { what: 'The van’s engine and knocks', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
     ] },
     { group: 'Radio', items: [

@@ -272,7 +272,7 @@ const Pages = (() => {
       const row = (y, label, items, h = 84) => { d.text(label, 86, y + h / 2 + 6, { font: FN.mono(500, 16), color: d.ACC }); const n = items.length, gap = 14, w = (1314 - 220 - gap * (n - 1)) / n;
         items.forEach(([t, l], i) => d.box(220 + i * (w + gap), y, w, h, t, l ? [l] : [], { center: true, ts: 19, ls: 14.5 })); };
       row(178, 'PAGE', [['app.js', 'camera · input · chapters'], ['pages.js', 'typesetting'], ['content.js', 'the words']]);
-      row(300, 'RUN', [['engine.js', 'render loop · post · shadows'], ['audio.js', 'Web Audio · 111 Hz']]);
+      row(300, 'RUN', [['engine.js', 'render loop · post · shadows'], ['audio.js', 'Web Audio · field recordings']]);
       row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the endless coast'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
       row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['shacks.js', 'shacks · huts · boats']], 78);
       row(626, 'LOOK', [['sky.js', 'sky colours'], ['glsl.js', 'every shader'], ['mats.js', 'materials'], ['paint.js', 'painted textures'], ['textures.js', 'noise · water · sand']], 78);
@@ -317,20 +317,19 @@ const Pages = (() => {
       d.arrow([[800 + 140, 300], [812, shore(812) - 40]], { soft: true, label: 'headland, rolled per 280 m', at: [1010, 300] });
     }, ['built a few milliseconds per frame', 'chunks behind you are recycled', 'the same seed always makes the same coast', 'park anywhere: the camp can be pitched there']],
     ['Sound', 'Recordings, mixed live and timed to what you see.', d => {
-      const src = [['SEA', 'a long seamless loop'], ['WAVES', 'wash · swell · lap · crash'], ['ROCKS', 'slaps where waves hit stone'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder'], ['VAN', 'engine, pitched by speed']];
+      const src = [['SEA', 'a long seamless loop'], ['WAVES', 'a second take swells in'], ['PAGES', 'real paper turning'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder'], ['VAN', 'engine, pitched by speed']];
       src.forEach(([t, l], i) => d.box(86, 178 + i * 80, 380, 68, t, [l], { ts: 17, ls: 14, lh: 20 }));
       const bus = [['OCEAN', 300], ['FOREST', 420], ['FIRE', 540], ['INSECTS', 640], ['WEATHER', 740]];
       bus.forEach(([t, y]) => d.box(560, y - 34, 220, 68, t, [], { center: true, middle: true, ts: 18 }));
       const sy = i => 212 + i * 80, by = n => bus.find(b => b[0] === n)[1];
-      [[0, 'OCEAN'], [1, 'OCEAN'], [2, 'OCEAN'], [3, 'INSECTS'], [4, 'FOREST'], [5, 'FIRE'], [6, 'WEATHER']].forEach(([i, n]) => d.arrow([[466, sy(i)], [512, sy(i)], [512, by(n)], [560, by(n)]], { soft: true, w: 1.5 }));
-      d.box(870, 400, 200, 110, '111 HZ EQ', ['a gentle peak', 'at 111 Hz'], { center: true });
+      [[0, 'OCEAN'], [1, 'OCEAN'], [3, 'INSECTS'], [4, 'FOREST'], [5, 'FIRE'], [6, 'WEATHER']].forEach(([i, n]) => d.arrow([[466, sy(i)], [512, sy(i)], [512, by(n)], [560, by(n)]], { soft: true, w: 1.5 }));
+      d.box(870, 400, 200, 110, 'MIX', ['left uncoloured'], { center: true });
       bus.forEach(([, y]) => d.arrow([[780, y], [830, y], [830, 455], [870, 455]], { soft: true, w: 1.5 }));
       d.arrow([[466, sy(7)], [846, sy(7)], [846, 470], [870, 470]], { soft: true, w: 1.5 });
       d.box(1114, 400, 200, 110, 'LIMITER', ['nothing clips'], { center: true });
       d.box(1114, 600, 200, 110, 'SPEAKERS', [], { center: true, middle: true, bold: true });
-      d.box(870, 600, 200, 110, '111 HZ TONE', ['optional, soft'], { center: true, dash: true });
-      d.arrow([[1070, 455], [1114, 455]]); d.arrow([[1214, 510], [1214, 600]]); d.arrow([[1070, 655], [1092, 655], [1092, 480], [1114, 480]], { soft: true });
-    }, ['each wash lands as its wave reaches the sand', 'crickets after dark, birds at dawn', 'the mixer switches are the five buses', 'sounds load only when sound is on']],
+      d.arrow([[1070, 455], [1114, 455]]); d.arrow([[1214, 510], [1214, 600]]);
+    }, ['the surf swells as its wave reaches the sand', 'crickets after dark, birds at dawn', 'the mixer switches are the five buses', 'sounds load only when sound is on']],
     ['Shipping', 'From a commit to your screen, and the same page as one file.', d => {
       d.box(86, 206, 170, 130, 'GIT PUSH', [], { center: true, middle: true });
       d.box(300, 206, 190, 130, 'GITHUB', ['main branch'], { center: true });

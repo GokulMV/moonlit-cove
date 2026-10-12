@@ -17,13 +17,13 @@
   const city = (c => ALIAS[c] || c)(tz.split('/').pop().replace(/_/g, ' '));
 
   const st = {
-    t: 4, last: 0, motion: store.get('motion', reduced ? 0.45 : 0.7), soft: store.get('soft', 0.55),
+    t: 4, last: 0, motion: store.get('motion', reduced ? 0.45 : 0.7), soft: store.get('soft2', 0.22),
     timeMode: store.get('timeMode', 'live'), hour: store.get('hour', 23), full: store.get('full', true), flow: 1, offset: 0,
     lightsMode: store.get('lightsMode', 'auto'), L: { string: 0, lantern: 0, van: 0, fairy: 0 },
     chapter: null, from: null, to: null, camT: 1, cur: null,
     rs: 1, fms: [], S: null, entered: false, hintGone: false, wrecked: false, toastTimer: 0
   };
-  const sound = { on: false, amb: null, ctx: null, ch: Object.assign({ ocean: true, forest: true, fire: true, insects: true, weather: true, tone: true }, store.get('ch', {})), vol: store.get('vol', 0.8), douse: null, thunder: [] };
+  const sound = { on: false, amb: null, ctx: null, ch: Object.assign({ ocean: true, forest: true, fire: true, insects: true, weather: true }, store.get('ch', {})), vol: store.get('vol', 0.8), douse: null, thunder: [] };
 
   /* views the camera moves between */
   const V = {
@@ -338,7 +338,7 @@
     toast(p === 'now' ? 'Back to live time.' : `Jumped to ${p}.`, false, 1800);
   }));
   $('tFull').addEventListener('click', () => { st.full = !st.full; fullShift = null; store.set('full', st.full); syncTimeUI(); });
-  $('lSoft').value = st.soft; $('lSoft').addEventListener('input', e => { st.soft = +e.target.value; store.set('soft', st.soft); });
+  $('lSoft').value = st.soft; $('lSoft').addEventListener('input', e => { st.soft = +e.target.value; store.set('soft2', st.soft); });
   $('lMotion').value = st.motion; $('lMotion').addEventListener('input', e => { st.motion = +e.target.value; store.set('motion', st.motion); });
   /* how much life there is: insects, fish, animals (birds, bats, crabs, dolphins), shells (0.5 is the cove as it always was; shells start all out) */
   st.dens = Object.assign({ insects: 0.5, fish: 0.5, animals: 0.5, shells: 1 }, store.get('dens', {}));
@@ -372,7 +372,7 @@
   $('cClose').addEventListener('click', () => toggleCredits(false));
 
   /* ── sound ── */
-  const chIds = { ocean: 'sOcean', forest: 'sForest', fire: 'sFire', insects: 'sInsects', weather: 'sWeather', tone: 'sTone' };
+  const chIds = { ocean: 'sOcean', forest: 'sForest', fire: 'sFire', insects: 'sInsects', weather: 'sWeather' };
   function startSound() {
     if (!sound.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -497,7 +497,6 @@
     const r = cv.getBoundingClientRect(), info = Engine.clickSea((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, st.t);
     if (!info) return;
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
-    if (sound.on && sound.amb) sound.amb.splash(sound.ctx.currentTime, info.combo);
     const msg = info.amp >= 4.6 ? `Swell ×${info.combo}. This one will flood the camp.` : info.amp >= 2.9 ? `Swell ×${info.combo}. It could reach the fire.` : info.combo > 1 ? `Swell ×${info.combo} building.` : 'A swell is on its way in.';
     toast(msg, false, 2600);
     if (info.amp >= 4) unlock('big_wave');
@@ -1243,6 +1242,9 @@
     p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)); p[2] = wk.z - Math.sin(wk.h) * sway;
     l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
     wk.cam.fov = 60 + 4 * sstep(1.6, 2.8, v);
+    /* focused where the eyes meet the sand (or far off, looking up), eased so it doesn't hunt */
+    const fd = pitch < -0.03 ? clamp(EYE / Math.sin(-pitch), 1.5, 40) : 40;
+    wk.cam.focus += (fd - wk.cam.focus) * 0.08;
   }
   /* a footprint, heel and ball, a little to the side of the line walked; fainter on wet sand, none in the water (a ripple
      instead); and with sound on, a soft crunch */
@@ -1254,7 +1256,6 @@
       Engine.trackStamp([[x - fx * 0.075, z - fz * 0.075, x - fx * 0.07, z - fz * 0.07, 0.085, a], [x, z, x + fx * 0.075, z + fz * 0.075, 0.1, a]]);
       wk.prints++;
     } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
-    if (sound.on && sound.amb && sound.amb.step) sound.amb.step(Math.min(1.4, 0.55 + Math.abs(wk.v) * 0.3), wade);
   }
   function startWalk() {
     if (wk.on || !ready) return;
@@ -1486,16 +1487,9 @@
       const cp = cam.pos, sz = Layout.shoreZ(cp[0]), oceanNear = Math.max(0, Math.min(1, 1 - (Math.hypot(cp[2] - sz, cp[1]) - 5) / 26));
       const fireNear = Math.max(0, Math.min(1, 1 - (Math.hypot(cp[0] - Layout.fire.x, cp[1], cp[2] - Layout.fire.z) - 2.5) / 12));
       sound.thunder = sound.thunder.filter(th => th.t > ctx.currentTime - 2);
-      /* fish splashing within earshot */
-      for (const sp of S.splashes || []) { const d = Math.hypot(sp.x - cp[0], sp.z - cp[2]); if (d < 40) sound.amb.plop(Math.min(1, 9 / (d + 4)), Math.max(-1, Math.min(1, (sp.x - cp[0]) / 20))); }
-      /* water slapping the nearest rocks, the two loudest for each wave */
-      const byWave = {};
-      for (const r of Engine.rockHits(st.t - 1, st.t + 6, cp[0], cp[2], 34)) {
-        const k = Math.min(1.2, r.amp * Math.min(1, r.rad / 1.2) * Math.min(1, 12 / (r.d + 4)));
-        (byWave[r.wave] = byWave[r.wave] || []).push({ id: r.id, t: ctx.currentTime + (r.x - st.t) / st.motion, k, pan: Math.max(-1, Math.min(1, (r.px - cp[0]) / 18)) });
-      }
-      const rocks = Object.values(byWave).flatMap(L => L.sort((a, b) => b.k - a.k).slice(0, 2)).filter(r => r.k > 0.08);
-      sound.amb.schedule(ctx.currentTime + 0.6, { rocks, night, crickets: tod.crickets * (1 - 0.8 * W.rain), birds: tod.birds * (1 - W.rain), gulls: tod.gulls * (1 - W.rain), owl: tod.owl * (1 - W.rain), fireI: tod.fire * (1 - 0.6 * W.rain) * (ss.fireOut == null ? 1 : 0), waves, douse: sound.douse, oceanNear, fireNear, rain: W.rain, thunder: sound.thunder });
+      /* the crickets are in the trees: nearer them, a little louder */
+      const forestNear = Math.max(0, Math.min(1, 1 - (Math.abs(cp[2] - Layout.vegZ(cp[0])) - 4) / 26));
+      sound.amb.schedule(ctx.currentTime + 0.6, { night, forestNear, crickets: tod.crickets * (1 - 0.8 * W.rain), birds: tod.birds * (1 - W.rain), gulls: tod.gulls * (1 - W.rain), owl: tod.owl * (1 - W.rain), fireI: tod.fire * (1 - 0.6 * W.rain) * (ss.fireOut == null ? 1 : 0), waves, douse: sound.douse, oceanNear, fireNear, rain: W.rain, thunder: sound.thunder });
     }
 
     /* keep the frame rate comfortable. A change of resolution remakes every render target and shows, so it is rare
@@ -1746,21 +1740,18 @@
     if (radio.ctx.state === 'suspended' && radio.ctx.resume) radio.ctx.resume().catch(() => {});
     return radio.ctx;
   }
-  /* the hiss between stations: a sweep of filtered noise and a falling whistle as the dial turns, then a low rush until it comes in */
+  /* between stations: a soft rush of static, rounded off and quiet, until the station comes in (no whistle, no beeps) */
   function hiss(on) {
     const h = radio.hiss;
-    if (h) { radio.hiss = null; const t = h.ctx.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(0, t, 0.05); try { h.s.stop(t + 0.35); } catch (e) { /* already stopping */ } }
+    if (h) { radio.hiss = null; const t = h.ctx.currentTime; h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(0, t, 0.08); try { h.s.stop(t + 0.5); } catch (e) { /* already stopping */ } }
     if (!on) return;
     const ctx = radioCtx(); if (!ctx) return;
-    if (!radio.noise) { const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; radio.noise = b; }
-    const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), o = ctx.createOscillator(), og = ctx.createGain(), v = 0.14 * radio.vol;
-    s.buffer = radio.noise; s.loop = true; f.type = 'bandpass'; f.Q.value = 0.8;
-    f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(2800, t + 0.3); f.frequency.exponentialRampToValueAtTime(1300, t + 0.6);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.04); g.gain.setTargetAtTime(v * 0.32, t + 0.55, 0.3);
-    o.type = 'sine'; o.frequency.setValueAtTime(2200, t); o.frequency.exponentialRampToValueAtTime(320, t + 0.55);
-    og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.01 * radio.vol, t + 0.2); og.gain.linearRampToValueAtTime(0, t + 0.6);
-    s.connect(f); f.connect(g); g.connect(ctx.destination); o.connect(og); og.connect(ctx.destination);
-    s.start(t); o.start(t); o.stop(t + 0.7);
+    if (!radio.noise) { const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0); let y = 0; for (let i = 0; i < d.length; i++) { y = 0.7 * y + 0.3 * (Math.random() * 2 - 1); d[i] = y; } radio.noise = b; }
+    const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), v = 0.05 * radio.vol;
+    s.buffer = radio.noise; s.loop = true; f.type = 'lowpass'; f.frequency.value = 2400; f.Q.value = 0.5;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.12); g.gain.setTargetAtTime(v * 0.5, t + 0.5, 0.4);
+    s.connect(f); f.connect(g); g.connect(ctx.destination);
+    s.start(t);
     radio.hiss = { ctx, s, g };
   }
   const fetchT = (url, ms) => { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); return fetch(url, { signal: c.signal, cache: 'no-store' }).finally(() => clearTimeout(t)); };
@@ -1878,7 +1869,7 @@
   /* the system's media keys and notification follow the radio */
   function mediaInfo(title, artist) {
     const m = navigator.mediaSession; if (!m) return;
-    try { m.metadata = title && window.MediaMetadata ? new MediaMetadata({ title, artist, album: 'Moonlit Cove' }) : null; m.playbackState = title ? 'playing' : 'none'; } catch (e) { /* not everywhere */ }
+    try { m.metadata = title && window.MediaMetadata ? new MediaMetadata({ title, artist, album: 'GokulMV · Portfolio' }) : null; m.playbackState = title ? 'playing' : 'none'; } catch (e) { /* not everywhere */ }
   }
   if (navigator.mediaSession) for (const [a, fn] of [['play', () => { if (seat.on) radioOn(); }], ['pause', () => radioOff()], ['stop', () => radioOff()], ['nexttrack', () => step(1)], ['previoustrack', () => step(-1)]]) { try { navigator.mediaSession.setActionHandler(a, fn); } catch (e) { /* not everywhere */ } }
   syncRadioUI();

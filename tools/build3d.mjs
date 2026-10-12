@@ -30,7 +30,7 @@ function fonts() {
 }
 /* the recordings: inlined as base64, or (for the website) copied out under content-hashed names */
 function sounds(outDir) {
-  const dir = path.join(root, 'assets', 'snd2'), meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  const dir = path.join(root, 'assets', 'snd3'), meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
   const o = {};
   for (const [k, m] of Object.entries(meta)) {
     const buf = fs.readFileSync(path.join(dir, k + '.mp3')), e = { loopStart: m.loopStart, loopEnd: m.loopEnd, rms: m.rms, events: m.events };
@@ -68,8 +68,7 @@ if (which === 'web') {
   fs.writeFileSync(path.join(out, threeName), three);
   /* a whole document (the artifact host adds this skeleton itself), a moon for the tab, and a card for shared links */
   const C = src('page/content.js'), name = (C.match(/name:\s*'([^']+)'/) || [, 'Moonlit Cove'])[1];
-  const icon = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0b0f18"/><circle cx="34" cy="28" r="15" fill="#f1e6c8"/><circle cx="41" cy="23" r="13" fill="#0b0f18"/><path d="M8 47c8-4 16 4 24 0s16-4 24 0" stroke="#e9a85a" stroke-width="3" fill="none" stroke-linecap="round"/></svg>');
-  const head = `\n<link rel="icon" href="${icon}">\n<meta name="theme-color" content="#0b0f18">\n<meta property="og:type" content="website">\n<meta property="og:title" content="${name} · Moonlit Cove">\n<meta property="og:description" content="A moonlit beach camp you can explore: experience by the fire, milestones on the string lights, projects on the table.">\n<meta name="twitter:card" content="summary">`;
+  const head = `\n<meta name="theme-color" content="#0b0f18">\n<meta property="og:type" content="website">\n<meta property="og:title" content="${name} · Portfolio">\n<meta property="og:description" content="A moonlit beach camp you can explore: experience by the fire, milestones on the string lights, projects on the table.">\n<meta name="twitter:card" content="summary">`;
   const html = '<!doctype html>\n<html lang="en">\n' + page(threeName, sounds(path.join(out, 'snd')), head) + '\n</html>\n';
   fs.writeFileSync(path.join(out, 'index.html'), html);
   const kb = f => (fs.statSync(path.join(out, f)).size / 1024).toFixed(0) + 'KB';
