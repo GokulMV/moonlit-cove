@@ -349,6 +349,7 @@ const Engine = (() => {
     add(camp.woodpile, 6.0, 0.45, 'grow'); add(camp.logRound, 6.2, 0.4, 'grow'); add(camp.driftwood, 6.4, 0.5, 'grow'); add(camp.bottle, 6.5, 0.4, 'grow');
     if (camp.board) add(camp.board.group, 6.8, 0.6, 'grow');
     if (camp.crate) add(camp.crate, 6.1, 0.4, 'grow');
+    if (camp.toolbox) add(camp.toolbox, 2.7, 0.4, 'grow');
     return L;
   }
   const backOut = u => { const c = 1.5; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
@@ -862,6 +863,23 @@ const Engine = (() => {
   /* what lies on a seat goes out of sight while you sit there (you would be sitting on it) */
   function seatProps(i, hidden) { const S = SEATS[i]; if (!S || S.kind !== 'chair' || !camp.chairProps) return; (camp.chairProps[S.i] || []).forEach(o => { o.visible = !hidden; }); }
   Object.assign(api, { seatCount, seatIndex, turnChair, seatProps });
+  /* ── the drawing board on the picnic table, and the toolbox the drawings go into ── */
+  /* where the paper lies (for the camera that looks down at it), as bookFrame does for the journal */
+  function sketchFrame() {
+    const sk = camp && camp.sketch; if (!sk) return null; const p = sk.userData.paper; p.updateMatrixWorld(true);
+    const q = p.getWorldQuaternion(new T.Quaternion()), o = new T.Vector3().setFromMatrixPosition(p.matrixWorld);
+    return { o: o.toArray(), right: new T.Vector3(1, 0, 0).applyQuaternion(q).toArray(), top: new T.Vector3(0, 1, 0).applyQuaternion(q).toArray(), up: new T.Vector3(0, 0, 1).applyQuaternion(q).toArray(), W: sk.userData.W, H: sk.userData.H };
+  }
+  /* where on the paper (u, v, 0 to 1, v up the sheet) a point (nx, ny) across the canvas lands, or null */
+  function sketchUV(nx, ny) {
+    const sk = camp && camp.sketch; if (!sk) return null;
+    _ndc.set(nx * 2 - 1, 1 - ny * 2); _ray.setFromCamera(_ndc, camera);
+    const h = _ray.intersectObject(sk.userData.paper, false)[0]; return h && h.uv ? [h.uv.x, h.uv.y] : null;
+  }
+  function setSketch(cv) { if (camp && camp.sketch) camp.sketch.userData.setPicture(cv); }
+  function setSketchLight(k) { if (camp && camp.sketch) camp.sketch.userData.setLight(k); }
+  function toolboxOpen(k) { if (camp && camp.toolbox) camp.toolbox.userData.open(k); }
+  Object.assign(api, { sketchFrame, sketchUV, setSketch, setSketchLight, toolboxOpen });
   /* where the radio is, for its sound */
   function radioPos() { const g = camp && camp.radio && camp.radio.group; if (!g) return null; g.updateMatrixWorld(true); const v = g.getWorldPosition(new T.Vector3()); return [v.x, v.y, v.z]; }
   Object.assign(api, { radioPos });
@@ -878,7 +896,8 @@ const Engine = (() => {
   /* points on these things for their hotspot dots (they move with a wave or a knock, like everything at the camp) */
   function propAnchors() {
     const at = (o, x, y, z) => o.localToWorld(new T.Vector3(x, y, z)).toArray(), b = camp.board;
-    return { board: at(b.group, 0, b.Y + b.H / 2 - 0.02, 0.06), chair0: at(camp.chairs[0], -0.5, 1.06, 0), chair1: at(camp.chairs[1], -0.5, 1.06, 0), radio: at(camp.radio.group, 0, 0.2, 0) };
+    return { board: at(b.group, 0, b.Y + b.H / 2 - 0.02, 0.06), chair0: at(camp.chairs[0], -0.5, 1.06, 0), chair1: at(camp.chairs[1], -0.5, 1.06, 0), radio: at(camp.radio.group, 0, 0.2, 0),
+      sketch: camp.sketch ? at(camp.sketch, 0, 0.06, 0) : null, toolbox: camp.toolbox ? at(camp.toolbox, 0, 0.3, 0) : null };
   }
   Object.assign(api, { paintBoard, setBoardLook, boardFrame, seatPose, pick, setRadio, propAnchors });
 

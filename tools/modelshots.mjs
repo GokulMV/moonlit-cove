@@ -9,6 +9,7 @@ const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = (
 if (!name) { console.log((await page.evaluate(() => Models.list())).join('\n')); await browser.close(); process.exit(0); }
 const info = await page.evaluate(([name]) => {
   const o = Models.make(name), x = Layout.camp.x - 14, z = Layout.shoreZ(Layout.camp.x - 14) + 6.5;
+  if (o.userData && typeof o.userData.open === 'function') o.userData.open(0.8);     /* (a lid, shown open) */
   o.position.set(x, 0, z); Engine.scene.add(o); o.updateMatrixWorld(true);
   /* stood on the sand */
   { const b0 = new THREE.Box3().setFromObject(o); o.position.y -= b0.min.y; o.updateMatrixWorld(true); }

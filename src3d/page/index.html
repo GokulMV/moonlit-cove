@@ -163,6 +163,44 @@
     </form>
   </section>
 
+  <!-- the drawing board: the tools, under the paper the camera looks down at -->
+  <section class="sketchbar glass" id="sketchBar" hidden aria-label="Drawing on the board">
+    <div class="sk-row">
+      <div class="sk-tools" role="group" aria-label="What to draw with">
+        <button type="button" data-sktool="pencil" aria-pressed="true" title="Pencil"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l3.5-1L19 7.5 16.5 5 5 16.5z"/><path d="M14.5 7l2.5 2.5"/></svg><span>Pencil</span></button>
+        <button type="button" data-sktool="pen" aria-pressed="false" title="Pen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l4 6-4 12-4-12z"/><path d="M12 3v8"/></svg><span>Pen</span></button>
+        <button type="button" data-sktool="marker" aria-pressed="false" title="Marker"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v9l-3 5-3-5z"/><path d="M9 13h6"/></svg><span>Marker</span></button>
+        <button type="button" data-sktool="crayon" aria-pressed="false" title="Crayon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 21V9l2-6 2 6v12z"/><path d="M10 13h4M10 17h4"/></svg><span>Crayon</span></button>
+        <button type="button" data-sktool="eraser" aria-pressed="false" title="Eraser"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 20h10"/><path d="M5 15l8-9 6 6-7 8H9z"/></svg><span>Eraser</span></button>
+      </div>
+      <div class="sk-cols" id="skCols" role="group" aria-label="Colour"></div>
+      <div class="sk-sizes" role="group" aria-label="How thick">
+        <button type="button" data-sksize="0.6" aria-label="Thin"><i style="--s:5px"></i></button><button type="button" data-sksize="1" aria-label="Medium" aria-pressed="true"><i style="--s:9px"></i></button><button type="button" data-sksize="1.8" aria-label="Thick"><i style="--s:14px"></i></button>
+      </div>
+      <div class="sk-edit"><button type="button" id="skUndo" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><button type="button" id="skClear" aria-label="Start again" title="Start again"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button></div>
+    </div>
+    <div class="sk-row sk-row2">
+      <label class="sk-name"><span>Sign it</span><input id="skName" type="text" maxlength="32" placeholder="your name (optional)" autocomplete="nickname"></label>
+      <p class="sk-msg" id="skMsg" aria-live="polite"></p>
+      <button type="button" class="sk-keep" id="skKeep">Put it in the toolbox</button>
+      <button type="button" class="sk-close" id="skClose">Close</button>
+    </div>
+  </section>
+
+  <!-- the toolbox: everyone's drawings -->
+  <section class="tbox glass" id="tbox" hidden aria-labelledby="tbTitle">
+    <header class="tb-head"><div><p class="eyebrow">In the toolbox</p><h2 id="tbTitle">Drawings</h2><p class="tb-count" id="tbCount"></p></div>
+      <button type="button" class="r-close" id="tbClose" aria-label="Close the toolbox">Close <kbd>Esc</kbd></button></header>
+    <div class="tb-grid" id="tbGrid"></div>
+    <button type="button" class="tb-draw" id="tbDraw">Draw one yourself</button>
+  </section>
+  <div class="tbview" id="tbView" hidden>
+    <figure class="tb-fig"><img id="tbImg" alt=""><figcaption><b id="tbWho"></b><span id="tbWhen"></span></figcaption></figure>
+    <button type="button" class="tb-nav tb-prev" id="tbPrev" aria-label="The drawing before"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button type="button" class="tb-nav tb-next" id="tbNext" aria-label="The next drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button type="button" class="r-close tb-back" id="tbBack">Back to the toolbox</button>
+  </div>
+
   <!-- sitting: stand up again, change seat, turn the chair, and the radio by the fire -->
   <div class="seathud" id="seatHud" hidden>
     <button class="r-close glass" id="bStand" type="button">Stand up <kbd>Esc</kbd></button>

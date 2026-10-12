@@ -450,6 +450,7 @@
   cv.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   cv.addEventListener('pointerup', e => {
     if (!down || !st.entered) return; const dx = e.clientX - down.x, moved = Math.hypot(dx, e.clientY - down.y); down = null;
+    if (sketch.on) return;
     if (rd.on) {
       const g = rd.drag;
       if (g && g.live) { endPageDrag(g.f > 0.42 || (g.v > 1.6 && g.f > 0.06)); return; }
@@ -621,7 +622,7 @@
 
   /* the hand on it: pointers, the wheel, the keys */
   const ex = { ptrs: new Map(), kind: 'turn', dragged: false, multi: false, two: null, ax: 0, ay: 0, wheelT: -1e9 };
-  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on;
+  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on && !sketch.on && !tbox.on;
   const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
   if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
   /* a new swipe (or pinch, or burst of scrolling): straight after the last one it goes further, each time up to four
@@ -1279,7 +1280,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1411,14 +1412,14 @@
     const tod = { fire: 1 - smf(-1, 7, sAlt), crickets: 1 - smf(-9, -2, sAlt), birds: smf(-11, -3, sAlt) * (morning ? 1 : 0.55) * (1 - 0.45 * smf(20, 45, sAlt)), gulls: smf(1, 10, sAlt), owl: 1 - smf(-14, -8, sAlt) };
 
     const t0 = performance.now();
-    st.readK = Math.max(0, Math.min(1, (st.readK || 0) + (rd.on ? dtR / 1.5 : -dtR / 1.0)));
+    st.readK = Math.max(0, Math.min(1, (st.readK || 0) + (rd.on || sketch.on ? dtR / 1.5 : -dtR / 1.0)));
     /* the clouds keep their own clock: it runs with the scene, and moving the time of day moves them on too. It counts
        from the first frame's time, never wrapping (a wrap at each midnight made them jump; small numbers keep the
        shader's sums precise) */
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const fade = stepPitch();
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
@@ -1687,7 +1688,7 @@
   $('bSeatPrev').addEventListener('click', () => nextSeat(-1)); $('bSeatNext').addEventListener('click', () => nextSeat(1));
   $('bTurnL').addEventListener('click', () => turnChair(1)); $('bTurnR').addEventListener('click', () => turnChair(-1));
   /* looking around: a drag, as far as a seated person turns their head */
-  cv.addEventListener('pointerdown', e => { if (seat.on && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) seat.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: seat.yawT, pitch: seat.pitchT }; });
+  cv.addEventListener('pointerdown', e => { if (seat.on && !sketch.on && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) seat.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: seat.yawT, pitch: seat.pitchT }; });
   addEventListener('pointermove', e => {
     const g = seat.drag; if (!g || g.id !== e.pointerId || !seat.on) return;
     const k = 2.6 / Math.max(500, view.h);
@@ -1701,6 +1702,9 @@
   addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (!$('wish').hidden) { closeWish(); e.stopPropagation(); e.preventDefault(); return; }
+      if (tbox.view >= 0) { tbViewClose(); e.stopPropagation(); e.preventDefault(); return; }
+      if (tbox.on) { closeToolbox(); e.stopPropagation(); e.preventDefault(); return; }
+      if (sketch.on) { closeSketch(); e.stopPropagation(); e.preventDefault(); return; }
       if (seat.on && $('credits').hidden && $('settings').hidden) { standUp(); e.stopPropagation(); return; }
     }
     if (!seat.on || (e.target && e.target.closest && e.target.closest('input, textarea, select'))) return;
@@ -1881,10 +1885,10 @@
   cv.addEventListener('pointerdown', e => { pdown = e.isPrimary ? { x: e.clientX, y: e.clientY } : null; });
   addEventListener('pointerup', e => {
     const d = pdown; pdown = null;
-    if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+    if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || sketch.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
     const hit = pickAt(e); if (!hit) return;
     down = null;                    /* (the sea's click handler, next in line, now has nothing to do) */
-    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
+    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (hit === 'sketch') openSketch(); else if (hit === 'toolbox') openToolbox(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
   }, true);
   cv.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return;
@@ -1896,7 +1900,7 @@
   campObs.push([Layout.board.x, Layout.board.z, 0.9, 'board']);
 
   /* dots on the board and the chairs (and the radio, while you sit) */
-  const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(seatBy('chair0'))], ['chair1', 'Sit', 'Sit in this chair', () => sit(seatBy('chair1'))], ['radio', 'Radio', 'Switch the radio on or off', radioToggle]].map(([key, label, aria, fn]) => {
+  const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(seatBy('chair0'))], ['chair1', 'Sit', 'Sit in this chair', () => sit(seatBy('chair1'))], ['radio', 'Radio', 'Switch the radio on or off', radioToggle], ['sketch', 'Draw', 'Draw a picture on the board', () => openSketch()], ['toolbox', 'Drawings', 'Look through everyone’s drawings', () => openToolbox()]].map(([key, label, aria, fn]) => {
     const s = document.createElement('button'); s.type = 'button'; s.className = 'spot extra'; s.setAttribute('aria-label', aria);
     s.innerHTML = `<span class="lbl">${esc(label)}</span><i></i>`; s.addEventListener('click', e => { e.stopPropagation(); fn(); }); spots.appendChild(s);
     return { key, el: s };
@@ -1904,11 +1908,213 @@
   function placeExtraSpots() {
     const A = Engine.propAnchors();
     for (const x of extraSpots) {
-      const p = Engine.project(A[x.key]), want = x.key === 'radio' ? seat.on : !seat.on && !st.chapter;
+      if (!A[x.key]) { x.el.style.visibility = 'hidden'; continue; }
+      const atTable = seat.on && seat.pose && seat.pose.near === 'table', p = Engine.project(A[x.key]);
+      const want = !sketch.on && !tbox.on && (x.key === 'radio' ? seat.on && !atTable : x.key === 'sketch' || x.key === 'toolbox' ? !st.chapter && (!seat.on || atTable) : !seat.on && !st.chapter);
       const vis = want && !rd.on && !car.on && !wk.on && !Engine.pitching && orbNearCamp() && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
     }
   }
+
+  /* ── the drawing board on the picnic table. Draw on the paper itself: the camera looks down at it and each stroke lands
+     where you put it, in pencil, pen, marker or crayon, in ten colours, or rub it out. Finished, it goes into the toolbox
+     on the corner of the rug, where anyone can look through everyone's drawings. (Kept on the server with the wishes;
+     without one, on this device) ── */
+  const SKW = 800, SKH = 600;
+  const SK_TOOLS = { pencil: { w: 2.4, a: 0.85 }, pen: { w: 3.4, a: 1 }, marker: { w: 15, a: 0.34 }, crayon: { w: 9, a: 0.6 }, eraser: { w: 26, a: 1 } };
+  const SK_COLS = ['#2b2622', '#c8352e', '#e8892a', '#e8c62a', '#3f9a4a', '#1f8a8a', '#2a6fc8', '#6a3fa0', '#e26aa0', '#7a4a2a'];
+  const sketch = { on: false, tool: 'pencil', color: SK_COLS[0], size: 1, ink: null, inkX: null, comp: null, compX: null, paper: null, undo: [], stroke: null, dirty: false, marks: 0, sending: false, from: -1, pend: [] };
+  const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  function sketchInit() {
+    if (sketch.ink) return;
+    sketch.ink = mkCanvas(SKW, SKH); sketch.inkX = sketch.ink.getContext('2d', { willReadFrequently: true });
+    sketch.comp = mkCanvas(SKW, SKH); sketch.compX = sketch.comp.getContext('2d');
+    /* the paper: cream, with a faint tooth to it */
+    sketch.paper = mkCanvas(SKW, SKH); { const a = sketch.paper.getContext('2d'); a.fillStyle = '#f6f1e4'; a.fillRect(0, 0, SKW, SKH);
+      for (let i = 0; i < 5000; i++) { const g = Math.random(); a.fillStyle = `rgba(${g < 0.5 ? '120,100,70' : '255,255,250'},${0.02 + Math.random() * 0.04})`; a.fillRect(Math.random() * SKW, Math.random() * SKH, 1 + Math.random() * 2, 1); } }
+    sketch.dirty = true;
+  }
+  function sketchCompose() { const a = sketch.compX; a.globalCompositeOperation = 'source-over'; a.globalAlpha = 1; a.drawImage(sketch.paper, 0, 0); a.drawImage(sketch.ink, 0, 0); Engine.setSketch(sketch.comp); }
+  /* one stretch of a stroke, from p0 to p1 (canvas pixels), in the current tool and colour; pressure 0..1 */
+  function inkSeg(p0, p1, pr) {
+    const a = sketch.inkX, T0 = SK_TOOLS[sketch.tool], w = T0.w * sketch.size * (0.55 + 0.9 * pr);
+    a.save(); a.lineCap = a.lineJoin = 'round';
+    if (sketch.tool === 'eraser') { a.globalCompositeOperation = 'destination-out'; a.strokeStyle = '#000'; a.lineWidth = w; a.beginPath(); a.moveTo(p0[0], p0[1]); a.lineTo(p1[0], p1[1]); a.stroke(); }
+    else if (sketch.tool === 'crayon') {
+      /* wax on paper: speckled, catching the paper's tooth */
+      a.fillStyle = sketch.color; const d = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), n = Math.max(1, Math.ceil(d / 1.5));
+      for (let i = 0; i <= n; i++) { const t = i / n, x = p0[0] + (p1[0] - p0[0]) * t, y = p0[1] + (p1[1] - p0[1]) * t;
+        for (let k = 0; k < 7; k++) { const r = Math.random() * w / 2, q = Math.random() * 6.283; a.globalAlpha = T0.a * (0.3 + 0.7 * Math.random()); a.fillRect(x + Math.cos(q) * r, y + Math.sin(q) * r, 1.4, 1.4); } }
+    } else {
+      a.globalCompositeOperation = sketch.tool === 'marker' ? 'multiply' : 'source-over';
+      a.strokeStyle = sketch.color; a.lineWidth = w;
+      if (sketch.tool === 'pencil') {
+        /* graphite: a little uneven, twice over */
+        for (const o of [0, 0.6]) { a.globalAlpha = T0.a * (0.55 + 0.35 * Math.random()); a.beginPath(); a.moveTo(p0[0] + o, p0[1] - o); a.lineTo(p1[0] + o, p1[1] - o); a.stroke(); }
+      } else { a.globalAlpha = T0.a; a.beginPath(); a.moveTo(p0[0], p0[1]); a.lineTo(p1[0], p1[1]); a.stroke(); }
+    }
+    a.restore(); sketch.dirty = true;
+  }
+  /* the camera over the board, tilted a little toward whoever draws, the paper filling the space above the tools */
+  function sketchView() {
+    const f = Engine.sketchFrame(); if (!f) return V.wide;
+    const aspect = view.w / view.h, fov = 38, tf = Math.tan(fov * Math.PI / 360), barH = view.w < 720 ? 190 : 150, hFrac = Math.max(0.5, 1 - (barH + 70) / view.h);
+    const d = Math.max(f.H * 1.06 / (2 * tf * hFrac), f.W * 1.06 / (2 * tf * aspect)), tilt = 0.16;
+    /* (the paper sits a little above the middle of the screen, clear of the tools) */
+    const lift = (barH - 40) / view.h * 2 * d * tf * 0.5;
+    const look = [0, 1, 2].map(i => f.o[i] - f.top[i] * lift + f.up[i] * 0.004);
+    const pos = [0, 1, 2].map(i => look[i] + f.up[i] * d * Math.cos(tilt) - f.top[i] * d * Math.sin(tilt));
+    return { pos, look, fov, focus: d };
+  }
+  function openSketch() {
+    if (!ready || !st.entered || car.on || sketch.on) return;
+    if (rd.on || st.chapter) openChapter(null);
+    if (tbox.on) closeToolbox(true);
+    toggleSettings(false);
+    sketch.from = seat.on ? seat.i : -1;
+    if (wk.on) stopWalk();
+    if (seat.on) leaveSeat();
+    sketchInit(); sketchCompose();
+    sketch.on = true; document.body.classList.add('sketching'); $('sketchBar').hidden = false; $('skMsg').textContent = '';
+    st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = sketchView(); st.camT = 0; st.camDur = camDur(st.from, st.to);
+    syncSketchUI();
+    if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
+  }
+  function closeSketch(stay) {
+    if (!sketch.on) return;
+    sketch.on = false; sketch.stroke = null; document.body.classList.remove('sketching', 'sk-drawing'); $('sketchBar').hidden = true;
+    if (stay) return;
+    if (sketch.from >= 0) sit(sketch.from); else goView('wide');
+  }
+  function syncSketchUI() {
+    document.querySelectorAll('[data-sktool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sktool === sketch.tool)));
+    document.querySelectorAll('[data-skcol]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.skcol === sketch.color)));
+    document.querySelectorAll('[data-sksize]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.sksize === sketch.size)));
+    $('skUndo').disabled = !sketch.undo.length; $('skKeep').disabled = sketch.sending;
+  }
+  { /* the tools */
+    const bar = $('sketchBar'), cols = $('skCols');
+    cols.innerHTML = SK_COLS.map(c => `<button type="button" class="sk-col" data-skcol="${c}" style="--c:${c}" aria-label="Colour ${c}" aria-pressed="false"></button>`).join('');
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.sktool) { sketch.tool = b.dataset.sktool; if (sketch.tool === 'eraser') {} }
+      else if (b.dataset.skcol) { sketch.color = b.dataset.skcol; if (sketch.tool === 'eraser') sketch.tool = 'pencil'; }
+      else if (b.dataset.sksize) sketch.size = +b.dataset.sksize;
+      syncSketchUI();
+    });
+    $('skUndo').addEventListener('click', () => { const u = sketch.undo.pop(); if (u) { sketch.inkX.putImageData(u, 0, 0); sketch.dirty = true; sketch.marks = Math.max(0, sketch.marks - 1); } syncSketchUI(); });
+    $('skClear').addEventListener('click', () => { if (!sketch.marks) return; sketch.undo.push(sketch.inkX.getImageData(0, 0, SKW, SKH)); if (sketch.undo.length > 25) sketch.undo.shift(); sketch.inkX.clearRect(0, 0, SKW, SKH); sketch.marks = 0; sketch.dirty = true; syncSketchUI(); });
+    $('skClose').addEventListener('click', () => closeSketch());
+    $('skKeep').addEventListener('click', keepSketch);
+    $('skName').value = store.get('drawName', '');
+    bar.addEventListener('keydown', e => e.stopPropagation());
+  }
+  /* drawing: the pointer, through the camera, onto the paper */
+  const skAt = e => { const r = cv.getBoundingClientRect(), uv = Engine.sketchUV((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); return uv ? [uv[0] * SKW, (1 - uv[1]) * SKH] : null; };
+  cv.addEventListener('pointerdown', e => {
+    if (!sketch.on || !e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0) || st.camT < 1) return;
+    const p = skAt(e); if (!p) return;
+    e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* (a pointer the browser no longer tracks) */ }
+    sketch.undo.push(sketch.inkX.getImageData(0, 0, SKW, SKH)); if (sketch.undo.length > 25) sketch.undo.shift();
+    const pr = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
+    sketch.stroke = { id: e.pointerId, last: p, pr }; inkSeg(p, [p[0] + 0.01, p[1]], pr); sketch.marks++;
+    document.body.classList.add('sk-drawing'); syncSketchUI();
+  });
+  cv.addEventListener('pointermove', e => {
+    const s0 = sketch.stroke; if (!sketch.on || !s0 || s0.id !== e.pointerId) return;
+    let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; if (!evs.length) evs = [e];
+    for (const ev of evs) { const p = skAt(ev); if (!p) continue; const pr = ev.pointerType === 'pen' ? (ev.pressure || 0.5) : 0.5; inkSeg(s0.last, p, (s0.pr + pr) / 2); s0.last = p; s0.pr = pr; }
+  });
+  const skUp = e => { if (sketch.stroke && sketch.stroke.id === e.pointerId) { sketch.stroke = null; document.body.classList.remove('sk-drawing'); } };
+  cv.addEventListener('pointerup', skUp); cv.addEventListener('pointercancel', skUp);
+  function stepSketch() {
+    if (sketch.dirty && sketch.ink) { sketch.dirty = false; sketchCompose(); }
+    /* readable after dark: the paper carries a little light of its own while you draw */
+    const S0 = st.S; Engine.setSketchLight(sketch.on && S0 ? 0.32 * (1 - 0.9 * S0.day) / Math.max(0.05, S0.exposure || 1) : 0);
+    if (sketch.on && st.camT >= 1) st.to = sketchView();
+  }
+  /* finished: into the toolbox */
+  const localDrawings = () => { const l = store.get('drawings', []); return Array.isArray(l) ? l.filter(d => d && typeof d.image === 'string' && /^data:image\/(png|webp);base64,/.test(d.image)) : []; };
+  async function keepSketch() {
+    if (sketch.sending) return;
+    if (!sketch.marks) { $('skMsg').textContent = 'Draw something first: a line will do.'; return; }
+    const name = tidy($('skName').value, 32); store.set('drawName', name);
+    const out = mkCanvas(SKW, SKH), a = out.getContext('2d'); a.drawImage(sketch.paper, 0, 0); a.drawImage(sketch.ink, 0, 0);
+    let image = out.toDataURL('image/webp', 0.9); if (!/^data:image\/webp/.test(image)) image = out.toDataURL('image/png');
+    sketch.sending = true; syncSketchUI(); $('skKeep').textContent = 'Putting it away…'; $('skMsg').textContent = '';
+    let res = null;
+    if (isWeb) {
+      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 20000);
+      try {
+        const r = await fetch('/api/drawings', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ image, name }), cache: 'no-store', signal: ctl.signal });
+        const j = /json/.test(r.headers.get('content-type') || '') ? await r.json().catch(() => null) : null;
+        if (r.ok && j && j.drawing) res = { drawing: j.drawing, total: j.total };
+        else if (j && j.error) res = { error: String(j.error) };
+        else if (r.status !== 404) res = { error: 'The toolbox couldn’t take your drawing just now. Try again in a moment.' };
+      } catch (e) { res = { error: 'Couldn’t reach the toolbox just now. Check your connection and try again.' }; }
+      finally { clearTimeout(to); }
+    }
+    if (!res) {
+      /* no toolbox on a server (the single-file cove): kept on this device */
+      const d = { id: 'local-' + Date.now().toString(36), name, at: new Date().toISOString(), image, local: true };
+      const list = [d, ...localDrawings()].slice(0, 12);
+      store.set('drawings', list);
+      res = (localDrawings()[0] || {}).id === d.id ? { drawing: { id: d.id, name, at: d.at, url: image, local: true }, local: true } : { error: 'There’s no room left on this device for another drawing.' };
+    }
+    sketch.sending = false; $('skKeep').textContent = 'Put it in the toolbox'; syncSketchUI();
+    if (res.error) { $('skMsg').textContent = res.error; return; }
+    tbox.list = null;
+    sketch.inkX.clearRect(0, 0, SKW, SKH); sketch.undo.length = 0; sketch.marks = 0; sketch.dirty = true;
+    toast(res.local ? 'Your drawing is in the toolbox (kept only on this device).' : 'Your drawing is in the toolbox, for anyone who opens it.', false, 4000);
+    unlock('artist');
+    closeSketch();
+  }
+
+  /* ── the toolbox: everyone's drawings, newest first; open one to see it large ── */
+  const tbox = { on: false, k: 0, list: null, total: 0, view: -1, loading: false };
+  async function loadDrawings() {
+    if (tbox.loading) return; tbox.loading = true;
+    let list = null, total = 0;
+    if (isWeb) { try { const r = await fetch('/api/drawings?limit=120', { cache: 'no-store', headers: { Accept: 'application/json' } }); const j = r.ok ? await r.json() : null; if (j && Array.isArray(j.drawings)) { list = j.drawings.filter(d => d && /^\/api\/drawings\/[A-Za-z0-9_-]+\.(png|webp)$/.test(d.url)); total = +j.total || list.length; } } catch (e) { /* the toolbox on this device, then */ } }
+    const local = localDrawings().map(d => ({ id: d.id, name: d.name || '', at: d.at, url: d.image, local: true }));
+    tbox.list = [...(list || []), ...local]; tbox.total = (list ? total : 0) + local.length; tbox.loading = false;
+    renderToolbox();
+  }
+  function renderToolbox() {
+    const g = $('tbGrid'), L = tbox.list || [];
+    $('tbCount').textContent = tbox.list == null ? 'Opening…' : L.length ? `${tbox.total} drawing${tbox.total === 1 ? '' : 's'}` : 'Empty, for now';
+    g.innerHTML = L.map((d, i) => `<button type="button" class="tb-item" data-i="${i}"><img src="${esc(d.url)}" alt="${esc(d.name ? 'A drawing by ' + d.name : 'A drawing')}" loading="lazy" decoding="async"><span>${esc(d.name || 'Unsigned')}${d.local ? ' · this device' : ''}</span></button>`).join('') ||
+      (tbox.list ? '<p class="tb-empty">No drawings yet. Sit at the picnic table, draw on the board, and put the first one in.</p>' : '');
+  }
+  function openToolbox() {
+    if (!ready || !st.entered || car.on || tbox.on) return;
+    if (rd.on || st.chapter) openChapter(null);
+    if (sketch.on) closeSketch(true);
+    toggleSettings(false);
+    if (wk.on) stopWalk();
+    tbox.on = true; tbox.view = -1; document.body.classList.add('toolbox-open'); $('tbox').hidden = false; $('tbView').hidden = true;
+    if (!seat.on) { const a = Engine.propAnchors().toolbox; if (a) { st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = { pos: [a[0] - 1.1, 1.35, a[2] + 1.25], look: [a[0], a[1] - 0.12, a[2]], fov: 44, focus: 1.6 }; st.camT = 0; st.camDur = camDur(st.from, st.to); } }
+    renderToolbox(); loadDrawings();
+  }
+  function closeToolbox(stay) {
+    if (!tbox.on) return;
+    tbox.on = false; tbox.view = -1; document.body.classList.remove('toolbox-open'); $('tbox').hidden = true; $('tbView').hidden = true;
+    if (!stay && !seat.on) goView('wide');
+  }
+  function tbShow(i) {
+    const L = tbox.list || []; if (!L.length) return;
+    tbox.view = (i + L.length) % L.length; const d = L[tbox.view];
+    $('tbImg').src = d.url; $('tbImg').alt = d.name ? 'A drawing by ' + d.name : 'A drawing';
+    $('tbWho').textContent = d.name || 'Unsigned'; $('tbWhen').textContent = d.at ? whenOf(d.at) : ''; $('tbView').hidden = false;
+    $('tbPrev').disabled = $('tbNext').disabled = L.length < 2;
+  }
+  function tbViewClose() { tbox.view = -1; $('tbView').hidden = true; }
+  $('tbGrid').addEventListener('click', e => { const b = e.target.closest('.tb-item'); if (b) tbShow(+b.dataset.i); });
+  $('tbClose').addEventListener('click', () => closeToolbox()); $('tbDraw').addEventListener('click', () => { closeToolbox(true); openSketch(); });
+  $('tbPrev').addEventListener('click', () => tbShow(tbox.view - 1)); $('tbNext').addEventListener('click', () => tbShow(tbox.view + 1)); $('tbBack').addEventListener('click', tbViewClose);
+  $('tbView').addEventListener('click', e => { if (e.target === $('tbView')) tbViewClose(); });
+  $('tbox').addEventListener('keydown', e => { if (tbox.view >= 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { tbShow(tbox.view + (e.key === 'ArrowLeft' ? -1 : 1)); e.preventDefault(); } e.stopPropagation(); });
+  function stepToolbox(dt) { const t = tbox.on ? 1 : 0; if (Math.abs(t - tbox.k) > 1e-3) { tbox.k += (t - tbox.k) * Math.min(1, dt * 3.2); Engine.toolboxOpen(tbox.k); } }
 
   /* where each sound comes from, as heard from the camera (or the walker's ears): the surf from the waterline, birds and
      crickets from the trees, the crackle from the fire. Each fades with distance (the fire, a point, quickly; the long
@@ -1941,7 +2147,7 @@
     if (!wish.started) startWishes();
     /* opening something else, or taking the van, gets you up out of the chair */
     if (seat.on && (rd.on || car.on || wk.on || st.chapter)) { leaveSeat(); if (!rd.on && !st.chapter && !wk.on) goView('wide'); }
-    stepChairs(dt);
+    stepChairs(dt); stepSketch(dt); stepToolbox(dt);
     if (seat.on) { const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a; st.to = seatCam(); }
     if (st.chapter !== 'wishes' && $('drawer').classList.contains('wishes-mode')) $('drawer').classList.remove('wishes-mode');
     wish.look += ((st.chapter === 'wishes' ? 1 : 0) - wish.look) * Math.min(1, dt * 1.5); Engine.setBoardLook(wish.look);
@@ -1962,5 +2168,5 @@
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
   window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard });
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard, sketch, openSketch, closeSketch, tbox, openToolbox, closeToolbox });
 })();

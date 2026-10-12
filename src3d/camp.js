@@ -139,8 +139,14 @@ void main(){
     g.add(at(mesh(new T.CylinderGeometry(0.014, 0.02, 0.1, 8), L('#1f3a2a', { roughness: 0.2 })), -0.14, 0.72, -0.27));
     const jar = mesh(new T.CylinderGeometry(0.05, 0.05, 0.1, 14), glow(1.0, 0.62, 0.3)); at(jar, 0.17, 0.475, -0.24); g.add(jar);
     refs.candles.push(jar.material);
+    /* the drawing board where the menu was, facing the green cushion (models/camp/sketchboard.js) */
+    const sk = Models.make('camp/sketchboard'); at(sk, 0.0, 0.425, 0.13); sk.rotation.y = 0.04; g.add(sk); sk.userData.pick = 'sketch';
+    refs.sketch = sk;
     refs.table = tg;
     }
+    /* the toolbox that keeps the drawings, on the corner of the rug by the green cushion (models/camp/toolbox.js) */
+    { const tb = Models.make('camp/toolbox'); at(tb, 1.5, 0.012, 0.98); tb.rotation.y = -0.5; g.add(tb); tb.userData.pick = 'toolbox';
+      refs.toolbox = tb; refs.dyn.push({ o: tb, kind: 'slide', half: 0.25, tip: 0.3 }); }
     refs.dyn.push({ o: tg, kind: 'slide', half: 0.42, tip: 0.22, candle: true });
     /* floor cushions & pouf */
     const cushion = (hex, sx, sy, sz, x, z, ry = 0) => {
@@ -711,7 +717,7 @@ void main(){
        radio, the wish board */
     if (refs.driftwood) refs.driftwood.userData.pick = 'log0';
     if (refs.cushions) { if (refs.cushions[1]) refs.cushions[1].userData.pick = 'rug0'; if (refs.cushions[0]) refs.cushions[0].userData.pick = 'rug1'; }
-    refs.pick = [...refs.chairs, refs.radio.group, refs.board.group, refs.driftwood, ...(refs.cushions || []).slice(0, 2)].filter(Boolean);
+    refs.pick = [...refs.chairs, refs.radio.group, refs.board.group, refs.driftwood, ...(refs.cushions || []).slice(0, 2), refs.sketch, refs.toolbox].filter(Boolean);
     refs.pool = poolMap(refs.bulbs);
     return refs;
   }
