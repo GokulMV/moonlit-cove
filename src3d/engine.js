@@ -531,17 +531,22 @@ const Engine = (() => {
     skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() } };
     skyMat = new T.ShaderMaterial({
       uniforms: Object.assign({}, skyU, { uEnv: { value: 0 }, uCloudLit: { value: new T.Vector3() }, uStars: { value: 1 }, uTime: { value: 0 }, uPhaseC: { value: 1 }, uPhaseSign: { value: 1 }, uCloud: { value: 0.85 }, uMoonR: { value: 0.0175 }, uSunR: { value: 0.016 }, uNoise: { value: noiseTex },
-        uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.55, -0.83) }, uCloudT: { value: 0 } }),
+        uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.55, -0.83) }, uCloudT: { value: 0 },
+        uN3: { value: null }, uCD: { value: null }, uCO: { value: new T.Vector3() }, uCQ: { value: 1 } }),
       vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false
     });
     const sky = new T.Mesh(new T.SphereGeometry(5000, 48, 24), skyMat); sky.renderOrder = 1000; sky.frustumCulled = false; scene.add(sky); skyMesh = sky;
     /* environment: the same sky, rendered into a prefiltered cube map so every glossy surface reflects it */
-    envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
+    envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 }, uCQ: { value: 0.4 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
     envScene = new T.Scene(); { const m = new T.Mesh(new T.SphereGeometry(400, 64, 32), envSkyMat); m.frustumCulled = false; envScene.add(m); }
     pmrem = new T.PMREMGenerator(R);
     envInit();
     { const n3 = Textures.noise3(); n3Tex = new T.Data3DTexture(n3.data, n3.size, n3.size, n3.size); n3Tex.format = T.RedFormat; n3Tex.type = T.UnsignedByteType;
       n3Tex.minFilter = n3Tex.magFilter = T.LinearFilter; n3Tex.wrapS = n3Tex.wrapT = n3Tex.wrapR = T.RepeatWrapping; n3Tex.unpackAlignment = 1; n3Tex.needsUpdate = true; }
+    /* the clouds' billows and the fine detail that erodes their edges */
+    { const cd = Textures.cloudDetail(), cdTex = new T.Data3DTexture(cd.data, cd.size, cd.size, cd.size); cdTex.format = T.RedFormat; cdTex.type = T.UnsignedByteType;
+      cdTex.minFilter = cdTex.magFilter = T.LinearFilter; cdTex.wrapS = cdTex.wrapT = cdTex.wrapR = T.RepeatWrapping; cdTex.unpackAlignment = 1; cdTex.needsUpdate = true;
+      skyMat.uniforms.uN3.value = n3Tex; skyMat.uniforms.uCD.value = cdTex; }
     noiseT = noiseTex;
 
     uBulb = { uProg: { value: 1 }, uTime: Mats.U.uTime, uI: { value: 0.6 }, uTw: { value: 0.14 }, uOff: { value: V3() }, uCol: { value: new T.Vector3(1.0, 0.7, 0.38) } };
@@ -656,9 +661,11 @@ const Engine = (() => {
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
-    const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
+    const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; su.uCO.value.copy(camera.position); su.uCQ.value = o.cloudQ ?? 1; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
     if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }
-    V(gU.uAmb, S.amb); V(gU.uKeyDir, S.keyDir); V(gU.uKeyCol, S.keyCol); V(gU.uMoonGlit, S.moonGlit); V(gU.uSunGlit, S.sunGlit);
+    /* under a deck of cloud the sun and moon no longer glitter on the sea */
+    { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, g = 1 - 0.88 * ov;
+      V(gU.uAmb, S.amb); V(gU.uKeyDir, S.keyDir); V(gU.uKeyCol, S.keyCol); gU.uMoonGlit.value.set(S.moonGlit[0] * g, S.moonGlit[1] * g, S.moonGlit[2] * g); gU.uSunGlit.value.set(S.sunGlit[0] * g, S.sunGlit[1] * g, S.sunGlit[2] * g); }
     gU.uDay.value = S.day; gU.uShadowK.value = S.shadowK; gU.uWaveT.value = o.waveT ?? t; Mats.U.uTime.value = t;
     gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0;
     const wt = o.waveT ?? t;

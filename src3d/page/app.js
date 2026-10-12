@@ -1417,7 +1417,7 @@
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const fade = stepPitch();
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;

@@ -170,5 +170,31 @@ const Textures = (() => {
     for (let i = 0; i < tmp.length; i++) out[i] = Math.round((tmp[i] - mn) / (mx - mn) * 255);
     return { size: N, data: out };
   }
-  return { noise, water, sand, rng, noise3 };
+  /* the clouds' fine detail: inverted Worley noise in three octaves (round cells, bright at their centres), tiling in
+     every direction. Eroding a cloud's edge with it leaves the cauliflower heaps of a cumulus, or wisps underneath */
+  function cloudDetail() {
+    const N = 32, acc = new Float32Array(N * N * N), r = rng(9071);
+    [[4, 0.625], [8, 0.25], [16, 0.125]].forEach(([P, w]) => {
+      const fp = new Float32Array(P * P * P * 3); for (let i = 0; i < fp.length; i++) fp[i] = r();
+      /* each cell's point, in a grid one cell wider all round (wrapped), so the search needs no modulo */
+      const Q = P + 2, pt = new Float32Array(Q * Q * Q * 3);
+      for (let cz = -1; cz <= P; cz++) for (let cy = -1; cy <= P; cy++) for (let cx = -1; cx <= P; cx++) {
+        const k = ((((cz + P) % P) * P + (cy + P) % P) * P + (cx + P) % P) * 3, j = (((cz + 1) * Q + cy + 1) * Q + cx + 1) * 3;
+        pt[j] = cx + fp[k]; pt[j + 1] = cy + fp[k + 1]; pt[j + 2] = cz + fp[k + 2];
+      }
+      const sc = P / N;
+      for (let z = 0; z < N; z++) { const fz = (z + 0.5) * sc, iz = Math.floor(fz);
+        for (let y = 0; y < N; y++) { const fy = (y + 0.5) * sc, iy = Math.floor(fy);
+          for (let x = 0; x < N; x++) { const fx = (x + 0.5) * sc, ix = Math.floor(fx);
+            let md = 9;
+            for (let dz = 0; dz < 3; dz++) for (let dy = 0; dy < 3; dy++) { let j = (((iz + dz) * Q + iy + dy) * Q + ix) * 3;
+              for (let dx = 0; dx < 3; dx++, j += 3) { const ex = pt[j] - fx, ey = pt[j + 1] - fy, ez = pt[j + 2] - fz, d = ex * ex + ey * ey + ez * ez; if (d < md) md = d; } }
+            acc[(z * N + y) * N + x] += w * (1 - Math.min(1, Math.sqrt(md)));
+          } } }
+    });
+    let mn = 1e9, mx = -1e9; for (const v of acc) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const out = new Uint8Array(N * N * N); for (let i = 0; i < acc.length; i++) out[i] = Math.round((acc[i] - mn) / (mx - mn) * 255);
+    return { size: N, data: out };
+  }
+  return { noise, water, sand, rng, noise3, cloudDetail };
 })();
