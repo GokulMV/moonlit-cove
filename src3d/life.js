@@ -1,9 +1,10 @@
 /* ─────────────────────────────────────────────────────────────
    life.js — small lives on the shore: starfish and shells along
    the strand line, fish that leap clear of the water now and then
-   with a splash, and schools of small fish that show as shadows in
-   the clear shallows by day. And sky lanterns, released from the
-   camp, rising out over the sea.
+   with a splash, schools of small fish that show as shadows in the
+   clear shallows by day, and sea turtles gliding over the sand under
+   them, coming up now and then to breathe. And sky lanterns, released
+   from the camp, rising out over the sea.
    ───────────────────────────────────────────────────────────── */
 const Life = (() => {
   const T = THREE, TAU = Math.PI * 2;
@@ -100,6 +101,48 @@ void main(){
   float a = max(body, tail*0.8)*vA*uDay*0.5;
   if (a < 0.01) discard;
   gl_FragColor = vec4(0.004, 0.018, 0.022, a);
+}`;
+
+  /* sea turtles' shadows on the sand under the shallows: a shell, a head, the long front flippers rowing and the short
+     back ones, each turtle drawn in its own frame on the water's surface */
+  const TURTLE_VS = `
+${GLSL.WAVEH}
+attribute vec4 iT;   /* x, z, heading, how much it shows */
+attribute vec4 iU;   /* flipper stroke phase, length, which (0 a turtle, 1 a ray) */
+varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
+void main(){
+  vUv = uv; vPh = iU.x; vA = iT.w; vKind = iU.z;
+  float c = cos(iT.z), s = sin(iT.z);
+  vec2 q = (uv - 0.5)*iU.y*1.5, w = vec2(c*q.x - s*q.y, s*q.x + c*q.y);
+  vec3 wp = vec3(iT.x + w.x, 0.0, iT.y + w.y);
+  wp.y = waveH(wp.xz) + 0.03;
+  gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(wp, 1.0);
+}`;
+  const TURTLE_FS = `
+uniform float uDay; varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
+float ell(vec2 p, vec2 c, vec2 r, float a){ p -= c; float cs = cos(a), sn = sin(a); p = vec2(cs*p.x + sn*p.y, -sn*p.x + cs*p.y); return length(p/r); }
+void main(){
+  vec2 p = (vUv - 0.5)*1.5;
+  if (vKind > 0.5){
+    /* a ray: a broad diamond of a body, its wing tips rippling, a long thin tail */
+    float w = 0.5 + 0.035*sin(vPh*1.3 - abs(p.y)*9.0), dia = abs(p.x - 0.05)/0.36 + abs(p.y)/w;
+    float m = 1.0 - smoothstep(0.85, 1.0, dia + 0.25*smoothstep(0.1, 0.36, p.x)*(1.0 - smoothstep(0.0, 0.1, abs(p.y))));
+    m = max(m, (1.0 - smoothstep(0.006, 0.014, abs(p.y + 0.02*sin(vPh + p.x*6.0))))*step(-0.72, p.x)*step(p.x, -0.25));
+    float al = m*vA*uDay*0.5;
+    if (al < 0.01) discard;
+    gl_FragColor = vec4(0.004, 0.016, 0.02, al); return;
+  }
+  float m = 1.0 - smoothstep(0.82, 1.0, ell(p, vec2(-0.02, 0.0), vec2(0.4, 0.31), 0.0));
+  m = max(m, 1.0 - smoothstep(0.75, 1.0, ell(p, vec2(0.46, 0.0), vec2(0.12, 0.085), 0.0)));
+  for (int k = 0; k < 2; k++){
+    float sd = k == 0 ? -1.0 : 1.0, a = sd*(1.85 + 0.55*sin(vPh)), b = sd*(2.55 + 0.2*sin(vPh + 1.6));
+    vec2 sh = vec2(0.17, sd*0.25), hip = vec2(-0.32, sd*0.15);
+    m = max(m, 1.0 - smoothstep(0.7, 1.0, ell(p, sh + 0.17*vec2(cos(a), sin(a)), vec2(0.2, 0.055), a)));
+    m = max(m, 1.0 - smoothstep(0.7, 1.0, ell(p, hip + 0.07*vec2(cos(b), sin(b)), vec2(0.09, 0.05), b)));
+  }
+  float al = m*vA*uDay*0.55;
+  if (al < 0.01) discard;
+  gl_FragColor = vec4(0.004, 0.018, 0.022, al);
 }`;
 
   /* sky lanterns: paper lanterns lit from below, released from the camp, rising and drifting out over the sea on the land breeze */
@@ -205,6 +248,39 @@ void main(){
     const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const shoal = new T.Mesh(sg, shoalM); shoal.frustumCulled = false; shoal.renderOrder = 4; root.add(shoal);
 
+    /* ── sea turtles: two or three about the shallows near the camera, their shadows gliding slowly over the sand under
+       the water, turning now and then; every minute or so one comes up to breathe, its head and the top of its shell
+       breaking the surface for a few seconds, with a ring on the water ── */
+    const NT = 3, tg = new T.InstancedBufferGeometry();
+    tg.index = quad.index; tg.setAttribute('position', quad.attributes.position); tg.setAttribute('uv', quad.attributes.uv);
+    const iT = new T.InstancedBufferAttribute(new Float32Array(NT * 4), 4), iU = new T.InstancedBufferAttribute(new Float32Array(NT * 4), 4);
+    iT.setUsage(T.DynamicDrawUsage); iU.setUsage(T.DynamicDrawUsage); tg.setAttribute('iT', iT); tg.setAttribute('iU', iU); tg.instanceCount = NT;
+    const turtleM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, Mats.coastU), vertexShader: TURTLE_VS, fragmentShader: TURTLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const turtleSh = new T.Mesh(tg, turtleM); turtleSh.frustumCulled = false; turtleSh.renderOrder = 4; root.add(turtleSh);
+    /* the head and the top of the shell, for when one comes up: an olive-brown dome plated with scutes (a row down the
+       middle, four either side, small ones round the rim, dark seams between, each paler at its middle), and a blunt,
+       scaly head */
+    const shellG = new T.SphereGeometry(1, 56, 18, 0, TAU, 0, Math.PI / 2); shellG.scale(0.44, 0.17, 0.35);
+    {
+      const C = [[0.3, 0], [0.15, 0], [0, 0], [-0.15, 0], [-0.3, 0]];
+      for (const sd of [-1, 1]) for (const x of [0.22, 0.07, -0.08, -0.23]) C.push([x, sd * 0.19]);
+      for (let k = 0; k < 24; k++) { const a = k / 24 * TAU; C.push([Math.cos(a) * 0.42, Math.sin(a) * 0.33]); }
+      const tone = C.map(() => 0.85 + 0.3 * r()), pa = shellG.attributes.position, col = new Float32Array(pa.count * 3);
+      for (let i = 0; i < pa.count; i++) {
+        const x = pa.getX(i), z = pa.getZ(i); let d1 = 9, d2 = 9, k1 = 0;
+        C.forEach(([cx, cz], k) => { const d = Math.hypot(x - cx, (z - cz) * 1.1); if (d < d1) { d2 = d1; d1 = d; k1 = k; } else if (d < d2) d2 = d; });
+        const seam = Math.min(1, (d2 - d1) / 0.025), g = tone[k1] * (0.82 + 0.22 * Math.exp(-d1 * 14)) * (0.55 + 0.45 * seam);
+        col.set([0.15 * g, 0.135 * g, 0.085 * g], i * 3);
+      }
+      shellG.setAttribute('color', new T.BufferAttribute(col, 3));
+    }
+    const shellM = Mats.lit({ vertexColors: true, roughness: 0.42 }, 'rock'), headM = Mats.lit({ color: new T.Color('#67624a'), roughness: 0.5 }, 'rock');
+    const headG = new T.SphereGeometry(1, 14, 10); headG.scale(0.13, 0.085, 0.08);
+    const turtles = Array.from({ length: NT }, () => { const g = new T.Group(), sh = new T.Mesh(shellG, shellM), hd = new T.Mesh(headG, headM); hd.position.set(0.5, 0.07, 0); hd.rotation.z = 0.5; g.add(sh, hd); g.visible = false; root.add(g);
+      return { g, x: NaN, z: 0, h: 0, v: 0.35, turn: 0, ph: r() * TAU, len: 0.75 + r() * 0.45, k: 0, up: -1e9, next: 15 + r() * 50, rang: false, ray: false }; });
+    /* (the last of them is a ray, as often as not: it glides a little faster, nearer the sand, and never comes up) */
+    turtles[NT - 1].ray = r() < 0.6; if (turtles[NT - 1].ray) { turtles[NT - 1].v = 0.55; turtles[NT - 1].len = 1.1 + r() * 0.5; }
+
     /* advance: t in seconds of scene time, cx the camera's x; returns splashes to show and hear */
     function update(t, dt, cx, opt = {}) {
       const out = [];
@@ -247,9 +323,33 @@ void main(){
         if (i >= nOut) S.k = 0;       /* a school called back in fades in */
         uSchool.value[i].set(S.x, S.z, S.h, S.k * (opt.day ?? 1));
       });
+      /* the turtles: in among the shallows a few metres out, keeping to their depth, turning slowly; up to breathe now
+         and then (by day: their shadows need the sun) */
+      const nTu = Math.round(NT * Math.min(1, (opt.fish ?? 0.5) * 1.6));
+      turtles.forEach((Tu, i) => {
+        const q = i * 4;
+        if (i >= nTu) { Tu.k = Math.max(0, Tu.k - dt * 0.5); if (Tu.k <= 0) { Tu.x = NaN; Tu.g.visible = false; } }
+        if (Tu.x !== Tu.x || Math.abs(Tu.x - cx) > 70) { if (i >= nTu) { iT.array[q + 3] = 0; return; } Tu.x = cx + (r() - 0.5) * 70; Tu.z = Layout.shoreZ(Tu.x) - (4 + r() * 9); Tu.h = r() * TAU; Tu.k = 0; }
+        const g = Layout.shoreDZ(Tu.x), along = Math.atan2(g, 1), sd = Layout.shoreZ(Tu.x) - Tu.z, keep = Math.max(-0.8, Math.min(0.8, (sd - 8) * 0.12));
+        Tu.turn += (r() - 0.5) * dt * 0.8; Tu.turn *= Math.pow(0.6, dt);
+        const sense = Math.cos(Tu.h - along) >= 0 ? 0 : Math.PI, want = along + sense + (sense ? -keep : keep);
+        Tu.h += (Math.atan2(Math.sin(want - Tu.h), Math.cos(want - Tu.h)) * 0.08 + Tu.turn) * dt;
+        Tu.x += Math.cos(Tu.h) * Tu.v * dt; Tu.z += Math.sin(Tu.h) * Tu.v * dt; Tu.ph += dt * 1.7;
+        if (i < nTu) Tu.k = Math.min(1, Tu.k + dt * 0.3);
+        /* up for a breath: 1 s rising, 4 s at the surface, 1 s going back down */
+        if (t > Tu.next && i < nTu && (opt.day ?? 1) > 0.2 && !Tu.ray) { Tu.up = t; Tu.next = t + 45 + r() * 90; Tu.rang = false; }
+        const e = t - Tu.up, at = e >= 0 && e < 6 ? Math.min(1, e, 6 - e) : 0;
+        if (at > 0 && !Tu.rang) { Tu.rang = true; out.push({ x: Tu.x + Math.cos(Tu.h) * 0.4 * Tu.len, z: Tu.z + Math.sin(Tu.h) * 0.4 * Tu.len, k: 0.12 }); }
+        /* (only the top of the shell and the head clear the water) */
+        Tu.g.visible = at > 0; if (at > 0) { Tu.g.position.set(Tu.x, -0.3 * Tu.len + 0.21 * Tu.len * at, Tu.z); Tu.g.rotation.set(0, -Tu.h, 0.08); Tu.g.scale.setScalar(Tu.len); }
+        iT.array[q] = Tu.x; iT.array[q + 1] = Tu.z; iT.array[q + 2] = Tu.h; iT.array[q + 3] = Tu.k * (1 - 0.7 * at) * (opt.day ?? 1);
+        iU.array[q] = Tu.ph; iU.array[q + 1] = Tu.len; iU.array[q + 2] = Tu.ray ? 1 : 0;
+      });
+      iT.needsUpdate = iU.needsUpdate = true;
       return out;
     }
-    return { update, get count() { return count; }, schools, jumps, setShells, lantern: (x, z, t) => sky.release(x, z, t), get lanterns() { return sky.count; } };
+    const turtleAt = (x, i = 0) => { const Tu = turtles[i]; Tu.x = x; Tu.z = Layout.shoreZ(x) - 6; Tu.h = 0; Tu.k = 1; return Tu; };
+    return { update, get count() { return count; }, schools, jumps, turtles, turtleAt, setShells, lantern: (x, z, t) => sky.release(x, z, t), get lanterns() { return sky.count; } };
   }
   return { build };
 })();

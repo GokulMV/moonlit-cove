@@ -4,7 +4,8 @@
    dusk, dragonflies and butterflies by day; gulls wheeling over the
    surf, cruising the coast and standing on the sand, sandpipers
    chasing the swash, ghost crabs on the night sand, bats over the
-   treeline, and now and then a pod of dolphins offshore. The camp's
+   treeline, now and then a pod of dolphins offshore, and a whale
+   further out, blowing, lifting its flukes, breaching. The camp's
    own fireflies, moths and butterflies stay with fx.js. Insects
    follow the Insects setting, everything else the Animals setting.
    ───────────────────────────────────────────────────────────── */
@@ -133,9 +134,45 @@ attribute vec4 iP, iQ;   /* where (x, y, z, heading) · pitch, bank, tail-beat p
 void main(){
   /* the tail stock and flukes beat up and down, more toward the tail */
   vec3 p = position; float u = aW.z;
-  p.y += sin(iQ.z - u*2.4)*u*u*0.13;
+  p.y += sin(iQ.z - u*2.4)*u*u*FLEX;
   place(p, normal, iP.xyz, iP.w, iQ.x, iQ.y, iQ.w);
 }`;
+  /* a whale's blow and the spray of its breaching: soft puffs of mist, each its own world size, rising and spreading
+     (a blow: a bushy column off the blowhole, drifting downwind) or thrown up and out and falling back (a splash),
+     lit white, brighter against the sun */
+  const MIST_VS = `
+attribute vec4 aS;   /* which puff, and three dice */
+uniform float uTime, uScale; uniform vec4 uMist[6], uMistK[6]; uniform vec3 uAmbF, uKeyColT, uKeyDirT; uniform vec4 uFog;
+varying float vA; varying vec3 vC;
+void main(){
+  int e = int(aS.x + 0.5); vec4 M = uMist[e], K = uMistK[e];
+  float tt = uTime - M.w, S = K.y, a = aS.w*6.2832, life, sz;
+  vec3 p, wind = vec3(K.z, 0.0, K.w);
+  if (K.x < 0.5){
+    life = 2.6 + 1.8*aS.y;
+    float hk = 0.3 + 0.7*aS.z, h = S*(1.0 - exp(-tt*2.2))*hk, r = (S*0.04 + h*0.22)*sqrt(aS.y)*(0.6 + 0.5*tt);
+    p = M.xyz + vec3(cos(a)*r, h, sin(a)*r) + wind*tt*(0.3 + 0.6*hk);
+    sz = (S*0.06 + h*0.12)*(0.7 + 0.6*aS.y)*(1.0 + 0.25*tt);
+  } else {
+    /* (most of it a dense white curtain round where it hit, the rest thrown wide; the mist hangs after) */
+    life = 1.8 + 1.6*aS.y;
+    float wide = step(0.62, aS.z), o = S*(0.05 + 0.12*aS.z + 0.3*wide*aS.z), up = S*(0.45 + 0.9*aS.y*aS.y);
+    p = M.xyz + vec3(cos(a)*(o*tt + S*0.12*aS.y), up*tt - 4.9*tt*tt*0.5, sin(a)*(o*tt + S*0.12*aS.y)) + wind*tt*0.5;
+    p.y = max(p.y, 0.15 + 0.3*aS.z);
+    sz = S*(0.08 + 0.09*tt)*(0.6 + 0.7*aS.z)*(1.0 - 0.4*wide);
+  }
+  float f = tt/life;
+  vA = tt > 0.0 && tt < life ? smoothstep(0.0, 0.06, f)*(1.0 - f)*(1.0 - f) : 0.0;
+  vec4 mv = modelViewMatrix*vec4(p, 1.0);
+  float px = sz*uScale/max(-mv.z, 0.1);
+  vA *= min(1.0, px*0.6);
+  float fw = pow(max(dot(normalize(p - cameraPosition), uKeyDirT), 0.0), 4.0), d = length(mv.xyz);
+  vC = mix(uAmbF*1.5 + uKeyColT*(0.55 + 1.1*fw), uFog.rgb, (1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))))*0.85);
+  gl_PointSize = clamp(px, 1.0, 256.0);
+  gl_Position = vA < 0.004 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
+}`;
+  const MIST_FS = `varying float vA; varying vec3 vC;
+void main(){ vec2 q = gl_PointCoord - 0.5; float r = length(q); if (r > 0.5) discard; float k = smoothstep(0.5, 0.0, r); gl_FragColor = vec4(vC, vA*k*k*0.42); }`;
   /* bats, dragonflies and butterflies fly paths worked out here from the time, about a home the CPU only moves when it is left far behind */
   const BAT_VS = `
 ${ORIENT}
@@ -444,6 +481,21 @@ void main(){
     for (const sd of [-1, 1]) {
       b.panel([[0.62, -0.1, sd * 0.18], [0.44, -0.12, sd * 0.18], [0.36, -0.24, sd * 0.42]], dark, U, [0, -1, 0]);
       b.panel([[-0.95, 0, sd * 0.01], [-1.13, 0, sd * 0.34], [-1.23, 0, sd * 0.31], [-1.12, 0, sd * 0.02]], dark, U, [0, 1, 0]);
+    }
+    return b.geo();
+  }
+
+  /* a humpback: a long, deep body with a blunt, knobbly head, long pale flippers, a small hump of a dorsal fin, broad
+     notched flukes; dark above, pale below (length 1, nose toward +x; aW.z how far back along it, for the tail's flex) */
+  function whaleGeo() {
+    const b = Build(), dark = [0.05, 0.055, 0.062], belly = [0.36, 0.37, 0.39], U = p => [0, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0];
+    b.lathe([[0.5, 0.01, 0.012, -0.006], [0.49, 0.036, 0.042, -0.012], [0.46, 0.066, 0.075, -0.014], [0.4, 0.092, 0.1, -0.012], [0.3, 0.11, 0.118, -0.008], [0.16, 0.118, 0.122, -0.004],
+      [0.02, 0.113, 0.115, 0], [-0.12, 0.097, 0.095, 0.004], [-0.24, 0.072, 0.067, 0.006], [-0.34, 0.049, 0.042, 0.006], [-0.42, 0.031, 0.024, 0.004], [-0.48, 0.02, 0.014, 0.002], [-0.52, 0.013, 0.009, 0]], 14,
+      (p, a) => mix3(dark, belly, sm(-0.2, -0.8, Math.cos(a)) * sm(-0.4, 0.15, p[0])), U);
+    b.panel([[-0.1, 0.092, 0], [-0.15, 0.124, 0], [-0.19, 0.13, 0], [-0.2, 0.085, 0]], dark, U, [0, 0, 1]);
+    for (const sd of [-1, 1]) {
+      b.panel([[0.22, -0.065, sd * 0.1], [0.14, -0.07, sd * 0.11], [-0.05, -0.11, sd * 0.39], [-0.01, -0.105, sd * 0.4]], [0.32, 0.33, 0.35], U, [0, -1, 0]);
+      b.panel([[-0.5, 0, sd * 0.004], [-0.53, 0, sd * 0.1], [-0.565, 0, sd * 0.2], [-0.6, 0, sd * 0.19], [-0.575, 0, sd * 0.08], [-0.565, 0, sd * 0.012]], dark, U, [0, 1, 0]);
     }
     return b.geo();
   }
@@ -862,7 +914,7 @@ void main(){
     /* ── dolphins: now and then by day or dusk, a small pod passes along the coast offshore, each one rolling up through the
        surface in an arc every few seconds (and sometimes leaping clear), with a splash as it breaks the water and goes back in ── */
     const dolphins = (() => {
-      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, GEN_FS, { GLOSS: 0.5 }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, GEN_FS, { GLOSS: 0.5, FLEX: 0.13 }), [['iP', 4], ['iQ', 4]]), A = H.A;
       const D = Array.from({ length: MAX }, () => ({ lat: 0, lag: 0, per: 4, ph: 0, size: 1, beat: 0, up: -1, down: -1 }));
       const pod = { on: false, n: 0, x: 0, x0: 0, dir: 1, off: 30, v: 4, t0: 0, next: 50 + rnd() * 70 };
       function start(t, cx, x) {
@@ -904,6 +956,80 @@ void main(){
       };
     })();
 
+    /* ── mist: whales' blows and the spray of a breach, puffs a few metres across that read from far off ── */
+    const mist = (() => {
+      const NE = 6, PE = 56, u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uMist: { value: Array.from({ length: NE }, () => new T.Vector4(0, -50, 0, -1e4)) }, uMistK: { value: Array.from({ length: NE }, () => new T.Vector4()) },
+        uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uKeyDirT: Mats.U.uKeyDirT, uFog: Mats.U.uFog };
+      const C = cloud(NE * PE, [['aS', 4]], new T.ShaderMaterial({ uniforms: u, vertexShader: MIST_VS, fragmentShader: MIST_FS, transparent: true, depthWrite: false })), a = C.A.aS.array;
+      for (let e = 0; e < NE; e++) for (let i = 0; i < PE; i++) { const k = (e * PE + i) * 4; a[k] = e; a[k + 1] = rnd(); a[k + 2] = rnd(); a[k + 3] = rnd(); }
+      let next = 0, last = -1e4;
+      return {
+        /* kind 0 a blow, 1 a splash; s its size in metres */
+        add(x, y, z, t, kind, s) { u.uMist.value[next].set(x, y, z, t); u.uMistK.value[next].set(kind, s, Layout.wind[0] * 1.6, Layout.wind[1] * 1.6); next = (next + 1) % NE; last = t; },
+        update(t, scale) { u.uScale.value = scale; C.p.visible = (t - last < 6 && t >= last) || warm > 0; },
+        shift(dx, dz) { for (const v of u.uMist.value) { v.x += dx; v.z += dz; } }
+      };
+    })();
+
+    /* ── a whale: now and then by day, one passes along the coast a few hundred metres out. It comes up to breathe a few
+       times, a bushy blow first and then its long back rolling through the surface with the hump of its fin, then
+       arches, lifts its flukes clear of the water and slides down deep for a while; now and then it bursts right out
+       of the sea instead, turns in the air and crashes back on its side ── */
+    const whales = (() => {
+      const H = herd(whaleGeo(), 1, mat(DOLPHIN_VS, GEN_FS, { GLOSS: 0.65, FLEX: 0.045 }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const w = { on: false, x: 0, off: 200, dir: 1, v: 1.6, size: 13, st: 'under', t0: 0, dur: 0, left: 0, first: true, beat: 0, next: 35 + rnd() * 60, blown: false, hit: false, top: false, pitch: 0, roll: 0, y: -6 };
+      const B = { breath: 7.5, dive: 7, breach: 5.5 };
+      function start(t, cx, x) {
+        const dir = rnd() < 0.5 ? 1 : -1;
+        Object.assign(w, { on: true, dir, x: x !== undefined ? x : cx - dir * (60 + rnd() * 140), off: 95 + rnd() * 200, v: 1.3 + rnd() * 1.1, size: 11.5 + rnd() * 3.5, st: 'under', t0: t, dur: 1 + rnd() * 3, left: 3 + Math.floor(rnd() * 3), first: true, y: -6 });
+      }
+      function go(st, t, dur) { w.st = st; w.t0 = t; w.dur = dur; w.blown = w.hit = w.top = false; }
+      return {
+        w, start,
+        get n() { return w.on && w.y > -5 ? 1 : 0; },
+        update(t, dt, cam, k, dens, calm) {
+          if (!w.on && !calm && k > 0.3 && dens > 0.02 && t > w.next) start(t, cam.x);
+          if (dens <= 0.02) w.on = false;
+          if (!w.on) { H.draw(0); return; }
+          w.x += w.dir * w.v * dt; w.beat += dt * TAU * 0.22;
+          const g = Layout.shoreDZ(w.x), z = Layout.shoreZ(w.x) - w.off, S = w.size, u = Math.min(1, (t - w.t0) / w.dur);
+          let y = -6, pitch = 0, roll = 0;
+          if (w.st === 'under') {
+            /* (its first time up on a visit, now and then, it breaches) */
+            if (u >= 1) { if (w.left > 0) { if (w.first && rnd() < 0.3) go('breach', t, B.breach); else go('breath', t, B.breath); w.first = false; } else go('dive', t, B.dive); }
+          } else if (w.st === 'breath') {
+            /* the head first (and the blow), then the back and the fin rolling over, and down */
+            const e = Math.sin(Math.PI * Math.min(1, u * 1.15));
+            y = -0.118 * S * 1.9 + 0.118 * S * 1.75 * Math.pow(Math.max(0, e), 0.6); pitch = 0.07 - 0.2 * u;
+            if (!w.blown && u > 0.1) { w.blown = true; mist.add(w.x + w.dir * 0.3 * S, 0.5, z, t, 0, 3.6 + S * 0.12); }
+            if (u >= 1) { w.left--; go('under', t, 9 + rnd() * 7); }
+          } else if (w.st === 'dive') {
+            /* it arches, the flukes come up out of the water, and it slides under, tail last */
+            y = -0.118 * S * 0.55 - S * 0.75 * sm(0.42, 1, u); pitch = -1.12 * sm(0.04, 0.5, u);
+            if (!w.top && u > 0.5) { w.top = true; mist.add(w.x - w.dir * 0.3 * S, 3, z, t, 1, 2.5); }
+            if (!w.hit && u > 0.86) { w.hit = true; mist.add(w.x - w.dir * 0.15 * S, 0.2, z, t, 1, 3); }
+            if (u >= 1) { w.st = 'deep'; w.t0 = t; w.dur = 60 + rnd() * 80; }
+          } else if (w.st === 'breach') {
+            /* up out of the sea at a steep slant, a turn in the air, and back down on its side in a burst of spray */
+            y = -0.45 * S + 0.56 * S * Math.sin(Math.PI * Math.min(1, u * 1.08)) - 0.25 * S * sm(0.7, 1, u); pitch = 1.15 - 1.3 * sm(0.25, 0.8, u); roll = -1.4 * sm(0.3, 0.75, u) * w.dir;
+            if (!w.blown && u > 0.12) { w.blown = true; mist.add(w.x + w.dir * 0.15 * S, 0.3, z, t, 1, 4.5); }
+            if (!w.hit && u > 0.72) { w.hit = true; mist.add(w.x + w.dir * 0.05 * S, 0.3, z, t, 1, 10); }
+            if (u >= 1) { w.left--; go('under', t, 8 + rnd() * 5); }
+          } else if (w.st === 'deep') {
+            /* back up again further along if it is still about, or gone */
+            if (u >= 1) { if (Math.abs(w.x - cam.x) < 260 && rnd() < 0.6) { w.left = 2 + Math.floor(rnd() * 3); w.first = true; go('under', t, 1); } else { w.on = false; w.next = t + (120 + rnd() * 200) / (0.4 + 1.6 * dens); } }
+          }
+          if (Math.abs(w.x - cam.x) > 700) { w.on = false; w.next = t + (60 + rnd() * 120) / (0.4 + 1.6 * dens); }
+          w.y = y; w.pitch = pitch; w.roll = roll;
+          const away = w.st === 'dive' ? w.dir * 1.15 * sm(0.0, 0.45, u) : 0;    /* (diving, it turns out to sea, so its flukes show their face) */
+          A.iP[0] = w.x; A.iP[1] = y; A.iP[2] = z; A.iP[3] = Math.atan2(-g * w.dir, w.dir) + away;
+          A.iQ[0] = pitch; A.iQ[1] = roll; A.iQ[2] = w.beat; A.iQ[3] = y > -0.118 * S * 1.5 - 0.2 || w.st === 'dive' || w.st === 'breach' ? S : 0;
+          H.draw(A.iQ[3] > 0 ? 1 : 0);
+        },
+        shift(dx) { w.x += dx; }
+      };
+    })();
+
     /* ── every frame ── */
     const out = [];         /* splashes this frame, for the water's ripples */
     let near = true, cut = false, lastDI = -1, lastDA = -1, nowT = 0, nowCam = null;
@@ -934,22 +1060,25 @@ void main(){
       pipers.update(t, dt, wt, cam, Math.round(3 * dA * sm(-4, 3, sAlt) * (1 - 0.6 * rain)), near, swash, cut);
       crabs.update(t, dt, wt, cam, Math.round(48 * dA), (o.night ?? (1 - sm(-6, 8, sAlt))) * (1 - 0.6 * rain), swash, cut);
       dolphins.update(t, dt, cam, sm(-6, 4, sAlt), dA, o.calm, splash);
-      spray.update(t, scale);
+      whales.update(t, dt, cam, sm(-4, 6, sAlt), dA, o.calm);
+      spray.update(t, scale); mist.update(t, scale);
       near = cut = false; if (warm > 0) warm--;
       return out;
     }
     /* the whole scene moved (the camp put somewhere else): carry every creature with it */
     function shift(dx, dz) {
-      for (const s of [flies, gnats, bats, dragon, butter, gulls, crabs, spray]) s.shift(dx, dz);
-      pipers.shift(dx); dolphins.shift(dx);
+      for (const s of [flies, gnats, bats, dragon, butter, gulls, crabs, spray, mist]) s.shift(dx, dz);
+      pipers.shift(dx); dolphins.shift(dx); whales.shift(dx);
       if (lastCx !== null) lastCx += dx; th.vx += dx; th.vz += dz;
     }
     return {
       update, shift, group: G,
       /* a pod of dolphins now, off x (or coming along toward the camera) */
       pod(x) { dolphins.start(Mats.U.uTime.value, lastCx ?? 0, x); },
-      get counts() { return { fireflies: flies.n, gnats: gnats.n, dragonflies: dragon.n, butterflies: butter.n, bats: bats.n, gulls: gulls.n, sandpipers: pipers.n, crabs: crabs.n, dolphins: dolphins.n }; },
-      debug: { gulls, pipers, crabs, dolphins, flies, gnats, bats, dragon, butter }
+      /* a whale now, off x (or coming along toward the camera) */
+      whale(x) { whales.start(Mats.U.uTime.value, lastCx ?? 0, x); },
+      get counts() { return { fireflies: flies.n, gnats: gnats.n, dragonflies: dragon.n, butterflies: butter.n, bats: bats.n, gulls: gulls.n, sandpipers: pipers.n, crabs: crabs.n, dolphins: dolphins.n, whales: whales.n }; },
+      debug: { gulls, pipers, crabs, dolphins, whales, mist, flies, gnats, bats, dragon, butter }
     };
   }
   return { build };
