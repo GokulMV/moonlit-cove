@@ -363,7 +363,7 @@ void crColour(inout vec3 c){
   float nk = crNear(4.0, 0.3);
   if (pat < 1.5){ vec4 f = crFur(); c *= (0.82 + 0.36*f.g)*(0.9 + 0.2*f.b)*mix(1.0, 0.8 + 0.3*f.r, nk); }
   else if (pat < 2.5){ float fs = vFur.x > 0.0 ? vFur.x : 0.0056; c *= mix(1.0, crFeath(fs).x, crNear(fs*400.0, fs*60.0)); }
-  else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); c *= mix(1.0, (0.88 + 0.2*ce.z)*mix(0.62, 1.0, smoothstep(0.02, 0.16, ce.y)), crNear(vFur.y*500.0, vFur.y*60.0)); }
+  else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); c *= mix(1.0, (0.92 + 0.13*ce.z)*mix(0.74, 1.0, smoothstep(0.02, 0.16, ce.y)), crNear(vFur.y*400.0, vFur.y*60.0)); }
   else if (pat < 4.5){ c *= mix(1.0, 0.86 + 0.24*vnz(vRest*140.0) + 0.08*vnz(vRest*600.0), nk); c = mix(c, c*vec3(1.12, 0.92, 0.9), 0.5*smoothstep(0.55, 0.8, vnz(vRest*55.0 + 3.0))*nk); }
   else if (pat < 5.5) c *= 0.92 + 0.14*vnz(vRest*vec3(60.0, 500.0, 60.0));
   else if (pat < 6.5){
@@ -515,8 +515,10 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
   /* ── posing: a pose is every bone's turn (its quaternion, from the rest pose) and how far the root has moved ── */
   const _q = new T.Quaternion(), _q2 = new T.Quaternion(), _e = new T.Euler(), _v = new T.Vector3();
   class Pose {
-    constructor(S) { this.S = S; this.q = new Float32Array(S.bones.length * 4); this.off = new T.Vector3(); this.reset(); }
-    reset() { const q = this.q; for (let i = 0; i < q.length; i += 4) { q[i] = q[i + 1] = q[i + 2] = 0; q[i + 3] = 1; } this.off.set(0, 0, 0); return this; }
+    constructor(S) { this.S = S; this.q = new Float32Array(S.bones.length * 4); this.sc = new Float32Array(S.bones.length); this.off = new T.Vector3(); this.reset(); }
+    reset() { const q = this.q; for (let i = 0; i < q.length; i += 4) { q[i] = q[i + 1] = q[i + 2] = 0; q[i + 3] = 1; } this.sc.fill(1); this.off.set(0, 0, 0); return this; }
+    /* a bone (and all it carries) grown or shrunk about its joint: a tongue drawn in, a throat's fan furled */
+    scale(b, k) { this.sc[this.S.ix[b]] = k; return this; }
     /* set a bone's turn (Euler angles, radians); turn it further about its own axes; or about its parent's, first */
     set(b, x = 0, y = 0, z = 0, o = 'XYZ') { _q.setFromEuler(_e.set(x, y, z, o)).toArray(this.q, this.S.ix[b] * 4); return this; }
     turn(b, x = 0, y = 0, z = 0, o = 'XYZ') { const i = this.S.ix[b] * 4; _q2.fromArray(this.q, i).multiply(_q.setFromEuler(_e.set(x, y, z, o))).toArray(this.q, i); return this; }
@@ -534,8 +536,8 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     at(b, rest, out = new T.Vector3()) { const Q = new T.Quaternion(); this.world(b, out, Q); return out.add(new T.Vector3(...(rest.isVector3 ? rest.toArray() : rest)).sub(this.S.head[b]).applyQuaternion(Q)); }
     /* turn bone b so that in the model's frame it is turned by Q */
     aim(b, Q) { const p = this.S.par[b]; if (!p) return this.put(b, Q); const Qp = new T.Quaternion(); this.world(p, new T.Vector3(), Qp); return this.put(b, Qp.invert().multiply(Q)); }
-    apply() { const S = this.S; for (let i = 0; i < S.bones.length; i++) S.bones[i].quaternion.fromArray(this.q, i * 4); S.by[S.root].position.copy(S.head[S.root]).add(this.off); }
-    copy(o) { this.q.set(o.q); this.off.copy(o.off); return this; }
+    apply() { const S = this.S; for (let i = 0; i < S.bones.length; i++) { S.bones[i].quaternion.fromArray(this.q, i * 4); S.bones[i].scale.setScalar(this.sc[i]); } S.by[S.root].position.copy(S.head[S.root]).add(this.off); }
+    copy(o) { this.q.set(o.q); this.sc.set(o.sc); this.off.copy(o.off); return this; }
     /* toward pose o by k */
     mix(o, k) {
       const a = this.q, b = o.q;
@@ -544,6 +546,7 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
         let x = a[i] + (b[i] * s - a[i]) * k, y = a[i + 1] + (b[i + 1] * s - a[i + 1]) * k, z = a[i + 2] + (b[i + 2] * s - a[i + 2]) * k, w = a[i + 3] + (b[i + 3] * s - a[i + 3]) * k;
         const l = Math.hypot(x, y, z, w) || 1; a[i] = x / l; a[i + 1] = y / l; a[i + 2] = z / l; a[i + 3] = w / l;
       }
+      for (let i = 0; i < this.sc.length; i++) this.sc[i] += (o.sc[i] - this.sc[i]) * k;
       this.off.lerp(o.off, k); return this;
     }
   }
