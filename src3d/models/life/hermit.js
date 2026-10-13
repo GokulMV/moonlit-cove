@@ -316,9 +316,15 @@
     /* for drawing many: the shell, and the body as it stands, each as one geometry (and where its mouth is) */
     if (o.parts) {
       g.updateMatrixWorld(true);
-      const bodyParts = [];
-      body.traverse(m => { if (!m.isMesh) return; const c = m.geometry.attributes.color ? [1, 1, 1] : m.material.color.toArray(); bodyParts.push({ geo: m.geometry, m: m.matrixWorld.clone(), c }); });
-      g.userData.parts = { shell: M.mergeC([{ geo: S.outer }, { geo: S.inner }, { geo: softG }]), body: M.mergeC(bodyParts), ap: new T.Vector3(0.001, yA - 0.002, 0) };
+      /* (and the body's walking legs tagged, aLeg: where the leg joins the body, and which leg it is, 1–4, so the many
+         can step: 0 for the rest) */
+      const legOf = new Map(); legs.forEach((L, k) => L.J[0].traverse(m => { if (m.isMesh) legOf.set(m, { k: 1 + L.i + (L.sd > 0 ? 2 : 0), hip: new T.Vector3().setFromMatrixPosition(L.J[0].matrixWorld) }); }));
+      const bodyParts = [], tags = [];
+      body.traverse(m => { if (!m.isMesh) return; const c = m.geometry.attributes.color ? [1, 1, 1] : m.material.color.toArray(); bodyParts.push({ geo: m.geometry, m: m.matrixWorld.clone(), c }); tags.push({ n: m.geometry.attributes.position.count, t: legOf.get(m) }); });
+      const bodyG = M.mergeC(bodyParts), aLeg = new Float32Array(bodyG.attributes.position.count * 4);
+      let o4 = 0; for (const { n, t } of tags) { for (let i = 0; i < n; i++, o4 += 4) if (t) aLeg.set([t.hip.x, t.hip.y, t.hip.z, t.k], o4); }
+      bodyG.setAttribute('aLeg', new T.BufferAttribute(aLeg, 4));
+      g.userData.parts = { shell: M.mergeC([{ geo: S.outer }, { geo: S.inner }, { geo: softG }]), body: bodyG, ap: new T.Vector3(0.001, yA - 0.002, 0), legLen: 0.045 * KB };
     }
     return g;
   });

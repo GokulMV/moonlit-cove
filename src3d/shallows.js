@@ -49,7 +49,7 @@ void main(){
        they lie flat, fanned out both sides of the stipe, and make the mat */
     float b = aB.z, t = aB.x, h1 = hsh(b + ph*3.1), h2 = hsh(b*1.7 + ph);
     float fl = 0.35*sin(uTime*(1.3 + 0.6*h2) + b*1.9 + ph);
-    float ang = aB.y*(0.22 + 0.4*h1) + fl*(lying ? 0.3 : 1.0);
+    float ang = aB.y*(0.22 + 0.4*h1) + fl*(lying ? 0.65 : 1.0);
     vec3 bd = lying ? D*cos(ang) + S*sin(ang) : normalize((D*cos(ang) + S*sin(ang))*0.75 + 0.6*Y);
     vec3 ac = normalize(cross(bd, Y)), bn = cross(ac, bd);
     float bl = (0.3 + 0.26*h2)*(0.55 + 0.45*smoothstep(0.0, 0.35, aH))*(0.8 + 1.4*iL.z);
@@ -128,8 +128,10 @@ void main(){
   float edge = 0.8 + 0.12*sin(an*3.0 + vSeed) + 0.08*sin(an*7.0 + vSeed*2.3);
   float dens = smoothstep(edge, edge - 0.45, r)*smoothstep(0.55, 0.85, vDeep)*smoothstep(vRock*0.8, vRock*1.15, length(vQ));
   if (dens < 0.02) discard;
-  /* (the whole bed breathes a little with the swell) */
-  vec2 p = vQ + vec2(0.05*sin(uTime*0.45 + vQ.y*1.7), 0.02*sin(uTime*0.6 + vQ.x*1.3));
+  /* (the whole bed moves with the water: streaming to and fro as each swell passes over, the surge running across it in
+     a wave, and the blades in it lifting and settling, each with the water round it) */
+  vec2 p = vQ + vec2(0.05*sin(uTime*0.45 + vQ.y*1.7), 0.02*sin(uTime*0.6 + vQ.x*1.3))
+         + vec2(0.17*sin(uTime*1.05 - vQ.x*1.3 + vSeed) + 0.07*sin(uTime*1.7 - vQ.y*2.0 + vSeed*2.0), 0.07*sin(uTime*0.85 + vQ.x*1.1 - vQ.y*0.7));
   /* under the top blades, the bed: more of them, too crowded and too deep to tell apart */
   float under = dens*(0.3 + 0.32*vn(p*vec2(1.1, 2.4)) + 0.2*vn(p*vec2(3.7, 8.5)));
   vec3 alb = mix(vec3(0.05, 0.037, 0.012), vec3(0.1, 0.074, 0.024), vn(p*2.7 + 4.0));
@@ -146,7 +148,8 @@ void main(){
       vec2 c = cid + vec2(float(i), float(j));
       if (hh(c, 51.0 + sl) > 0.3 + 0.75*dens) continue;
       vec2 o = (c + vec2(0.1 + 0.4*hh(c, 1.0 + sl), 0.15 + 0.7*hh(c, 173.0 + sl)))*cs;
-      float ang = (hh(c, 97.0 + sl) - 0.5)*0.3 + 0.5*(vn(c*0.35 + 11.0) - 0.5), len = 0.32 + 0.3*hh(c, 33.0 + sl), wm = 0.025 + 0.02*hh(c, 19.0 + sl), bend = (hh(c, 77.0 + sl) - 0.5)*0.16;
+      float sw = sin(uTime*(0.9 + 0.6*hh(c, 61.0 + sl)) + hh(c, 62.0 + sl)*6.283);
+      float ang = (hh(c, 97.0 + sl) - 0.5)*0.3 + 0.5*(vn(c*0.35 + 11.0) - 0.5) + 0.2*sw, len = 0.32 + 0.3*hh(c, 33.0 + sl), wm = 0.025 + 0.02*hh(c, 19.0 + sl), bend = (hh(c, 77.0 + sl) - 0.5)*0.16 + 0.12*sin(uTime*1.3 + hh(c, 63.0 + sl)*6.283);
       vec2 d = q - o, ax = vec2(cos(ang), sin(ang));
       float t = dot(d, ax)/len;
       if (t < -0.06 || t > 1.02) continue;
@@ -292,9 +295,21 @@ void main(){
     /* (the shell and the crab as models/life/hermit.js builds them, each one geometry; ap: the middle of the shell's
        mouth, where the crab draws in) */
     const HP = Models.make('life/hermit', { lite: true, parts: true }).userData.parts, AP = HP.ap;
-    const NH = 10, shellI = new T.InstancedMesh(HP.shell, Mats.lit({ vertexColors: true, roughness: 0.38 }), NH), bodyI = new T.InstancedMesh(HP.body, Mats.lit({ vertexColors: true, roughness: 0.5 }), NH);
+    /* (the body's material: as the others, but its walking legs step, each about where it joins the body: swung fore and
+       aft and lifted as it comes forward, the pairs out of step, by each crab's own gait, iGait: phase and how much) */
+    const bodyM = Mats.lit({ vertexColors: true, roughness: 0.5 }), ob = bodyM.onBeforeCompile, LEGL = HP.legLen.toFixed(4);
+    bodyM.onBeforeCompile = (sh, rr) => { ob(sh, rr); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLeg; attribute vec2 iGait;').replace('#include <begin_vertex>', `#include <begin_vertex>
+  if (aLeg.w > 0.5){
+    float li = aLeg.w - 1.0, side = li > 1.5 ? 1.0 : -1.0, k = mod(li, 2.0), ph = iGait.x + k*3.1416 + (side > 0.0 ? 1.5708 : -1.5708);
+    vec3 q = transformed - aLeg.xyz; float outk = clamp(length(q)/${LEGL}, 0.0, 1.0), sw = sin(ph)*0.32*iGait.y, cs = cos(sw), sn = sin(sw);
+    q = vec3(q.x*cs + q.z*sn, q.y + max(cos(ph), 0.0)*0.12*${LEGL}*iGait.y*outk*outk, -q.x*sn + q.z*cs);
+    transformed = aLeg.xyz + q;
+  }`); };
+    bodyM.customProgramCacheKey = () => 'art-hermit-legs';
+    const NH = 10, shellI = new T.InstancedMesh(HP.shell, Mats.lit({ vertexColors: true, roughness: 0.38 }), NH), bodyI = new T.InstancedMesh(HP.body, bodyM, NH);
+    const gaitA = new T.InstancedBufferAttribute(new Float32Array(NH * 2), 2); gaitA.setUsage(T.DynamicDrawUsage); HP.body.setAttribute('iGait', gaitA);
     shellI.count = bodyI.count = 0; shellI.frustumCulled = bodyI.frustumCulled = false; root.add(shellI, bodyI);
-    const crabs = Array.from({ length: NH }, () => ({ x: NaN, z: 0, h: 0, st: 'walk', tm: 0, out: 1, size: 1.8 + r() * 0.8, held: false }));
+    const crabs = Array.from({ length: NH }, () => ({ x: NaN, z: 0, h: 0, st: 'walk', tm: 0, out: 1, size: 1.8 + r() * 0.8, held: false, gait: r() * 6, ga: 0, turn: 0 }));
     const m4 = new T.Matrix4(), mB = new T.Matrix4(), mS = new T.Matrix4(), mT = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), p3 = new T.Vector3();
     function place(c, cx) { for (let k = 0; k < 12; k++) { const x = cx + (r() - 0.5) * 50, sz = Layout.shoreZ(x), z = sz + 0.9 + r() * 2.4; if (world && world.massif(x, z) > 0.05) continue; if (Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 4) continue; Object.assign(c, { x, z, h: r() * TAU, st: 'walk', tm: 2 + r() * 4, out: 1 }); return; } }
     let lastT = null;
@@ -308,18 +323,28 @@ void main(){
         /* (a walker near: in it goes) */
         const near = cam.y < Math.max(0, world ? world.land(cam.x, cam.z) : 0) + 3 && Math.hypot(c.x - cam.x, c.z - cam.z) < 2.2;
         if (near) { c.st = 'hide'; c.tm = 2 + r() * 3; }
-        if (c.st === 'walk') { c.x += Math.cos(c.h) * 0.06 * dt; c.z += Math.sin(c.h) * 0.06 * dt; c.h += (r() - 0.5) * dt * 2; const sz = Layout.shoreZ(c.x); if (c.z < sz + 0.6 || c.z > sz + 3.6) c.h += Math.PI * dt * 2; if ((c.tm -= dt) <= 0) { c.st = 'stop'; c.tm = 1 + r() * 4; } c.out = Math.min(1, c.out + dt * 3); }
+        /* (walking: a slow amble along a gentle curve, its curve changing now and then, never a jitter; turned back up or
+           down the beach when it strays from the tide line; its legs stepping, a step every 3 cm or so) */
+        if (c.st === 'walk') {
+          c.x += Math.cos(c.h) * 0.06 * dt; c.z += Math.sin(c.h) * 0.06 * dt;
+          if (r() < dt * 0.6) c.turn = (r() - 0.5) * 0.9;
+          const sz = Layout.shoreZ(c.x); c.h += (c.z < sz + 0.6 || c.z > sz + 3.6 ? 1.2 : c.turn) * dt;
+          c.gait += 0.06 * dt * (Math.PI * 2 / 0.03);
+          if ((c.tm -= dt) <= 0) { c.st = 'stop'; c.tm = 1 + r() * 4; } c.out = Math.min(1, c.out + dt * 3);
+        }
         else if (c.st === 'stop') { if ((c.tm -= dt) <= 0) { c.st = 'walk'; c.tm = 2 + r() * 5; } c.out = Math.min(1, c.out + dt * 3); }
         else if (c.st === 'hide') { c.out = Math.max(0, c.out - dt * 5); if (!near && (c.tm -= dt) <= 0) c.st = 'stop'; }
+        c.ga += ((c.st === 'walk' ? 1 : 0) - c.ga) * Math.min(1, dt * 6);
         e.set(0, -c.h, 0); q.setFromEuler(e); sc.setScalar(c.size); p3.set(c.x, 0.0, c.z); m4.compose(p3, q, sc); shellI.setMatrixAt(n, m4);
         /* (the crab drawn in toward the middle of the shell's mouth, smaller and further in the more it hides; never to
            nothing, as a zero scale leaves its normals undefined) */
         const o = Math.max(0.06, c.out), k = 0.14 + 0.86 * o;
         mB.makeTranslation(AP.x, AP.y, AP.z).multiply(mS.makeScale(k, k, k)).multiply(mT.makeTranslation(-AP.x - 0.005 * (1 - o), -AP.y, -AP.z));
         sc.setScalar(c.size); m4.compose(p3, q, sc).multiply(mB); bodyI.setMatrixAt(n, m4);
+        gaitA.array[n * 2] = c.gait % (Math.PI * 2); gaitA.array[n * 2 + 1] = c.ga * o;
         c.slot = n; n++;
       }
-      shellI.count = bodyI.count = n; shellI.instanceMatrix.needsUpdate = bodyI.instanceMatrix.needsUpdate = true;
+      shellI.count = bodyI.count = n; shellI.instanceMatrix.needsUpdate = bodyI.instanceMatrix.needsUpdate = true; gaitA.needsUpdate = true;
     }
     /* for picking up (inspect.js); thrown in the sea, it comes back up the beach somewhere further along */
     function pickables(list, cam) {
