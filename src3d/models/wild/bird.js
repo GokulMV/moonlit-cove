@@ -147,7 +147,7 @@ const Bird = (() => {
       toeShapes.push({ cap: [[F[0], F[1], hz], ht], r: [lg.r * 0.65, lg.r * 0.4], bone: 'ha' + X, tag: 'toe', k: lg.r * 0.3 }, { cap: [ht, [ht[0] - lg.claw, 0.001, hz]], r: [lg.r * 0.36, lg.r * 0.06], bone: 'ha' + X, tag: 'claw', k: lg.r * 0.1 });
     }
     const feet = R.sculpt(toeShapes, { name: 'feet', S, cell: lg.cell || 0.0008, tau: 0.0015,
-      paint: (x, y, z, nx, ny, nz, tg) => (tg.claw || 0) > 0.5 ? { col: sp.paint.claw || lin('#1c1916'), mat: [0.35, 0.4, PAT.horn, 0], fur: 0 } : { col: sp.paint.leg, mat: [0.6, 0.15, PAT.scale, 0], fur: 0, comb: [0, 0, 0], scale: true } });
+      paint: (x, y, z, nx, ny, nz, tg) => (tg.claw || 0) > 0.5 ? { col: sp.paint.claw || lin('#1c1916'), mat: [0.35, 0.4, PAT.horn, 0], fur: 0 } : { col: typeof sp.paint.leg === 'function' ? sp.paint.leg(x, y, z, tg) : sp.paint.leg, mat: [0.6, 0.15, PAT.scale, 0], fur: 0, comb: [0, 0, 0], scale: true } });
     /* (the leg's scales: their size, and how domed, for the scale pattern) */
     feet.raw = () => [0, lg.scale || lg.r * 0.55, 0.5, 0];
 
@@ -178,7 +178,7 @@ const Bird = (() => {
     for (const s of [-1, 1]) for (let i = 0; i < NSC; i++) {
       const f = i / Math.max(1, NSC - 1), L = Sd.len * (0.62 - 0.2 * f), w = Sd.w * 0.4, mS = m0F + gapM * (STACK + 1 + f * 3);
       const root = onto(V(wg.sh[0] + 0.02 - 0.09 * f, cy + ry, s * rz * (0.18 + 0.6 * f)), m0F + gapM * STACK * 0.5), dir = V(-1, -0.04 - 0.1 * f, s * (0.04 + 0.3 * f)).normalize();
-      for (let k = 0; k < 4; k++) dir.copy(onto(root.clone().addScaledVector(dir, L * 0.5), mS).sub(root).normalize());
+      for (let k = 0; k < 4; k++) dir.copy(onto(root.clone().addScaledVector(dir, L * 0.75), mS).sub(root).normalize());
       const nrm = grad(root.clone().addScaledVector(dir, L * 0.5)).add(V(0, 0.3, 0)); nrm.addScaledVector(dir, -nrm.dot(dir)).normalize();
       const across = new T.Vector3().crossVectors(dir, nrm).multiplyScalar(s).normalize();
       const g = M.foil(12, 8, t => { const ww = w * shapeW(t), p = root.clone().addScaledVector(dir, L * t).addScaledVector(nrm, -0.1 * L * t * t);
@@ -232,7 +232,8 @@ const Bird = (() => {
           const root = Pf.at(d.par, d.root), k = d.kind, a = k === 'tert' ? (FS.tert ?? 0.04) : a0 + (a1 - a0) * d.f + (k === 'cov' ? 0.2 : k === 'mcov' ? 0.32 : 0);
           const dir = k === 'prim' || k === 'pcov' ? V(TT.x, TT.y + ry * 0.15 * (1 - d.f), s * rz * (0.18 + 0.2 * (1 - d.f))).sub(root).normalize() : V(-Math.cos(a), -Math.sin(a), 0);
           const m = m0 + dm * rank(d);
-          for (let i = 0; i < 4; i++) dir.copy(onto(root.clone().addScaledVector(dir, d.L * 0.5), m).sub(root).normalize());
+          /* (laid so that it meets the body three quarters along: the tip lifts little, the middle sinks a little) */
+          for (let i = 0; i < 4; i++) dir.copy(onto(root.clone().addScaledVector(dir, d.L * 0.75), m).sub(root).normalize());
           /* (each feather's face turned up a little from the body's, so its inner vane, toward the wing's leading edge,
              tucks in under the feathers above it) */
           const tilt = { prim: 0.2, pcov: 0.4, sec: 0.35, cov: 0.55, mcov: 0.6, tert: 0.8 }[k] ?? 0.4;
@@ -272,8 +273,9 @@ const Bird = (() => {
       const Qb = new T.Quaternion(); Pz.world('body', V(), Qb); const D = (x, y) => V(x, y, 0).normalize().applyQuaternion(Qb);
       for (const s of [-1, 1]) {
         const X = side(s); Pz.set('th' + X, 0, 0, -0.3 * k);
-        const kn = Pz.world('tb' + X), back = sp.tuck === 'back';
-        const an = kn.clone().addScaledVector(D(back ? -0.88 : 0.35, back ? -0.42 : -0.94), LT), ft = an.clone().addScaledVector(D(back ? -1 : -0.96, back ? 0.12 : 0.28), LM), tt = ft.clone().addScaledVector(D(back ? -0.8 : -0.5, back ? 0.6 : 0.86), LO);
+        const kn = Pz.world('tb' + X), back = sp.tuck === 'back', trail = sp.tuck === 'trail';
+        /* (tucked forward under the belly, back under the tail, or — herons, egrets — trailed straight out behind) */
+        const an = kn.clone().addScaledVector(trail ? D(-0.96, -0.28) : D(back ? -0.88 : 0.35, back ? -0.42 : -0.94), LT), ft = an.clone().addScaledVector(trail ? D(-1, -0.04) : D(back ? -1 : -0.96, back ? 0.12 : 0.28), LM), tt = ft.clone().addScaledVector(trail ? D(-1, -0.12) : D(back ? -0.8 : -0.5, back ? 0.6 : 0.86), LO);
         const rest = [kn, S.head['tm' + X].clone(), S.head['to' + X].clone(), S.tail['to' + X].clone()].map(v => v.clone());
         R.chainTo(Pz, ['tb' + X, 'tm' + X, 'to' + X], [kn, an, ft, tt].map((v, i) => i ? rest[i].clone().lerp(v, k).toArray() : v.toArray()));
         Pz.set('ha' + X, 0, 0, 1.2 * k);
@@ -282,7 +284,7 @@ const Bird = (() => {
     const FWD = V(...(sp.head.fwd || [1, 0, 0])).normalize(), NECK = ['n1', ...np.slice(1, -1).map((p, i) => 'n' + (i + 2))];
     /* the head turned to look along dir, the neck sharing the turn; or the bill brought to a point */
     /* (the neck's own lift: its base raised and its top bent back down, in an S, the head kept as it looks) */
-    const LIFT = nk.lift || 0;
+    const LIFT = nk.lift || 0, FLIFT = nk.flyLift ?? LIFT * 0.5;
     const look = (Pz, dir, k = 1, lift = LIFT) => {
       const d = dir.clone().normalize(), sd = new T.Vector3().crossVectors(d, V(0, 1, 0)); if (sd.lengthSq() < 1e-6) sd.set(0, 0, 1); sd.normalize();
       const Wq = R.frameTo(FWD, V(0, 0, 1), d, sd), Qb = new T.Quaternion(); Pz.world('body', V(), Qb);
@@ -304,7 +306,28 @@ const Bird = (() => {
     };
 
     const flapHz = sp.flap ? sp.flap.hz : 3, amp = sp.flap ? sp.flap.amp : 0.9;
+    /* on the ground: each foot in turn lifted, carried forward and set down (in place: the planted foot slides back
+       under the body), the body rocking and bobbing with the steps; the head held still while the body passes under it
+       and then shot forward, twice a stride (W.headBob, as the neck's S drawn in and let out). W: { hz, stride (in
+       toe lengths), lift, pitch (more than at rest), headBob, gaze, duty (the part of a stride a foot is down) } */
+    const stepping = (Pz, t, W = {}) => {
+      const hz = W.hz ?? 1.4, L = (W.stride ?? 1) * lg.toe[1] * 2.6, lift = (W.lift ?? 0.3) * L, ph = t * hz, duty = W.duty ?? 0.62, pp = sp.perch || {};
+      const pitch = (pp.pitch ?? 0.6) + (W.pitch ?? 0), footX = pp.footX ?? (lg.foot[0] + 0.01), bob = Math.cos(TAU * 2 * ph);
+      perchBody(Pz, t, pitch, 0);
+      Pz.off.y += -0.05 * L * bob; Pz.set('body', 0.05 * Math.sin(TAU * ph), 0.05 * Math.sin(TAU * ph), pitch + 0.025 * bob);
+      for (const s of [-1, 1]) {
+        const u = ((ph + (s > 0 ? 0.5 : 0)) % 1 + 1) % 1; let x, y, curl;
+        if (u < duty) { x = L * (0.5 - u / duty); y = 0; curl = 0.02; }
+        else { const v = (u - duty) / (1 - duty); x = L * (-0.5 + v); y = lift * Math.sin(Math.PI * v); curl = 0.7 * Math.sin(Math.PI * Math.min(1, v * 1.3)); }
+        legTo(Pz, s, V(footX + x, lg.foot[1] + y, s * lg.hip[2] * (pp.stance ?? 1)), curl, qE(0, 0, y > 0 ? -0.5 * Math.sin(Math.PI * (u - duty) / (1 - duty)) : 0));
+      }
+      const hs = ((2 * ph) % 1 + 1) % 1, hb = hs < 0.7 ? hs / 0.7 : 1 - (hs - 0.7) / 0.3;
+      look(Pz, FWD.clone().add(V(0, (W.gaze ?? pp.gaze ?? 0), 0.15 * wave(t, 3, 0.5))), 1, LIFT + (W.headBob ?? 0.25) * hb);
+      tailPose(Pz, (pp.tail ?? 0.1) + 0.06 * bob, 0.15); face(Pz, t);
+    };
     const clips = {
+      walk: (Pz, t) => stepping(Pz, t, sp.walk),
+      run: (Pz, t) => { stepping(Pz, t, Object.assign({ hz: 2.6, stride: 1.8, lift: 0.4, pitch: -0.25, duty: 0.42, headBob: 0.05 }, sp.run || {})); for (const s of [-1, 1]) wing(Pz, s, { f: 0.85, lift: 0.2 }); },
       perch: (Pz, t) => {
         perchBody(Pz, t);
         look(Pz, FWD.clone().add(V(0, ((sp.perch && sp.perch.gaze) || 0) + 0.15 * wave(t, 5, 0.4), 0.9 * wave(t, 7, 0.35))), 1);
@@ -316,17 +339,17 @@ const Bird = (() => {
         const ph = t * flapHz, c = Math.cos(TAU * ph), sn = Math.sin(TAU * ph), up = 0.5 + 0.5 * c, dn = 1 - up;
         Pz.off.set(0, 0.0 + 0.012 * sn * (sp.size || 1), 0); Pz.set('body', 0, 0, 0.04 + 0.03 * sn);
         for (const s of [-1, 1]) wing(Pz, s, { f: 0.08 + 0.3 * Math.max(0, -sn) * up, lift: amp * (c * 0.55 + 0.1), hand: 0.25 * Math.max(0, -sn), sweep: 0.1 * sn, fan: 0.4 * dn, twist: 0.25 * sn });
-        tailPose(Pz, -0.02, 0.35); legsUp(Pz); look(Pz, FWD.clone().add(V(0, -0.05, 0)), 0.7); face(Pz, t);
+        tailPose(Pz, -0.02, 0.35); legsUp(Pz); look(Pz, FWD.clone().add(V(0, -0.05, 0)), 0.7, FLIFT); face(Pz, t);
       },
       glide: (Pz, t) => {
         Pz.set('body', 0.04 * wave(t, 3, 0.4), 0, 0.02);
         for (const s of [-1, 1]) wing(Pz, s, { f: 0.04, lift: (sp.dihedral ?? 0.08) + 0.03 * wave(t, 4 + s, 0.6), fan: 0.5, hand: 0.03 });
-        tailPose(Pz, 0, 0.45); legsUp(Pz); look(Pz, FWD.clone().add(V(0, -0.1, 0.2 * wave(t, 8, 0.3))), 0.8); face(Pz, t);
+        tailPose(Pz, 0, 0.45); legsUp(Pz); look(Pz, FWD.clone().add(V(0, -0.1, 0.2 * wave(t, 8, 0.3))), 0.8, FLIFT); face(Pz, t);
       },
       soar: (Pz, t) => {
         Pz.set('body', 0.25 + 0.05 * wave(t, 3, 0.3), 0, 0.03);
         for (const s of [-1, 1]) wing(Pz, s, { f: 0.0, lift: (sp.dihedral ?? 0.08) + 0.08, fan: 1, twist: -0.05 });
-        tailPose(Pz, 0.02, 1, -0.08); legsUp(Pz); look(Pz, V(0.9, -0.3, -0.35), 0.9); face(Pz, t);
+        tailPose(Pz, 0.02, 1, -0.08); legsUp(Pz); look(Pz, V(0.9, -0.3, -0.35), 0.9, FLIFT); face(Pz, t);
       },
       takeoff: (Pz, t) => {
         /* a crouch, the spring, then deep strong strokes, the legs trailing */
@@ -335,7 +358,7 @@ const Bird = (() => {
         Pz.off.y += 0.25 * go * (sp.size || 1) * sst(0.3, 1, c);
         const ph = t * flapHz * 1.2, cc = Math.cos(TAU * ph), sn = Math.sin(TAU * ph);
         for (const s of [-1, 1]) wing(Pz, s, { f: (1 - go) * (1 - 0.7 * cr) + go * (0.1 + 0.35 * Math.max(0, -sn)), lift: go * amp * 1.2 * (cc * 0.6 + 0.2) + 0.6 * cr, hand: go * 0.3 * Math.max(0, -sn), fan: go, sweep: 0.15 * go * sn });
-        if (go > 0.6) legsUp(Pz, sst(0.6, 1, c)); tailPose(Pz, -0.2 * go, 0.4 + 0.5 * go); look(Pz, FWD.clone().add(V(0, 0.1, 0)), 0.8); face(Pz, t);
+        if (go > 0.6) legsUp(Pz, sst(0.6, 1, c)); tailPose(Pz, -0.2 * go, 0.4 + 0.5 * go); look(Pz, FWD.clone().add(V(0, 0.1, 0)), 0.8, LIFT + (FLIFT - LIFT) * go); face(Pz, t);
       },
       land: (Pz, t) => {
         /* coming in: wings up and spread wide to brake, tail fanned and down, feet reaching forward */
@@ -343,7 +366,7 @@ const Bird = (() => {
         Pz.set('body', 0, 0, 0.55); Pz.off.set(0, 0.08 * (sp.size || 1), 0);
         for (const s of [-1, 1]) wing(Pz, s, { f: 0.05, lift: 0.75 + 0.25 * sn, sweep: 0.3, fan: 1, twist: 0.35 });
         for (const s of [-1, 1]) legTo(Pz, s, V(lg.foot[0] + 0.12 * (sp.size || 1), lg.foot[1] - 0.02, s * lg.hip[2]), 0.1, qE(0, 0, 0.6));
-        tailPose(Pz, -0.45, 1); look(Pz, FWD.clone().add(V(0, -0.35, 0)), 0.9); face(Pz, t);
+        tailPose(Pz, -0.45, 1); look(Pz, FWD.clone().add(V(0, -0.35, 0)), 0.9, (LIFT + FLIFT) / 2); face(Pz, t);
       },
       preen: (Pz, t) => {
         perchBody(Pz, t);
@@ -357,7 +380,7 @@ const Bird = (() => {
         look(Pz, FWD.clone().add(V(0, 0.4 + 0.3 * on, 0)), 1); face(Pz, t, (sp.gape || 0.35) * on);
       }
     };
-    if (sp.more) sp.more(clips, { R, V, qE, S, wing, tailPose, legTo, legsUp, look, lookAt, face, perchBody, FWD, NECK, W, flapHz, amp, TAU });
+    if (sp.more) sp.more(clips, { R, V, qE, S, wing, tailPose, legTo, legsUp, look, lookAt, face, perchBody, stepping, FWD, NECK, W, LIFT, FLIFT, flapHz, amp, TAU });
     clips.idle = clips.idle || clips.perch;
     return R.creature(g, S, clips, o);
   }
