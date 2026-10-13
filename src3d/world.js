@@ -194,7 +194,7 @@ const World = (() => {
        side sd) and a little every way */
     const put = (x, z, top, hx, hy, hz, lean, sd, tx, tz, wet) => {
       const proto = BP[Math.floor(rr() * BP.length)];
-      _e.set((rr() - 0.5) * 0.24, rr() * TAU, (rr() - 0.5) * 0.24, 'YXZ'); const q = new T.Quaternion().setFromEuler(_e);
+      _e.set((rr() - 0.5) * 0.34, rr() * TAU, (rr() - 0.5) * 0.34, 'YXZ'); const q = new T.Quaternion().setFromEuler(_e);
       if (lean) q.premultiply(_q.setFromAxisAngle(_ax.set(tx, 0, tz), sd * lean));     /* (turned about the line: its top faces out to the side sd) */
       const sv = new T.Vector3(hx, hy, hz), Wp = [];
       for (const h of proto.planes) { _v.set(h[0] / hx, h[1] / hy, h[2] / hz).applyQuaternion(q); Wp.push([_v.x, _v.y, _v.z, h[3] + _v.x * x + _v.z * z]); }
@@ -208,14 +208,16 @@ const World = (() => {
       const lay = (v, top, k, lean, sd, wet) => {
         const x = P.x + px * v * P.w + P.tx * (rr() - 0.5) * 0.7, z = P.z + pz * v * P.w + P.tz * (rr() - 0.5) * 0.7;
         if (top < -1.3 || (z > beach && top < -0.25)) return;     /* (lost in the sea floor, or buried in the sand) */
-        put(x, z, top, k * (0.62 + 0.3 * rr()), k * (0.44 + 0.2 * rr()), k * (0.56 + 0.26 * rr()), lean, sd, P.tx, P.tz, wet);
+        put(x, z, top, k * (0.62 + 0.3 * rr()), k * (0.48 + 0.28 * rr()), k * (0.56 + 0.26 * rr()), lean, sd, P.tx, P.tz, wet);
       };
       /* the crest: two or three across, big, their tops about level */
       const nA = P.w > 1.45 ? 3 : 2;
-      for (let j = 0; j < nA; j++) lay((nA === 3 ? (j - 1) * 0.62 : (j - 0.5) * 0.9) + (rr() - 0.5) * 0.18, P.h + (rr() - 0.55) * 0.24, 1, (rr() - 0.5) * 0.16, 1, false);
+      for (let j = 0; j < nA; j++) lay((nA === 3 ? (j - 1) * 0.62 : (j - 0.5) * 0.9) + (rr() - 0.5) * 0.18, P.h + (rr() - 0.55) * 0.34, 1, (rr() - 0.5) * 0.36, 1, false);
+      /* (and a smaller one wedged in between here and there, lower, at a slant) */
+      if (rr() < 0.55) lay((rr() - 0.5) * 1.6, P.h - 0.1 - 0.25 * rr(), 0.62, (rr() - 0.5) * 0.9, 1, false);
       /* the flanks: leaning out, lower; and the toe at their feet */
       for (const sd of [-1, 1]) {
-        lay(sd * (1.18 + 0.2 * rr()), P.h - 0.38 - 0.28 * rr(), 0.95, 0.3 + 0.28 * rr(), sd, false);
+        lay(sd * (1.18 + 0.2 * rr()), P.h - 0.38 - 0.28 * rr(), 0.95, 0.32 + 0.4 * rr(), sd, false);
         if (rr() < 0.85) lay(sd * (1.8 + 0.25 * rr()), P.h - 1.0 - 0.35 * rr(), 0.82, 0.45 + 0.35 * rr(), sd, true);
       }
     }
