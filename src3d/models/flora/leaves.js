@@ -38,7 +38,7 @@ const FloraLeaf = (() => {
       top: [90, 0.44, 0.32], tj: [8, 0.07, 0.045], under: [80, 0.15, 0.5], underK: 0.07, flush: [60, 0.45, 0.42], flushK: 0.12, yellow: 0.03, dmg: 0.15, twig: [30, 0.22, 0.32], gloss: [0.2, 20, 1.0] },
     /* the same sprays, bigger: a branchlet of several shoots on a card a metre or more across, for the crowns of the big
        trees, seen from tens of metres off */
-    diptL: null, koompL: null, laurelL: null, mangoL: null, rambL: null, durianL: null, cempL: null, figL: null, casuarL: null, terminL: null, barringL: null, hibiscL: null, rhizoL: null, avicL: null,
+    diptL: null, koompL: null, laurelL: null, mangoL: null, rambL: null, durianL: null, cempL: null, figL: null, casuarL: null, terminL: null, barringL: null, hibiscL: null, rhizoL: null, avicL: null, sonnL: null, brugL: null,
     /* a strangler fig: thick, glossy, dark, the midrib and veins paler; spirally set toward the twig's end; figs in pairs */
     fig: { back: [1.15, 1.22, 0.9], card: 0.62, L: [0.08, 0.14], W: [0.45, 0.55], shape: 'elliptic', tip: 0.04, veins: [7, 10], va: 1.1, arr: 'rosette', twigs: [3, 4], per: [6, 9], figs: 0.5,
       top: [108, 0.38, 0.18], tj: [6, 0.06, 0.03], under: [90, 0.22, 0.34], underK: 0.04, flush: [70, 0.35, 0.38], flushK: 0.15, yellow: 0.05, dmg: 0.3, twig: [35, 0.18, 0.3], gloss: [0.3, 26, 0.6] },
@@ -59,7 +59,15 @@ const FloraLeaf = (() => {
     /* Avicennia (api-api): opposite, elliptic to lance-shaped with a point, 6-10 cm; shiny dark green above, white beneath
        (the crown silvers when the wind turns its leaves) */
     avic: { back: [1.6, 1.62, 1.5], card: 0.5, L: [0.06, 0.1], W: [0.32, 0.4], shape: 'elliptic', tip: 0.03, veins: [6, 8], va: 0.9, arr: 'opposite', twigs: [3, 4], per: [4, 6],
-      top: [98, 0.32, 0.23], tj: [6, 0.05, 0.035], under: [80, 0.06, 0.62], underK: 0.22, flush: [80, 0.22, 0.38], flushK: 0.07, yellow: 0.04, dmg: 0.2, twig: [35, 0.15, 0.35], gloss: [0.24, 22, 0.8] } };
+      top: [98, 0.32, 0.23], tj: [6, 0.05, 0.035], under: [80, 0.06, 0.62], underK: 0.22, flush: [80, 0.22, 0.38], flushK: 0.07, yellow: 0.04, dmg: 0.2, twig: [35, 0.15, 0.35], gloss: [0.24, 22, 0.8] },
+    /* Sonneratia alba: opposite, thick and leathery, broadly obovate to nearly round, 5-10 cm, a pale yellowish green
+       both sides; the stalks short, reddish */
+    sonn: { back: [1.2, 1.25, 0.95], card: 0.55, L: [0.05, 0.1], W: [0.7, 0.85], shape: 'obovate', tip: 0, veins: [6, 8], va: 1.0, arr: 'opposite', twigs: [3, 4], per: [3, 5], crowd: 0.6,
+      top: [88, 0.32, 0.3], tj: [6, 0.06, 0.04], under: [84, 0.25, 0.36], underK: 0.08, flush: [60, 0.35, 0.38], flushK: 0.08, yellow: 0.06, dmg: 0.2, twig: [20, 0.3, 0.3], gloss: [0.22, 20, 0.8] },
+    /* Bruguiera gymnorhiza: opposite, elliptic, 8-18 cm, thick and glossy, crowded at the twig's end, the stalks reddish;
+       old ones turning orange-red */
+    brug: { back: [1.3, 1.3, 0.8], card: 0.65, L: [0.09, 0.17], W: [0.36, 0.44], shape: 'elliptic', tip: 0.03, veins: [8, 11], va: 1.0, arr: 'opposite', twigs: [3, 4], per: [3, 4], crowd: 0.4, red: 0.05,
+      top: [102, 0.4, 0.21], tj: [6, 0.06, 0.03], under: [80, 0.3, 0.38], underK: 0.06, flush: [70, 0.4, 0.38], flushK: 0.1, yellow: 0.05, dmg: 0.2, twig: [10, 0.3, 0.26], gloss: [0.3, 26, 0.65] } };
 
   /* ── the beach trees' ── */
   Object.assign(KINDS, {
@@ -93,7 +101,7 @@ const FloraLeaf = (() => {
       top: [108, 0.4, 0.18], tj: [6, 0.06, 0.03], under: [92, 0.25, 0.34], underK: 0.05, flush: [80, 0.4, 0.4], flushK: 0.1, yellow: 0.05, dmg: 0.25, twig: [30, 0.25, 0.28], gloss: [0.3, 26, 0.7] } });
   for (const [big, small, card, tw, per] of [['diptL', 'dipt', 1.15, [5, 6], [6, 9]], ['koompL', 'koomp', 1.0, [5, 6], [5, 7]], ['laurelL', 'laurel', 1.1, [5, 6], [5, 8]],
     ['mangoL', 'mango', 1.1, [5, 6], [9, 13]], ['figL', 'fig', 1.05, [5, 6], [6, 9]], ['casuarL', 'casuar', 1.1, [5, 6], [60, 90]], ['terminL', 'termin', 1.15, [5, 6], [6, 9]], ['barringL', 'barring', 1.2, [4, 5], [6, 9]], ['hibiscL', 'hibisc', 1.0, [5, 6], [4, 6]], ['rambL', 'ramb', 1.0, [5, 6], [3, 5]], ['durianL', 'durian', 1.0, [5, 6], [5, 8]], ['cempL', 'cemp', 1.05, [5, 6], [6, 9]],
-    ['rhizoL', 'rhizo', 1.0, [5, 6], [3, 4]], ['avicL', 'avic', 0.9, [5, 6], [4, 6]]])
+    ['rhizoL', 'rhizo', 1.0, [5, 6], [3, 4]], ['avicL', 'avic', 0.9, [5, 6], [4, 6]], ['sonnL', 'sonn', 0.95, [5, 6], [3, 5]], ['brugL', 'brug', 1.05, [5, 6], [3, 4]]])
     KINDS[big] = Object.assign({}, KINDS[small], { card, twigs: tw, per });
   /* a leaf's half-width at t along its midrib (0 at the stalk, 1 at the tip), as a share of its half-width */
   function halfW(shape, t, tip) {

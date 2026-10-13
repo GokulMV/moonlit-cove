@@ -186,25 +186,34 @@
     /* (grey-brown and corky, the mud's stain on its foot, its rounded tip paler) */
     const curve = new T.QuadraticBezierCurve3(V(0, -0.03, 0), V(0.003, 0.07, 0), V(0.008, 0.15, 0.002));
     return body(curve, 7, 6, t => 0.0066 * (1 - 0.22 * t) * (t > 0.88 ? Math.sqrt(Math.max(0.05, (1 - t) / 0.12)) : 1),
-      t => { const y = t * 0.18 - 0.03, mud = 1 - sm(0.0, 0.05, y), tip = sm(0.68, 1, t), alg = sm(0.25, 0.05, t) * 0.5; let c = [0.15, 0.135, 0.11]; c = mix3(c, [0.12, 0.13, 0.08], alg); c = mix3(c, [0.27, 0.255, 0.22], tip); return mix3(c, [0.07, 0.056, 0.042], mud); }, 0.05);
+      t => { const y = t * 0.18 - 0.03, mud = 1 - sm(0.0, 0.05, y), tip = sm(0.68, 1, t), alg = sm(0.25, 0.05, t) * 0.5; let c = [0.095, 0.085, 0.07]; c = mix3(c, [0.075, 0.085, 0.05], alg); c = mix3(c, [0.17, 0.16, 0.14], tip); return mix3(c, [0.045, 0.036, 0.027], mud); }, 0.05);
   }
-  function pneumatophores(g, t, o, R) {
-    const spots = [], nC = 24 + Math.floor(R() * 9), dens = o.pneuma ?? 1, cap = o.pneumaMax ?? 6000;
+  /* (a Sonneratia's are cones instead: woody, as thick as a wrist at the foot, knee-high, blunt; fewer and farther apart) */
+  function coneGeo() {
+    const curve = new T.QuadraticBezierCurve3(V(0, -0.05, 0), V(0.006, 0.18, 0), V(0.014, 0.4, 0.004));
+    return body(curve, 10, 9, t => 0.032 * Math.pow(1 - t, 1.25) * (1 + 0.35 * (1 - sm(0, 0.18, t))) + 0.004 * (1 - sm(0.92, 1, t)) + 0.0015,
+      (t, a) => { const y = t * 0.45 - 0.05, mud = 1 - sm(0.0, 0.1, y), tip = sm(0.65, 1, t), rib = 0.92 + 0.12 * Math.cos(a * 7 + t * 3); let c = [0.1, 0.088, 0.072].map(q => q * rib); c = mix3(c, [0.17, 0.16, 0.14], tip); return mix3(c, [0.045, 0.036, 0.027], mud); }, 0.06);
+  }
+  const PNEUMA = {
+    pencil: { geo: pneumaGeo, nC: [24, 32], step: 0.035, p: 0.85, scatter: 0.3, L: [4.5, 8], fork: 0.02, cap: 6000, size: (R, d) => { const s = 0.8 + 0.45 * R(); return [s, s * (0.65 + 0.6 * R()) * (1.15 - 0.4 * clamp(d / 7))]; }, tilt: 0.22 },
+    cone: { geo: coneGeo, nC: [10, 15], step: 0.12, p: 0.55, scatter: 0.35, L: [4, 9], fork: 0.03, cap: 1400, size: (R, d) => { const s = 0.7 + 0.6 * R(); return [s, s * (0.75 + 0.55 * R()) * (1.25 - 0.55 * clamp(d / 8))]; }, tilt: 0.12 } };
+  function pneumatophores(g, t, o, R, kind = 'pencil') {
+    const P = PNEUMA[kind], spots = [], nC = Math.round(lerp(R, P.nC)), dens = o.pneuma ?? 1, cap = o.pneumaMax ?? P.cap;
     const walk = (x, z, a, L, depth) => {
       let px = x, pz = z;
-      for (let s = 0; s < L; s += 0.035) {
-        a += (R() - 0.5) * 0.1; px += Math.cos(a) * 0.035; pz += Math.sin(a) * 0.035;
+      for (let s = 0; s < L; s += P.step) {
+        a += (R() - 0.5) * 0.1 * Math.sqrt(P.step / 0.035); px += Math.cos(a) * P.step; pz += Math.sin(a) * P.step;
         const d = Math.hypot(px, pz), q = (1 - s / L) * 0.7 + 0.3;
-        if (d > 0.3 && R() < 0.85 * dens * q) spots.push([px + (R() - 0.5) * 0.3, pz + (R() - 0.5) * 0.3, d]);
-        if (depth < 2 && R() < 0.02) walk(px, pz, a + (R() < 0.5 ? -1 : 1) * (0.45 + 0.5 * R()), (L - s) * (0.45 + 0.4 * R()), depth + 1);
+        if (d > t.info.r0 + 0.2 && R() < P.p * dens * q) spots.push([px + (R() - 0.5) * P.scatter, pz + (R() - 0.5) * P.scatter, d]);
+        if (depth < 2 && R() < P.fork * P.step / 0.035) walk(px, pz, a + (R() < 0.5 ? -1 : 1) * (0.45 + 0.5 * R()), (L - s) * (0.45 + 0.4 * R()), depth + 1);
       }
     };
-    for (let k = 0; k < nC; k++) { const a = k / nC * TAU + (R() - 0.5) * 0.35; walk(Math.cos(a) * 0.25, Math.sin(a) * 0.25, a, lerp(R, [4.5, 8]), 0); }
+    for (let k = 0; k < nC; k++) { const a = k / nC * TAU + (R() - 0.5) * 0.35; walk(Math.cos(a) * 0.25, Math.sin(a) * 0.25, a, lerp(R, P.L), 0); }
     while (spots.length > cap) spots.splice(Math.floor(R() * spots.length), 1);
-    const geo = pneumaGeo(), im = new T.InstancedMesh(geo, mat('pneuma', { roughness: 0.82, skin: true }), spots.length), m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = V(), c = new T.Color();
+    const geo = P.geo(), im = new T.InstancedMesh(geo, mat('pneuma-' + kind, { roughness: 0.82, skin: true }), spots.length), m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = V(), c = new T.Color();
     spots.forEach(([x, z, d], i) => {
-      const s = 0.8 + 0.45 * R(), hk = (0.65 + 0.6 * R()) * (1.15 - 0.4 * clamp(d / 7));
-      e.set((R() - 0.5) * 0.22, R() * TAU, (R() - 0.5) * 0.22); q.setFromEuler(e); sc.set(s, s * hk, s);
+      const [s, sh] = P.size(R, d);
+      e.set((R() - 0.5) * P.tilt, R() * TAU, (R() - 0.5) * P.tilt); q.setFromEuler(e); sc.set(s, sh, s);
       m.compose(V(x, 0, z), q, sc); im.setMatrixAt(i, m);
       /* (some greener with algae, some darker, the odd one bleached) */
       const u = R(), k = 0.82 + 0.3 * R(); c.setRGB(k, k, k); if (u < 0.22) c.setRGB(k * 0.82, k * 1.0, k * 0.72); else if (u < 0.3) c.setRGB(k * 1.15, k * 1.12, k * 1.05); im.setColorAt(i, c);
@@ -215,6 +224,68 @@
     const Kt = FloraKit, tile = Kt.bark('avicennia').tile, parts = [];
     for (let k = 0; k < 5; k++) { const a = R() * TAU; parts.push(...Kt.roots(Math.cos(a) * t.info.r0 * 0.8, Math.sin(a) * t.info.r0 * 0.8, [Math.cos(a), Math.sin(a)], 0.035 + 0.02 * R(), 0.8 + 1.4 * R(), { seed: Math.floor(R() * 1e6), tile, radial: 7 })); }
     if (parts.length) { const rm = new T.Mesh(Kt.mergeParts(parts), Kt.barkMat('avicennia', { tint: [0.62, 0.58, 0.52] })); rm.castShadow = rm.receiveShadow = true; g.add(rm); }
+  }
+
+  /* ── a Bruguiera's knee roots: its cable roots run out under the mud and every so often loop up out of it and back
+     down, a knee a hand or two high, bent sharply over, swollen and corky at the bend; a line of them along each root ── */
+  function knees(g, t, o, R) {
+    const list = [], nC = 8 + Math.floor(R() * 6), r0 = t.info.r0;
+    for (let k = 0; k < nC; k++) {
+      let a = k / nC * TAU + (R() - 0.5) * 0.5, x = Math.cos(a) * (r0 + 0.3), z = Math.sin(a) * (r0 + 0.3);
+      const L = 2 + 3.5 * R();
+      for (let s = 0; s < L;) {
+        const gap = (0.18 + 0.4 * R()) * (0.6 + 0.6 * s / L); s += gap; a += (R() - 0.5) * 0.35; x += Math.cos(a) * gap; z += Math.sin(a) * gap;
+        if (R() < 0.15) continue;
+        const span = 0.1 + 0.16 * R(), h = (0.1 + 0.24 * R()) * (1.2 - 0.55 * s / L), rr = 0.015 + 0.012 * R(), dx = Math.cos(a), dz = Math.sin(a), sk = R() * 9;
+        /* (up out of the mud nearly upright, over a sharp bend with a corky knob on it, down again at a slant a little
+           farther on: a knee, not a hoop) */
+        const p0 = V(x, -0.06, z), p3 = V(x + dx * span, -0.06, z + dz * span), top = V(x + dx * span * 0.32, h, z + dz * span * 0.32);
+        const c = new T.CatmullRomCurve3([p0, V(x + dx * span * 0.08, h * 0.55, z + dz * span * 0.08), top, V(x + dx * span * 0.62, h * 0.62, z + dz * span * 0.62), p3], false, 'centripetal');
+        list.push([body(c, 16, 8, tt => rr * (0.9 + 0.9 * Math.exp(-(((tt - 0.47) / 0.12) ** 2))) * (0.88 + 0.24 * Models.vn(tt * 7, sk, 1.9)), (tt, aa) => { const y = c.getPoint(tt).y, mud = 1 - sm(-0.02, 0.07, y), k2 = 0.82 + 0.3 * Models.vn(aa * 2, tt * 6, x + z); return mix3([0.078 * k2, 0.068 * k2, 0.056 * k2], [0.04, 0.032, 0.024], mud); }, 0.05), new T.Matrix4(), [0, 0, 0, 1]]);
+      }
+    }
+    if (!list.length) return;
+    const m = new T.Mesh(merge(list), mat('knees', { roughness: 0.85, skin: true })); m.castShadow = m.receiveShadow = true; m.userData.part = 'knees'; g.add(m);
+  }
+
+  /* ── things that hang under the leaf clumps, swaying with them: a Sonneratia's fruit (a flattened green berry sitting in
+     a star of six to eight leathery sepals spread flat, the style's stub on top) and a Bruguiera's propagules (a cigar-
+     shaped green stem out of a red calyx of ten to fourteen narrow lobes) ── */
+  function sonnFruit(R) {
+    const parts = [], gr = [0.09, 0.14, 0.04].map(q => q * (0.85 + 0.3 * R())), sep = [0.12, 0.16, 0.05];
+    parts.push([body(new T.LineCurve3(V(0, 0.005, 0), V(0, -0.025, 0)), 2, 6, () => 0.0035, () => [0.12, 0.13, 0.06]), new T.Matrix4()]);
+    const n = 6 + Math.floor(R() * 3);
+    for (let k = 0; k < n; k++) { const a = k / n * TAU, gb = blade(0.022, 0.011, sep, 0.05, -0.25), m = new T.Matrix4().makeRotationY(-a).multiply(new T.Matrix4().makeRotationZ(-0.25)); m.setPosition(Math.cos(a) * 0.008, -0.028, Math.sin(a) * 0.008); parts.push([gb, m]); }
+    const f = body(new T.LineCurve3(V(0, -0.026, 0), V(0, -0.058, 0)), 8, 12, tt => 0.024 * Math.pow(Math.sin(Math.PI * Math.min(1, 0.06 + tt * 0.92)), 0.55), () => gr); parts.push([f, new T.Matrix4()]);
+    parts.push([body(new T.LineCurve3(V(0, -0.058, 0), V(0, -0.072, 0)), 2, 6, tt => 0.0025 * (1 - 0.5 * tt), () => [0.2, 0.18, 0.1]), new T.Matrix4()]);
+    return parts;
+  }
+  function brugPropagule(R, ripe) {
+    const parts = [], red = mix3([0.3, 0.12, 0.05], [0.45, 0.05, 0.04], ripe), len = mix(0.08, 0.2, ripe) * (0.9 + 0.2 * R()), rad = 0.0075;
+    parts.push([body(new T.LineCurve3(V(0, 0.005, 0), V(0, -0.025, 0)), 2, 6, () => 0.003, () => [0.25, 0.08, 0.05]), new T.Matrix4()]);
+    /* (the calyx: a cup, and its lobes standing out and up round the stem's top) */
+    parts.push([body(new T.LineCurve3(V(0, -0.022, 0), V(0, -0.04, 0)), 4, 12, tt => 0.007 + 0.006 * tt, () => red), new T.Matrix4()]);
+    const n = 10 + Math.floor(R() * 5);
+    for (let k = 0; k < n; k++) { const a = k / n * TAU, gb = blade(0.022, 0.0045, red, 0.05, 0.1), m = new T.Matrix4().makeRotationY(-a).multiply(new T.Matrix4().makeRotationZ(1.15)); m.setPosition(Math.cos(a) * 0.012, -0.04, Math.sin(a) * 0.012); parts.push([gb, m]); }
+    const col = mix3([0.12, 0.18, 0.05], [0.08, 0.1, 0.04], ripe), c = new T.QuadraticBezierCurve3(V(0, -0.036, 0), V(0.004, -0.036 - len * 0.5, 0), V(0.008, -0.036 - len, 0.003));
+    parts.push([body(c, 12, 9, tt => rad * (0.85 + 0.25 * Math.sin(Math.PI * Math.pow(tt, 0.8))) * (tt > 0.9 ? Math.pow((1 - tt) / 0.1, 0.6) : 1) + 0.0004, (tt, aa) => col.map(q => q * (0.9 + 0.2 * Models.vn(aa * 2, tt * 12, 3.7)))), new T.Matrix4()]);
+    return parts;
+  }
+  function hangers(g, t, o, R, make, max, fertile, key) {
+    const H = t.info.H, list = []; let n = 0;
+    for (const c of t.clumps) {
+      if (n >= max) break;
+      if (R() > fertile) continue;
+      const k0 = 1 + Math.floor(R() * 3), out = V(c.d.x, 0, c.d.z); if (out.lengthSq() < 1e-4) out.set(1, 0, 0); out.normalize();
+      const base = c.c.clone().addScaledVector(out, c.r * (0.25 + 0.4 * R())).add(V(0, -c.r * (0.45 + 0.2 * R()), 0));
+      for (let k = 0; k < k0 && n < max; k++, n++) {
+        const at = base.clone().add(V((R() - 0.5) * 0.12, (R() - 0.5) * 0.05, (R() - 0.5) * 0.12)), m = new T.Matrix4().makeRotationY(R() * TAU).premultiply(new T.Matrix4().makeRotationX((R() - 0.5) * 0.15)); m.setPosition(at);
+        const w = [c.ph, 0.2, clamp(at.y / H), H];
+        for (const [pg, pm] of make(R)) list.push([pg, new T.Matrix4().multiplyMatrices(m, pm), w]);
+      }
+    }
+    if (!list.length) return;
+    const mm = new T.Mesh(merge(list), FloraLeaf.windBark(mat(key, { roughness: 0.5, side: T.DoubleSide, skin: true }))); mm.castShadow = true; mm.receiveShadow = true; mm.userData.part = key; mm.userData.count = n; g.add(mm);
   }
   /* an Avicennia's fruit: in bunches of three to six under the twigs, each a flattened tear, velvety grey-green, pointed */
   function avFruits(g, t, o, R) {
@@ -244,6 +315,18 @@
     const g = FloraGrow.model('avicennia', o.seed || 1, o), t = g.userData.grown, R = Models.rng((o.seed || 1) * 137 + 11);
     if (o.pneuma !== 0) pneumatophores(g, t, o, R);
     if (o.fruits !== 0) avFruits(g, t, o, R);
+    return g;
+  });
+  Models.add('flora/sonneratia', (o = {}) => {
+    const g = FloraGrow.model('sonneratia', o.seed || 1, o), t = g.userData.grown, R = Models.rng((o.seed || 1) * 139 + 13);
+    if (o.pneuma !== 0) pneumatophores(g, t, o, R, 'cone');
+    if (o.fruits !== 0) hangers(g, t, o, R, sonnFruit, o.fruits ?? 40, 0.3, 'sonnfruit');
+    return g;
+  });
+  Models.add('flora/bruguiera', (o = {}) => {
+    const g = FloraGrow.model('bruguiera', o.seed || 1, o), t = g.userData.grown, R = Models.rng((o.seed || 1) * 149 + 17), ripe = o.ripe ?? 0.5 + 0.5 * R();
+    if (o.knees !== 0) knees(g, t, o, R);
+    if (o.propagules !== 0) hangers(g, t, o, R, r => brugPropagule(r, clamp(ripe + (r() - 0.5) * 0.6)), o.propagules ?? 60, 0.35, 'brugprop');
     return g;
   });
   /* one propagule (o.ripe), and a seedling beside it, at their real size */

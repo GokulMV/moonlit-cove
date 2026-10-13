@@ -96,7 +96,17 @@ const FloraGrow = (() => {
        the mud by the thousand */
     avicennia: { H: [6, 11], bole: [0.14, 0.24], dbh: H => 0.042 * H, taper: 0.6, flare: 0.3, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
       crown: { R: [0.45, 0.56], D: [0.5, 0.62], dome: 0.8, fR: [1.2, 1.7], clumps: [5, 7], cR: [0.55, 0.8], limbs: [4, 6], spread: 1.0 },
-      leaf: 'avicL', bark: 'avicennia', barkTint: [0.86, 0.86, 0.8], moss: 0.04, cards: 1.35 } };
+      leaf: 'avicL', bark: 'avicennia', barkTint: [0.86, 0.86, 0.8], moss: 0.04, cards: 1.35 },
+    /* a Sonneratia (perepat, S. alba), 7-14 m, on the seaward edge: a stout trunk of creamy-grey bark finely fissured, a
+       wide spreading crown of thick, round, pale leaves; its breathing roots woody cones (mangrove.js) */
+    sonneratia: { H: [7, 13], bole: [0.25, 0.35], dbh: H => 0.04 * H, taper: 0.6, flare: 0.35, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.45, 0.56], D: [0.45, 0.55], dome: 0.78, fR: [1.3, 1.9], clumps: [5, 7], cR: [0.6, 0.85], limbs: [4, 6], spread: 1.0 },
+      leaf: 'sonnL', bark: 'avicennia', barkTint: [0.8, 0.74, 0.64], moss: 0.04, cards: 1.3 },
+    /* a Bruguiera (tumu, B. gymnorhiza), 10-20 m, a little back from the water: a straight dark trunk on small buttresses,
+       its roots knees out of the mud (mangrove.js); a narrow crown of glossy leaves crowded at the twig ends */
+    bruguiera: { H: [10, 18], bole: [0.4, 0.52], dbh: H => 0.026 * H, taper: 0.62, flare: 0.3, butts: { n: [3, 5], h: [0.35, 0.8], reach: [0.35, 0.8], t0: [0.07, 0.12], roots: 0.3 },
+      crown: { R: [0.24, 0.3], D: [0.4, 0.5], dome: 0.85, fR: [1.4, 1.9], clumps: [5, 7], cR: [0.6, 0.85], limbs: [3, 5], spread: 1.0 },
+      leaf: 'brugL', bark: 'rhizophora', barkTint: [0.72, 0.7, 0.68], moss: 0.05, cards: 1.35 } };
 
   /* a direction at angle `el` off the axis t, turned `az` round it */
   function aside(t, az, el) {
@@ -207,7 +217,7 @@ const FloraGrow = (() => {
     if (S.stilts) stilts(S.stilts, tr, r0, R, addPart, tile, lod);
     for (const b of butts) {
       const B = Kt.buttress(tr, Object.assign({ seed: Math.floor(R() * 1e6), tile, moss: S.moss, segL: lod ? 22 : 40 }, b)); addPart(B.geo, () => [0, 0]);
-      if (!lod) for (const g of Kt.roots(B.tip[0] - B.dir[0] * 0.6, B.tip[1] - B.dir[1] * 0.6, B.dir, Math.max(0.1, B.t * 0.62), 1.6 + R() * 2.6, { seed: Math.floor(R() * 1e6), tile })) addPart(g, () => [0, 0]);
+      if (!lod) for (const g of Kt.roots(B.tip[0] - B.dir[0] * 0.6, B.tip[1] - B.dir[1] * 0.6, B.dir, Math.max(0.1, B.t * 0.62), (1.6 + R() * 2.6) * (S.butts.roots ?? 1), { seed: Math.floor(R() * 1e6), tile })) addPart(g, () => [0, 0]);
     }
     const [tx, tz] = tr.spine(boleH), top = V(tx, boleH, tz);
 
