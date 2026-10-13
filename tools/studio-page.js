@@ -120,8 +120,8 @@ const Studio = (() => {
   /* ── daylight: the sun at (azimuth, elevation), casting shadows over everything within reach of the box; the sky's light ── */
   function daylight(box, sun = [-0.9, 0.85], light = 'sun') {
     scene.background = bgSky;
-    { const r0 = box.getBoundingSphere(new T.Sphere()).radius; scene.fog = new T.Fog(new T.Color('#d8dfe2'), r0 * 6, r0 * 26); }
-    const sph = box.getBoundingSphere(new T.Sphere()), c = sph.center, rad = Math.max(1, sph.radius);
+    { const r0 = Math.max(1, box.getBoundingSphere(new T.Sphere()).radius); scene.fog = new T.Fog(new T.Color('#d8dfe2'), r0 * 6, r0 * 26); }
+    const sph = box.getBoundingSphere(new T.Sphere()), c = sph.center, rad = Math.max(0.08, sph.radius);   /* (small things — a fruit, a flower — framed as small as they are) */
     const dir = new T.Vector3(Math.cos(sun[1]) * Math.cos(sun[0]), Math.sin(sun[1]), Math.cos(sun[1]) * Math.sin(sun[0]));
     key.color.setRGB(1, 0.95, 0.86); key.intensity = 3.1; key.castShadow = true;
     key.position.copy(c).addScaledVector(dir, rad * 3); key.target.position.copy(c); key.target.updateMatrixWorld();

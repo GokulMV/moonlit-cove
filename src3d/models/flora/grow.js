@@ -37,7 +37,24 @@ const FloraGrow = (() => {
     /* a canopy tree, 24-36 m: a shorter bole, small buttresses, a deeper, rounder crown */
     canopy: { H: [24, 34], bole: [0.45, 0.55], dbh: H => 0.024 * H, taper: 0.6, butts: { n: [3, 5], h: [0.8, 1.6], reach: [0.6, 1.4], t0: [0.14, 0.22] },
       crown: { R: [0.2, 0.26], D: [0.3, 0.38], dome: 0.8, fR: [2.6, 3.6], clumps: [6, 8], cR: [1.0, 1.4], limbs: [3, 4], spread: 1.0 },
-      leaf: 'laurelL', bark: 'canopy', moss: 0.6, cards: 1.0 } };
+      leaf: 'laurelL', bark: 'canopy', moss: 0.6, cards: 1.0 },
+    /* ── the fruit trees: short boles, low limbs, deep round crowns ── */
+    /* a mango, 11-18 m: a stout short trunk, rough and dark; a dense, deep dome of dark leaves to near the ground */
+    mango: { H: [11, 17], bole: [0.18, 0.26], dbh: H => 0.045 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.44, 0.52], D: [0.58, 0.68], dome: 0.95, fR: [1.9, 2.5], clumps: [6, 8], cR: [0.75, 1.0], limbs: [3, 5], spread: 1.0 },
+      leaf: 'mangoL', bark: 'meranti', barkTint: [0.5, 0.47, 0.45], moss: 0.35, cards: 1.75 },
+    /* a rambutan, 10-16 m: smooth grey-brown bark, a spreading dome */
+    rambutan: { H: [10, 15], bole: [0.22, 0.3], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.42, 0.5], D: [0.52, 0.62], dome: 0.9, fR: [1.8, 2.4], clumps: [6, 8], cR: [0.7, 0.95], limbs: [3, 5], spread: 1.0 },
+      leaf: 'rambL', bark: 'canopy', moss: 0.4, cards: 1.1 },
+    /* a durian, 25-40 m: a tall straight trunk, small buttresses, an open, irregular crown on long limbs */
+    durian: { H: [25, 36], bole: [0.42, 0.52], dbh: H => 0.026 * H, taper: 0.62, butts: { n: [2, 4], h: [0.6, 1.3], reach: [0.5, 1.2], t0: [0.12, 0.2] },
+      crown: { R: [0.2, 0.26], D: [0.36, 0.46], dome: 0.85, fR: [2.4, 3.2], clumps: [6, 8], cR: [0.9, 1.25], limbs: [4, 6], spread: 1.0 },
+      leaf: 'durianL', bark: 'meranti', moss: 0.5, cards: 0.95 },
+    /* a cempedak, 12-20 m: grey bark, a dense crown; its fruit straight off the trunk and the big limbs */
+    cempedak: { H: [12, 18], bole: [0.28, 0.38], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 2], h: [0.5, 0.9], reach: [0.4, 0.8], t0: [0.1, 0.16] },
+      crown: { R: [0.36, 0.42], D: [0.48, 0.58], dome: 0.9, fR: [2.0, 2.6], clumps: [6, 8], cR: [0.8, 1.05], limbs: [3, 5], spread: 1.0 },
+      leaf: 'cempL', bark: 'fig', moss: 0.4, cards: 1.1 } };
 
   /* a direction at angle `el` off the axis t, turned `az` round it */
   function aside(t, az, el) {
@@ -92,7 +109,7 @@ const FloraGrow = (() => {
     const groups = limbAz.map(() => []); florets.forEach(f => groups[limbOf(f)].push(f));
     const rLimb = rTop * 0.95 / Math.sqrt(Math.max(1, nL)) * 1.15, segs = lod ? 6 : 16, radial = r => Math.max(5, Math.min(lod ? 8 : 16, Math.round(r * 70)));
     const barkCol = lvl => (t, a, p) => { const k = 0.92 - 0.1 * lvl + 0.08 * t; return [k, k, k]; };
-    const UP = V(0, 1, 0), clumps = [], nCl = () => Math.round(lerp(R, S.crown.clumps));
+    const UP = V(0, 1, 0), clumps = [], limbs = [], nCl = () => Math.round(lerp(R, S.crown.clumps));
     groups.forEach((G, li) => {
       if (!G.length) return;
       const gc = V(); for (const f of G) gc.add(f.c); gc.multiplyScalar(1 / G.length);
@@ -103,6 +120,7 @@ const FloraGrow = (() => {
       const ph = R(), Lm = start.distanceTo(node);
       const c1 = new T.CatmullRomCurve3([start, start.clone().addScaledVector(UP, Lm * 0.32).addScaledVector(out, Lm * 0.06), start.clone().lerp(node, 0.62).addScaledVector(UP, Lm * 0.08).add(V((R() - 0.5) * 0.4, 0, (R() - 0.5) * 0.4)), node]);
       addPart(Kt.tube(c1, t => rLimb * (1 - 0.28 * t), { segs, radial: radial(rLimb), tile, col: barkCol(0) }), (x, y, z) => [ph, 0.035 * clamp((y - boleH) / Math.max(0.5, node.y - boleH))]);
+      limbs.push({ curve: c1, r: t => rLimb * (1 - 0.28 * t), ph });
       const r2b = rLimb * 0.72 / Math.sqrt(G.length) * 1.1;
       for (const f of G) {
         /* (the branch to the floret: rising from the fork, bowing up, ending low in the floret) */
@@ -165,16 +183,17 @@ const FloraGrow = (() => {
         const q = Math.hypot((P[i] - crownC.x) / Rc, (y - crownC.y) / (Dc * 0.7 + 2), (P[i + 2] - crownC.z) / Rc), k = 0.42 + 0.5 * clamp((q - 0.2) / 0.9);
         const m = sm(boleH - rTop * 2, boleH + 1.5, y); C[i] *= 1 - m * (1 - k); C[i + 1] *= 1 - m * (1 - k); C[i + 2] *= 1 - m * (1 - k); } }
     bark.setAttribute('aWind', new T.BufferAttribute(W, 4));
-    return { bark, leaves: leafGeo, info: { H, boleH, r0, crown: { c: crownC, R: Rc, D: Dc }, cards: cards.length, butts: butts.length }, S };
+    return { bark, leaves: leafGeo, info: { H, boleH, r0, crown: { c: crownC, R: Rc, D: Dc }, cards: cards.length, butts: butts.length }, S,
+      clumps: clumps.map(c => ({ c: c.c, r: c.r, d: c.d, ph: c.ph })), limbs, trunk: { spine: tr.spine, rAt: tr.rAt, boleH } };
   }
 
   /* a tree as a model: its bark (wind-moved), its three sets of leaves, their shadows cut out */
   function model(kind, seed, o = {}) {
     const t = tree(kind, seed, o), S = t.S, g = new T.Group();
-    const bm = FloraLeaf.windBark(FloraKit.barkMat(S.bark)), lm = FloraLeaf.material(S.leaf);
+    const bm = FloraLeaf.windBark(FloraKit.barkMat(S.bark, S.barkTint ? { tint: S.barkTint } : {})), lm = FloraLeaf.material(S.leaf);
     const b = new T.Mesh(t.bark, bm); b.castShadow = b.receiveShadow = true; g.add(b);
     t.leaves.forEach((geo, i) => { if (!geo.attributes.position.count) return; const m = new T.Mesh(geo, lm.leaves[i]); m.customDepthMaterial = lm.depth[i]; m.castShadow = true; m.receiveShadow = false; g.add(m); });
-    g.userData.info = t.info;
+    g.userData.info = t.info; g.userData.grown = t;
     return g;
   }
   return { SPECIES, tree, model };
@@ -183,3 +202,4 @@ const FloraGrow = (() => {
 Models.add('flora/emergent', (o = {}) => FloraGrow.model('emergent', o.seed || 1, o));
 Models.add('flora/tualang', (o = {}) => FloraGrow.model('tualang', o.seed || 1, o));
 Models.add('flora/canopy', (o = {}) => FloraGrow.model('canopy', o.seed || 1, o));
+Models.add('flora/mango-tree', (o = {}) => FloraGrow.model('mango', o.seed || 1, o));

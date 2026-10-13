@@ -313,7 +313,7 @@ const FloraKit = (() => {
   const barkMats = new Map();
   function barkMat(kind, o = {}) {
     const key = kind + JSON.stringify(o); if (barkMats.has(key)) return barkMats.get(key);
-    const b = bark(kind), m = Mats.lit({ map: b.map, normalMap: b.normalMap, normalScale: new T.Vector2(o.ns ?? 1.5, o.ns ?? 1.5), vertexColors: true, color: new T.Color(o.tint ?? 0.82, o.tint ?? 0.82, o.tint ?? 0.82), roughness: o.rough ?? Math.min(0.95, b.rough + 0.04) });
+    const b = bark(kind), m = Mats.lit({ map: b.map, normalMap: b.normalMap, normalScale: new T.Vector2(o.ns ?? 1.5, o.ns ?? 1.5), vertexColors: true, color: Array.isArray(o.tint) ? new T.Color(...o.tint) : new T.Color(o.tint ?? 0.82, o.tint ?? 0.82, o.tint ?? 0.82), roughness: o.rough ?? Math.min(0.95, b.rough + 0.04) });
     barkMats.set(key, m); return m;
   }
 
