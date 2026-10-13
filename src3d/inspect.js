@@ -47,6 +47,8 @@ const Inspect = (() => {
       note: 'It runs down the wet sand behind each wave and back up ahead of the next, probing for the tiny shellfish the water stirs up.' },
     bat: { model: 'life/bat', name: 'Free-tailed bat', latin: 'Molossidae', home: 'air', handoff: 1.1, reach: 30, view: [-2.2, 1.0],
       note: 'It hunts by echo in the dark, calling faster and faster as it closes in on a moth, up to two hundred times a second.' },
+    ray: { model: 'life/ray', name: 'Spotted eagle ray', latin: 'Aetobatus narinari', home: 'sea', reach: 45, view: [-2.2, 1.0],
+      note: 'It flies through the water on its wings, and digs for clams with the duck-bill of its snout, cracking them in plates of teeth like a nutcracker.' },
     turtle: { model: 'life/turtle', name: 'Green sea turtle', latin: 'Chelonia mydas', home: 'sea', reach: 45, view: [-2.2, 0.75],
       note: 'Named for the green of the fat beneath its shell, not the shell itself. A grown one grazes on seagrass.' },
     dolphin: { model: 'life/dolphin', name: 'Bottlenose dolphin', latin: 'Tursiops truncatus', home: 'sea', big: true, reach: 160, view: [-1.9, 0.3],

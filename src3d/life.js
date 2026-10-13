@@ -1,9 +1,9 @@
 /* ─────────────────────────────────────────────────────────────
    life.js — small lives on the shore: starfish and shells along
    the strand line, fish that leap clear of the water now and then
-   with a splash, schools of small fish that show as shadows in the
-   clear shallows by day, and sea turtles gliding over the sand under
-   them, coming up now and then to breathe. And sky lanterns, released
+   with a splash, schools of small fish in the clear shallows with
+   their shadows on the sand by day, and sea turtles (and now and then
+   a ray) swimming over the sand under them, coming up to breathe. And sky lanterns, released
    from the camp, rising out over the sea.
    ───────────────────────────────────────────────────────────── */
 const Life = (() => {
@@ -69,7 +69,13 @@ const Life = (() => {
     const fin = (pts, col) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pts.flat(), 3)); g.computeVertexNormals(); return M.paint(g, () => col); };
     const tail = fin([[-0.048, 0.004, 0], [-0.075, 0.022, 0], [-0.066, 0, 0], [-0.048, -0.004, 0], [-0.066, 0, 0], [-0.075, -0.022, 0]], yellow.map(v => v * 0.9));
     const dors = fin([[0.03, 0.028, 0], [-0.03, 0.03, 0], [0.0, 0.042, 0], [-0.03, 0.03, 0], [-0.045, 0.02, 0], [-0.035, 0.033, 0]], yellow.map(v => v * 0.8));
-    const g = M.mergeC([{ geo: body }, { geo: tail }, { geo: dors }]), P = g.attributes.position, aT = new Float32Array(P.count);
+    /* an eye either side: a black pupil in a pale ring, set high toward the snout */
+    const eyes = [];
+    for (const sd of [-1, 1]) {
+      const ring = new T.SphereGeometry(0.0062, 10, 8); ring.scale(0.9, 1, 0.45); ring.translate(0.036, 0.004, sd * 0.0098); eyes.push({ geo: ring, c: [0.8, 0.78, 0.66] });
+      const pup = new T.SphereGeometry(0.0038, 10, 8); pup.scale(0.9, 1, 0.45); pup.translate(0.0365, 0.004, sd * 0.0118); eyes.push({ geo: pup, c: [0.01, 0.01, 0.012] });
+    }
+    const g = M.mergeC([{ geo: body }, { geo: tail }, { geo: dors }, ...eyes]), P = g.attributes.position, aT = new Float32Array(P.count);
     for (let i = 0; i < P.count; i++) aT[i] = Math.max(0, Math.min(1, (0.06 - P.getX(i)) / 0.135));
     g.setAttribute('aT', new T.BufferAttribute(aT, 1));
     return g;
@@ -96,36 +102,55 @@ const Life = (() => {
     return { body, tail, fins };
   }
 
-  /* shadows of small fish in the shallows, drawn on the water's surface */
+  /* (what is seen through the water is drawn at the surface's own depth along the line of sight, so the water never
+     covers it, a few centimetres nearer than that, as the sea's mesh only follows the waves between its own points;
+     a little of its depth kept, so that its own parts still stand in their order) */
+  const ONTOP = `
+vec3 onTop(vec3 w, float hs){
+  vec3 ray = w - cameraPosition; float k = ray.y < -1e-4 ? clamp((hs + 0.012 - cameraPosition.y)/ray.y, 0.0, 1.0) : 1.0;
+  vec3 p = cameraPosition + ray*k, v = p - cameraPosition; float d = length(v), dep = clamp(hs - w.y, 0.0, 1.5);
+  return p + v/max(d, 1e-3)*(dep*0.025 - min(d*0.5, 0.06 + 0.0015*d));
+}
+/* how deep the water is here, roughly (as shallows.js reckons it), and where the sun throws the shadow of a thing at
+   height y onto the sand under it */
+float bedAt(vec2 p){ float g = shoreDZv(p.x); return clamp(0.12*(shoreZv(p.x) - p.y)/sqrt(1.0 + g*g) + 0.15, 0.0, 4.5); }
+vec2 throwTo(vec2 p, float y, float bed, vec3 L){ vec2 o = -L.xz/max(L.y, 0.12)*max(0.0, y + bed); float n = length(o); return p + (n > 1.4 ? o*(1.4/n) : o); }`;
+  /* the shadows of the shoal's fish on the sand under the shallows: each where the sun throws it from its fish, the
+     fish's own size, softer the further its fish swims above the sand; strong in full sun, gone under cloud */
   const SHOAL_VS = `
 ${GLSL.WAVEH}
-uniform vec4 uSchool[5]; uniform float uTime;
+${ONTOP}
+uniform vec4 uSchool[5]; uniform float uTime; uniform vec3 uKeyDirT;
 attribute vec4 aFish;   /* school, along, across, phase */
-varying vec2 vUv; varying float vA;
+varying vec2 vUv; varying float vA, vSoft;
 void main(){
   vUv = uv;
   vec4 S = uSchool[int(aFish.x)];
   float hd = S.z, c = cos(hd), s = sin(hd);
   vec2 off = vec2(aFish.y, aFish.z) + vec2(sin(uTime*0.9 + aFish.w*6.0)*0.35, sin(uTime*0.6 + aFish.w*4.0)*0.3);
   vec2 p = S.xy + vec2(c*off.x - s*off.y, s*off.x + c*off.y);
-  float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0);
-  vec2 q = (uv - 0.5)*vec2(0.5, 0.15)*(0.8 + 0.4*fract(aFish.w*7.7));
+  float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0), fy = -0.2 - 0.32*fract(aFish.w*3.3), bed = bedAt(p);
+  vec3 L = normalize(uKeyDirT);
+  vec2 at = throwTo(p, fy, bed, L);
+  float lift = max(0.0, fy + bed);
+  vSoft = clamp(0.25 + lift*0.9, 0.25, 0.8);
+  /* (a fish's shadow is its outline from where the sun stands: long and thin with the sun high, deeper as it sinks) */
+  vec2 q = (uv - 0.5)*vec2(0.15, 0.03 + 0.05*(1.0 - L.y))*(0.8 + 0.4*fract(aFish.w*7.7))*(1.0 + vSoft*0.6);
   vec2 w = vec2(cos(yaw)*q.x - sin(yaw)*q.y, sin(yaw)*q.x + cos(yaw)*q.y);
-  vec3 wp = vec3(p.x + w.x, 0.0, p.y + w.y);
-  wp.y = waveH(wp.xz) + 0.025;
+  vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
   float g = shoreDZv(p.x), dist = (shoreZv(p.x) - p.y)/sqrt(1.0 + g*g);
-  vA = S.w*smoothstep(0.8, 1.8, dist)*smoothstep(8.0, 5.0, dist);
-  gl_Position = projectionMatrix*viewMatrix*vec4(wp, 1.0);
+  vA = S.w*smoothstep(0.8, 1.8, dist)*smoothstep(8.0, 5.0, dist)*smoothstep(0.12, 0.35, L.y);
+  gl_Position = projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
   const SHOAL_FS = `
-uniform float uDay; varying vec2 vUv; varying float vA;
+uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv; varying float vA, vSoft;
 void main(){
   vec2 q = vUv*2.0 - 1.0;
-  float body = 1.0 - smoothstep(0.75, 1.0, length(vec2(q.x*1.05 + 0.1, q.y*(1.4 + 0.9*max(q.x, 0.0)))));
-  float tail = step(q.x, -0.72)*(1.0 - smoothstep(0.1, 0.9, abs(q.y)*1.6 - (-0.72 - q.x)*2.0));
-  float a = max(body, tail*0.8)*vA*uDay*0.32;
+  float m = 1.0 - smoothstep(1.0 - vSoft, 1.0, length(q));
+  float lk = dot(uKeyColT, vec3(0.3, 0.59, 0.11)), la = dot(uAmbF, vec3(0.3, 0.59, 0.11)), sun = clamp(lk/(lk + 2.0*la + 1e-4)*1.5, 0.0, 1.0);
+  float a = m*vA*uDay*sun*(0.34 - 0.18*vSoft);
   if (a < 0.01) discard;
-  gl_FragColor = vec4(0.004, 0.018, 0.022, a);
+  gl_FragColor = vec4(0.012, 0.035, 0.04, a);
 }`;
 
   /* the fish themselves, swimming under the surface of the shallows: each drawn where it is seen through the water,
@@ -177,46 +202,83 @@ void main(){
   gl_FragColor = vec4(col, vA*uDay*(0.25 + 0.75*exp(-vDepth*0.7))*(1.0 - 0.85*fres));
 }`;
 
-  /* sea turtles' shadows on the sand under the shallows: a shell, a head, the long front flippers rowing and the short
-     back ones, each turtle drawn in its own frame on the water's surface */
+  /* sea turtles' (and the ray's) shadows on the sand under the shallows, each where the sun throws it from the animal
+     above (a shell, a head, the long front flippers rowing and the short back ones; for a ray its diamond and tail),
+     soft at the edges, and only in sunshine */
   const TURTLE_VS = `
 ${GLSL.WAVEH}
+${ONTOP}
+uniform vec3 uKeyDirT;
 attribute vec4 iT;   /* x, z, heading, how much it shows */
-attribute vec4 iU;   /* flipper stroke phase, length, which (0 a turtle, 1 a ray) */
+attribute vec4 iU;   /* flipper stroke phase, length, which (0 a turtle, 1 a ray), how high it swims (y) */
 varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
 void main(){
-  vUv = uv; vPh = iU.x; vA = iT.w; vKind = iU.z;
+  vUv = uv; vPh = iU.x; vKind = iU.z;
+  vec3 L = normalize(uKeyDirT);
+  float bed = bedAt(iT.xy);
+  vec2 at = throwTo(iT.xy, iU.w, bed, L);
+  vA = iT.w*smoothstep(0.12, 0.35, L.y);
   float c = cos(iT.z), s = sin(iT.z);
-  vec2 q = (uv - 0.5)*iU.y*1.5, w = vec2(c*q.x - s*q.y, s*q.x + c*q.y);
-  vec3 wp = vec3(iT.x + w.x, 0.0, iT.y + w.y);
-  wp.y = waveH(wp.xz) + 0.03;
-  gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(wp, 1.0);
+  vec2 q = (uv - 0.5)*iU.y*1.5*(1.0 + 0.08*max(0.0, iU.w + bed)), w = vec2(c*q.x - s*q.y, s*q.x + c*q.y);
+  vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
+  gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
   const TURTLE_FS = `
-uniform float uDay; varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
+uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
 float ell(vec2 p, vec2 c, vec2 r, float a){ p -= c; float cs = cos(a), sn = sin(a); p = vec2(cs*p.x + sn*p.y, -sn*p.x + cs*p.y); return length(p/r); }
 void main(){
   vec2 p = (vUv - 0.5)*1.5;
+  float lk = dot(uKeyColT, vec3(0.3, 0.59, 0.11)), la = dot(uAmbF, vec3(0.3, 0.59, 0.11)), sun = clamp(lk/(lk + 2.0*la + 1e-4)*1.5, 0.0, 1.0);
+  float m;
   if (vKind > 0.5){
     /* a ray: a broad diamond of a body, its wing tips rippling, a long thin tail */
     float w = 0.5 + 0.035*sin(vPh*1.3 - abs(p.y)*9.0), dia = abs(p.x - 0.05)/0.36 + abs(p.y)/w;
-    float m = 1.0 - smoothstep(0.85, 1.0, dia + 0.25*smoothstep(0.1, 0.36, p.x)*(1.0 - smoothstep(0.0, 0.1, abs(p.y))));
-    m = max(m, (1.0 - smoothstep(0.006, 0.014, abs(p.y + 0.02*sin(vPh + p.x*6.0))))*step(-0.72, p.x)*step(p.x, -0.25));
-    float al = m*vA*uDay*0.5;
-    if (al < 0.01) discard;
-    gl_FragColor = vec4(0.004, 0.016, 0.02, al); return;
+    m = 1.0 - smoothstep(0.6, 1.0, dia + 0.25*smoothstep(0.1, 0.36, p.x)*(1.0 - smoothstep(0.0, 0.1, abs(p.y))));
+    m = max(m, 0.6*(1.0 - smoothstep(0.004, 0.02, abs(p.y + 0.02*sin(vPh + p.x*6.0))))*step(-0.72, p.x)*step(p.x, -0.25));
+  } else {
+    m = 1.0 - smoothstep(0.6, 1.0, ell(p, vec2(-0.02, 0.0), vec2(0.4, 0.31), 0.0));
+    m = max(m, 1.0 - smoothstep(0.5, 1.0, ell(p, vec2(0.46, 0.0), vec2(0.12, 0.085), 0.0)));
+    for (int k = 0; k < 2; k++){
+      float sd = k == 0 ? -1.0 : 1.0, a = sd*(1.85 + 0.55*sin(vPh)), b = sd*(2.55 + 0.2*sin(vPh + 1.6));
+      vec2 sh = vec2(0.17, sd*0.25), hip = vec2(-0.32, sd*0.15);
+      m = max(m, 1.0 - smoothstep(0.45, 1.0, ell(p, sh + 0.17*vec2(cos(a), sin(a)), vec2(0.2, 0.055), a)));
+      m = max(m, 1.0 - smoothstep(0.45, 1.0, ell(p, hip + 0.07*vec2(cos(b), sin(b)), vec2(0.09, 0.05), b)));
+    }
   }
-  float m = 1.0 - smoothstep(0.82, 1.0, ell(p, vec2(-0.02, 0.0), vec2(0.4, 0.31), 0.0));
-  m = max(m, 1.0 - smoothstep(0.75, 1.0, ell(p, vec2(0.46, 0.0), vec2(0.12, 0.085), 0.0)));
-  for (int k = 0; k < 2; k++){
-    float sd = k == 0 ? -1.0 : 1.0, a = sd*(1.85 + 0.55*sin(vPh)), b = sd*(2.55 + 0.2*sin(vPh + 1.6));
-    vec2 sh = vec2(0.17, sd*0.25), hip = vec2(-0.32, sd*0.15);
-    m = max(m, 1.0 - smoothstep(0.7, 1.0, ell(p, sh + 0.17*vec2(cos(a), sin(a)), vec2(0.2, 0.055), a)));
-    m = max(m, 1.0 - smoothstep(0.7, 1.0, ell(p, hip + 0.07*vec2(cos(b), sin(b)), vec2(0.09, 0.05), b)));
-  }
-  float al = m*vA*uDay*0.55;
+  float al = m*vA*uDay*sun*0.26;
   if (al < 0.01) discard;
-  gl_FragColor = vec4(0.004, 0.018, 0.022, al);
+  gl_FragColor = vec4(0.012, 0.035, 0.04, al);
+}`;
+
+  /* the turtles and the ray themselves, seen through the water as the fish are: every part of the model drawn where it
+     is seen, at the surface's own depth, tinted toward the water's green the deeper it is and faded at a glancing angle;
+     what breaks the surface (a turtle up to breathe) shows as it is */
+  const UW_VS = `
+${GLSL.WAVEH}
+${ONTOP}
+attribute vec3 color;
+uniform vec3 uCol; uniform float uVC;
+varying vec3 vC, vN, vW; varying float vDepth;
+void main(){
+  vec4 w = modelMatrix*vec4(position, 1.0);
+  vN = normalize(mat3(modelMatrix)*normal); vC = uCol*mix(vec3(1.0), color, uVC); vW = w.xyz;
+  float hs = waveH(w.xz); vDepth = max(0.0, hs - w.y);
+  gl_Position = projectionMatrix*viewMatrix*vec4(onTop(w.xyz, hs), 1.0);
+}`;
+  const UW_FS = `
+uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay, uFade;
+varying vec3 vC, vN, vW; varying float vDepth;
+void main(){
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW);
+  float tr = exp(-vDepth*1.4);
+  vec3 L = uAmbF*0.95 + uKeyColT*max(dot(n, uKeyDirT), 0.0)*tr*1.15;
+  vec3 h = normalize(uKeyDirT + V); float sp = pow(max(dot(n, h), 0.0), 30.0)*0.3*tr;
+  vec3 col = vC*L + uKeyColT*sp;
+  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + uKeyColT*0.3), col*1.1, exp(-vDepth*0.75));
+  float under = smoothstep(0.0, 0.04, vDepth), fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
+  float a = uFade*mix(1.0, (0.35 + 0.65*exp(-vDepth*0.7))*(1.0 - 0.85*fres), under)*(0.45 + 0.55*uDay);
+  if (a < 0.01) discard;
+  gl_FragColor = vec4(col, a);
 }`;
 
   /* sky lanterns: paper lanterns lit from below, released from the camp, rising and drifting out over the sea on the land breeze */
@@ -338,7 +400,7 @@ void main(){
     sg.setAttribute('aFish', new T.InstancedBufferAttribute(af, 4)); sg.instanceCount = 3 * NF;
     const schools = [0, 1, 2, 3, 4].map(i => ({ x: (i - 2) * 16, s: 4 + (i % 3) * 1.5, h: 0, v: 0.7, turn: 0, k: 0 }));
     const uSchool = { value: schools.map(() => new T.Vector4()) };
-    const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const shoalM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uDay: U.uDay, uSchool, uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF }, Mats.coastU), vertexShader: SHOAL_VS, fragmentShader: SHOAL_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const shoal = new T.Mesh(sg, shoalM); shoal.frustumCulled = false; shoal.renderOrder = 4; root.add(shoal);
     /* the fish themselves, over their shadows */
     const fg3 = schoolFishGeo(), fs = new T.InstancedBufferGeometry(); fs.index = fg3.index;
@@ -371,40 +433,31 @@ void main(){
     tg.index = quad.index; tg.setAttribute('position', quad.attributes.position); tg.setAttribute('uv', quad.attributes.uv);
     const iT = new T.InstancedBufferAttribute(new Float32Array(NT * 4), 4), iU = new T.InstancedBufferAttribute(new Float32Array(NT * 4), 4);
     iT.setUsage(T.DynamicDrawUsage); iU.setUsage(T.DynamicDrawUsage); tg.setAttribute('iT', iT); tg.setAttribute('iU', iU); tg.instanceCount = NT;
-    const turtleM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, Mats.coastU), vertexShader: TURTLE_VS, fragmentShader: TURTLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
+    const lightU = { uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF };
+    const turtleM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, lightU, Mats.coastU), vertexShader: TURTLE_VS, fragmentShader: TURTLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const turtleSh = new T.Mesh(tg, turtleM); turtleSh.frustumCulled = false; turtleSh.renderOrder = 4; root.add(turtleSh);
-    /* the head and the top of the shell, for when one comes up: an olive-brown dome plated with scutes (a row down the
-       middle, four either side, small ones round the rim, dark seams between, each paler at its middle), and a blunt,
-       scaly head */
-    const shellG = new T.SphereGeometry(1, 56, 18, 0, TAU, 0, Math.PI / 2); shellG.scale(0.44, 0.17, 0.35);
-    {
-      const C = [[0.3, 0], [0.15, 0], [0, 0], [-0.15, 0], [-0.3, 0]];
-      for (const sd of [-1, 1]) for (const x of [0.22, 0.07, -0.08, -0.23]) C.push([x, sd * 0.19]);
-      for (let k = 0; k < 24; k++) { const a = k / 24 * TAU; C.push([Math.cos(a) * 0.42, Math.sin(a) * 0.33]); }
-      const tone = C.map(() => 0.85 + 0.3 * r()), pa = shellG.attributes.position, col = new Float32Array(pa.count * 3);
-      for (let i = 0; i < pa.count; i++) {
-        const x = pa.getX(i), z = pa.getZ(i); let d1 = 9, d2 = 9, k1 = 0;
-        C.forEach(([cx, cz], k) => { const d = Math.hypot(x - cx, (z - cz) * 1.1); if (d < d1) { d2 = d1; d1 = d; k1 = k; } else if (d < d2) d2 = d; });
-        const seam = Math.min(1, (d2 - d1) / 0.025), g = tone[k1] * (0.82 + 0.22 * Math.exp(-d1 * 14)) * (0.55 + 0.45 * seam);
-        col.set([0.15 * g, 0.135 * g, 0.085 * g], i * 3);
-      }
-      shellG.setAttribute('color', new T.BufferAttribute(col, 3));
+    /* every part of a model given the look through the water (UW_VS, UW_FS); uFade how much of it shows */
+    const uwBase = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, lightU, Mats.coastU);
+    function underwater(o, uFade) {
+      o.traverse(m => {
+        if (!m.isMesh) return;
+        const src = m.material, col = src.color ? src.color.clone() : new T.Color(1, 1, 1);
+        m.material = new T.ShaderMaterial({ uniforms: Object.assign({ uCol: { value: col }, uVC: { value: src.vertexColors && m.geometry.attributes.color ? 1 : 0 }, uFade }, uwBase),
+          vertexShader: UW_VS, fragmentShader: UW_FS, transparent: true, depthWrite: true, side: src.side ?? T.FrontSide });
+        m.renderOrder = 5; m.frustumCulled = false; m.castShadow = m.receiveShadow = false;
+      });
+      return o;
     }
-    const shellM = Mats.lit({ vertexColors: true, roughness: 0.42 }, 'rock'), headM = Mats.lit({ color: new T.Color('#67624a'), roughness: 0.5 }, 'rock');
-    const eyeM = Mats.lit({ color: new T.Color('#0b0a08'), roughness: 0.15 }), beakM = Mats.lit({ color: new T.Color('#3b3526'), roughness: 0.4 }), flipM = Mats.lit({ color: new T.Color('#57523c'), roughness: 0.5 }, 'rock');
-    const headG = new T.SphereGeometry(1, 14, 10); headG.scale(0.13, 0.085, 0.08);
-    const eyeG = new T.SphereGeometry(0.018, 8, 6), beakG = new T.ConeGeometry(0.035, 0.07, 8); beakG.rotateZ(-Math.PI / 2);
-    /* a front flipper: long, flat and curved back, rowing just under the surface */
-    const finG = new T.SphereGeometry(1, 12, 6); finG.scale(0.24, 0.025, 0.07); finG.translate(0.2, 0, 0);
-    const turtles = Array.from({ length: NT }, () => { const g = new T.Group(), sh = new T.Mesh(shellG, shellM), hd = new T.Mesh(headG, headM); hd.position.set(0.5, 0.07, 0); hd.rotation.z = 0.5;
-      /* eyes either side of the head, a hooked beak at its tip */
-      for (const sd of [-1, 1]) { const ey = new T.Mesh(eyeG, eyeM); ey.position.set(0.045, 0.028, sd * 0.062); hd.add(ey); }
-      const bk = new T.Mesh(beakG, beakM); bk.position.set(0.12, -0.012, 0); bk.scale.set(1, 0.8, 1.1); hd.add(bk);
-      const fins = [-1, 1].map(sd => { const f = new T.Mesh(finG, flipM); f.position.set(0.2, -0.04, sd * 0.28); f.userData.sd = sd; g.add(f); return f; });
-      g.add(sh, hd); g.visible = false; root.add(g); g.userData.fins = fins;
-      return { g, x: NaN, z: 0, h: 0, v: 0.35, turn: 0, ph: r() * TAU, len: 0.75 + r() * 0.45, k: 0, up: -1e9, next: 15 + r() * 50, rang: false, ray: false }; });
-    /* (the last of them is a ray, as often as not: it glides a little faster, nearer the sand, and never comes up) */
-    turtles[NT - 1].ray = r() < 0.6; if (turtles[NT - 1].ray) { turtles[NT - 1].v = 0.55; turtles[NT - 1].len = 1.1 + r() * 0.5; }
+    /* how deep the water is, roughly, this far out from the line of the waves (as shallows.js reckons it) */
+    const depthAt = (x, z) => { const g = Layout.shoreDZ(x), s = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); return Math.max(0, Math.min(4.5, 0.12 * s + 0.15)); };
+    /* the turtles, whole (the same green turtle as the one picked up), and the last of them, as often as not, a spotted
+       eagle ray instead: it glides a little faster, nearer the sand, and never comes up */
+    const turtles = Array.from({ length: NT }, (_, i) => {
+      const Tu = { x: NaN, z: 0, h: 0, v: 0.35, turn: 0, ph: r() * TAU, len: 0.75 + r() * 0.45, k: 0, up: -1e9, next: 15 + r() * 50, rang: false, ray: false, uFade: { value: 0 } };
+      if (i === NT - 1 && r() < 0.6) { Tu.ray = true; Tu.v = 0.55; Tu.len = 1.1 + r() * 0.5; }
+      Tu.g = underwater(Models.make(Tu.ray ? 'life/ray' : 'life/turtle'), Tu.uFade); Tu.g.visible = false; root.add(Tu.g);
+      return Tu;
+    });
 
     /* advance: t in seconds of scene time, cx the camera's x; returns splashes to show and hear */
     function update(t, dt, cx, opt = {}) {
@@ -467,22 +520,28 @@ void main(){
         if (t > Tu.next && i < nTu && (opt.day ?? 1) > 0.2 && !Tu.ray) { Tu.up = t; Tu.next = t + 45 + r() * 90; Tu.rang = false; }
         const e = t - Tu.up, at = e >= 0 && e < 6 ? Math.min(1, e, 6 - e) : 0;
         if (at > 0 && !Tu.rang) { Tu.rang = true; out.push({ x: Tu.x + Math.cos(Tu.h) * 0.4 * Tu.len, z: Tu.z + Math.sin(Tu.h) * 0.4 * Tu.len, k: 0.12 }); }
-        /* (only the top of the shell and the head clear the water) */
-        Tu.g.visible = at > 0; if (at > 0) { Tu.g.position.set(Tu.x, -0.3 * Tu.len + 0.21 * Tu.len * at, Tu.z); Tu.g.rotation.set(0, -Tu.h, 0.08); Tu.g.scale.setScalar(Tu.len);
-          /* (the front flippers row slowly, out and back) */
-          for (const f of Tu.g.userData.fins) { const sd = f.userData.sd; f.rotation.set(0, -sd * (0.9 + 0.35 * Math.sin(Tu.ph)), sd * 0.15 * Math.cos(Tu.ph)); } }
+        /* the animal itself, through the water: mid-water over the sand (a ray low, just above it), rising for a breath
+           until the top of its shell and its head clear the surface; rowing (or beating its wings) as it goes */
+        const bed = depthAt(Tu.x, Tu.z), swim = Tu.ray ? -Math.max(0.25, bed - 0.2) : -Math.min(0.75, Math.max(0.34, bed * 0.55)), y = swim + (-0.07 * Tu.len - swim) * at;
+        Tu.g.visible = Tu.k > 0.01; Tu.uFade.value = Tu.k;
+        if (Tu.g.visible) {
+          Tu.g.position.set(Tu.x, y, Tu.z); Tu.g.rotation.set(0, -Tu.h, (Tu.ray ? 0.05 : 0.07) * Math.sin(Tu.ph * 0.5) + (Tu.ray ? 0 : 0.12 * Math.sin(Math.PI * at)), 'YXZ');
+          Tu.g.scale.setScalar(Tu.ray ? Tu.len / 1.3 : Tu.len);
+          Tu.g.userData.anim && Tu.g.userData.anim(Tu.ray ? Tu.ph * 1.1 : Tu.ph * 0.75);
+        }
         iT.array[q] = Tu.x; iT.array[q + 1] = Tu.z; iT.array[q + 2] = Tu.h; iT.array[q + 3] = Tu.k * (1 - 0.7 * at) * (opt.day ?? 1);
-        iU.array[q] = Tu.ph; iU.array[q + 1] = Tu.len; iU.array[q + 2] = Tu.ray ? 1 : 0;
+        iU.array[q] = Tu.ph; iU.array[q + 1] = Tu.len; iU.array[q + 2] = Tu.ray ? 1 : 0; iU.array[q + 3] = y;
       });
       iT.needsUpdate = iU.needsUpdate = true;
       return out;
     }
-    /* turtles at the surface and fish in mid-leap, for picking up (inspect.js); thrown back, a turtle swims on from where
-       it went in */
+    /* turtles (and the ray) in the shallows and fish in mid-leap, for picking up (inspect.js); thrown back, a turtle swims
+       on from where it went in */
     function swimPickables(list, cam) {
       for (const Tu of turtles) {
-        if (!Tu.g.visible || Tu.held || Tu.ray) continue;
-        list.push({ kind: 'turtle', x: Tu.g.position.x, y: Tu.g.position.y + 0.1 * Tu.len, z: Tu.g.position.z, r: 0.42 * Tu.len, yaw: -Tu.h, size: 1.1 * Tu.len, reach: 45,
+        if (!Tu.g.visible || Tu.held) continue;
+        const sc = Tu.ray ? Tu.len / 1.3 : Tu.len;
+        list.push({ kind: Tu.ray ? 'ray' : 'turtle', x: Tu.g.position.x, y: Tu.g.position.y + (Tu.ray ? 0.03 : 0.1) * sc, z: Tu.g.position.z, r: (Tu.ray ? 0.45 : 0.42) * sc, yaw: -Tu.h, size: sc, reach: 45,   /* (the same model as swims here, at the size it swims) */
           take() { Tu.held = true; Tu.g.visible = false; },
           give(how, p) { Tu.held = false; if (how !== 'back' && p) { Tu.x = p.x; Tu.z = Math.min(p.z, Layout.shoreZ(p.x) - 3); } Tu.up = -1e9; } });
       }
