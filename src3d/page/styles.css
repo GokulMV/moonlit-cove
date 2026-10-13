@@ -31,7 +31,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); out
 /* brand */
 .brand::before { content: ''; position: absolute; z-index: -1; left: -60px; top: -50px; width: calc(100% + 160px); height: calc(100% + 110px); background: radial-gradient(ellipse 60% 62% at 34% 42%, rgba(6, 9, 15, 0.62), rgba(6, 9, 15, 0.32) 55%, rgba(6, 9, 15, 0) 100%); pointer-events: none; }
 .brand { position: absolute; z-index: 0; isolation: isolate; top: calc(env(safe-area-inset-top, 0px) + 22px); left: max(var(--gut), 26px); max-width: min(420px, calc(100% - 2 * var(--gut))); pointer-events: none; text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55); transition: opacity .6s; }
-.brand h1 { margin: 5px 0 3px; font: 500 clamp(24px, 2.6vw, 32px)/1 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; letter-spacing: -0.005em; }
+.brand h1 { margin: 0 0 4px; font: 500 clamp(24px, 2.6vw, 32px)/1 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 72; letter-spacing: -0.005em; }
 .brand .role { margin: 0; font: 500 12px/1.4 var(--mono); letter-spacing: 0.04em; color: rgba(236, 230, 218, 0.86); }
 /* the name can be put away, and brought back from the corner or the settings */
 .brand-hide { position: absolute; top: -4px; right: -34px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: rgba(11, 15, 24, 0.55); color: var(--dim); opacity: 0; pointer-events: auto; transition: opacity .25s, color .2s; }
@@ -266,7 +266,7 @@ input[type="range"]:disabled { opacity: 0.35; }
   opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); transition: opacity .8s ease .3s, transform 1.1s cubic-bezier(.2, .7, .2, 1) .3s, visibility 0s 1.4s; }
 .intro.ready .intro-card { opacity: 1; visibility: visible; transform: none; transition: opacity .8s ease .3s, transform 1.1s cubic-bezier(.2, .7, .2, 1) .3s, visibility 0s; }
 #hud .intro.gone .intro-card { opacity: 0; transform: translateY(-10px) scale(0.985); transition: opacity .5s ease, transform .9s cubic-bezier(.4, 0, .2, 1); }
-.intro-card h2 { margin: 12px 0 8px; font: 400 clamp(50px, 8vw, 70px)/0.95 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 144; letter-spacing: -0.02em; }
+.intro-card h2 { margin: 2px 0 10px; font: 400 clamp(38px, 7vw, 54px)/0.98 var(--display); font-variation-settings: 'SOFT' 100, 'opsz' 144; letter-spacing: -0.02em; }
 .intro-role { margin: 0; font: 500 13px/1.4 var(--mono); letter-spacing: 0.04em; color: rgba(236, 230, 218, 0.82); }
 /* the live sky, as the chip in the corner will show it */
 .intro-sky { display: flex; align-items: center; gap: 12px; margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }

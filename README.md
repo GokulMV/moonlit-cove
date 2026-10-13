@@ -1,6 +1,6 @@
 # Moonlit Cove
 
-GokulMV's portfolio, built as a beach camp to explore under a live night sky.
+GK’s Hideaway: GokulMV's portfolio, built as a beach camp to explore under a live night sky.
 
 The résumé is part of the camp. The basket holds blueprints of the architecture, the clipboard on the van lists what it's built with, the journal by the fire has stories from the build, and contact is a letter in a bottle. The sky follows the visitor's local time with the real moon, stars and planets, and the tide follows the moon.
 

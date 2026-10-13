@@ -7,6 +7,7 @@
      contact    the letter in the bottle
    ───────────────────────────────────────────────────────────── */
 const Content = {
+  site: 'GK’s Hideaway',
   name: 'GokulMV',
   role: 'Senior Consultant at Thoughtworks',
   links: [['LinkedIn', 'https://linkedin.com/in/gokulmv', 'linkedin.com/in/gokulmv'], ['GitHub', 'https://github.com/GokulMV', 'github.com/GokulMV']],

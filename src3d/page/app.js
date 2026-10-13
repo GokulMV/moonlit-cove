@@ -47,8 +47,9 @@
   Object.defineProperty(V, 'van', { get: vanView, enumerable: true });
 
   /* ── text content ── */
-  $('hName').textContent = Content.name; $('iName').textContent = Content.name;
-  $('hRole').textContent = Content.role; $('iRole').textContent = Content.role;
+  /* (the place's name, and beneath it whose it is) */
+  $('hName').textContent = Content.site; $('introName').textContent = Content.site;
+  $('hRole').textContent = Content.name + ' · ' + Content.role; $('introRole').textContent = Content.name + ' · ' + Content.role;
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   /* the words of each chapter as plain HTML, for screen readers (the pages themselves are pictures on paper) */
   function docText(id) {
@@ -2083,7 +2084,7 @@
   /* the system's media keys and notification follow the radio */
   function mediaInfo(title, artist) {
     const m = navigator.mediaSession; if (!m) return;
-    try { m.metadata = title && window.MediaMetadata ? new MediaMetadata({ title, artist, album: 'GokulMV · Portfolio' }) : null; m.playbackState = title ? 'playing' : 'none'; } catch (e) { /* not everywhere */ }
+    try { m.metadata = title && window.MediaMetadata ? new MediaMetadata({ title, artist, album: Content.site }) : null; m.playbackState = title ? 'playing' : 'none'; } catch (e) { /* not everywhere */ }
   }
   if (navigator.mediaSession) for (const [a, fn] of [['play', () => { if (seat.on) radioOn(); }], ['pause', () => radioOff()], ['stop', () => radioOff()], ['nexttrack', () => step(1)], ['previoustrack', () => step(-1)]]) { try { navigator.mediaSession.setActionHandler(a, fn); } catch (e) { /* not everywhere */ } }
   syncRadioUI();

@@ -86,8 +86,8 @@ if (which === 'web') {
   const three = fs.readFileSync(path.join(nm, 'three/build/three.min.js')), threeName = `vendor/three-${THREE_VERSION}.${hash(three)}.min.js`;
   fs.writeFileSync(path.join(out, threeName), three);
   /* a whole document (the artifact host adds this skeleton itself), a moon for the tab, and a card for shared links */
-  const C = src('page/content.js'), name = (C.match(/name:\s*'([^']+)'/) || [, 'Moonlit Cove'])[1];
-  const head = `\n<meta name="theme-color" content="#0b0f18">\n<meta property="og:type" content="website">\n<meta property="og:title" content="${name} · Portfolio">\n<meta property="og:description" content="A moonlit beach camp you can explore: build notes by the fire, blueprints in the basket, a letter in a bottle.">\n<meta name="twitter:card" content="summary">`;
+  const C = src('page/content.js'), name = (C.match(/name:\s*'([^']+)'/) || [, 'Moonlit Cove'])[1], site = (C.match(/site:\s*'([^']+)'/) || [, name])[1];
+  const head = `\n<meta name="theme-color" content="#0b0f18">\n<meta property="og:type" content="website">\n<meta property="og:site_name" content="${site}">\n<meta property="og:title" content="${site}">\n<meta property="og:description" content="${name}’s moonlit beach camp you can explore: build notes by the fire, blueprints in the basket, a letter in a bottle.">\n<meta name="twitter:card" content="summary">\n<meta name="twitter:title" content="${site}">`;
   const html = '<!doctype html>\n<html lang="en">\n' + page(threeName, sounds(path.join(out, 'snd')), head) + '\n</html>\n';
   fs.writeFileSync(path.join(out, 'index.html'), html);
   const kb = f => (fs.statSync(path.join(out, f)).size / 1024).toFixed(0) + 'KB';
