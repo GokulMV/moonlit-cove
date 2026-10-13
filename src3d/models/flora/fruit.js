@@ -45,7 +45,7 @@ const FloraFruit = (() => {
     papaya: { u0: '#2f5c20', u1: '#5a8a2e', ripe: '#e8962a', blush: '#f0a030', spot: '#3a2410', rot: '#4a2c14', mould: '#a9aea0', tip0: '#5a8a2e', tip1: '#e8962a',
       n: [5, 12, 30], blush_: 0.4, k: [0, 1, 0.55, 0], r: [0.4, 0.33, 0.85], g: [0.06, 0.08, 60, 0.008] },
     /* a banana finger: green, yellow, freckled with sugar spots, brown, black */
-    banana: { u0: '#3a6a22', u1: '#6a9a34', ripe: '#e8c83a', blush: '#e0c03a', spot: '#2a1a0a', rot: '#1c140c', mould: '#a8a898', tip0: '#2a2a1a', tip1: '#2a2a1a',
+    banana: { u0: '#3a6a22', u1: '#6a9a34', ripe: '#deb52a', blush: '#e0c03a', spot: '#2a1a0a', rot: '#1c140c', mould: '#a8a898', tip0: '#2a2a1a', tip1: '#2a2a1a',
       n: [20, 30, 160], blush_: 0.0, k: [0, 1.4, 0.6, 0], r: [0.45, 0.4, 0.8], g: [0.15, 0.06, 80, 0.0] },
     /* a coconut: green (or orange-gold), drying brown, cracking grey */
     coconut: { u0: '#4a6a20', u1: '#7a9a30', ripe: '#7a5a2a', blush: '#8a6a30', spot: '#3a2a16', rot: '#4a3c2c', mould: '#8a8478', tip0: '#7a9a30', tip1: '#7a5a2a',
@@ -55,7 +55,7 @@ const FloraFruit = (() => {
      rambutan's hairs shrink back); fragment — its skin's colour for its age, its blotches, its blush, spots, rot,
      mould, lenticels, and the wrinkles' relief ── */
   const VDECL = `
-attribute float aAge; attribute float aSeed; attribute vec4 aFr;
+attribute float aAge; attribute float aSeed; attribute vec4 aFr;   /* (aFr: sun side, along a hair or spine, keeps its own colour, part of the fruit's body) */
 uniform vec4 uFrG; uniform vec3 uFrP;
 varying float vAge; varying float vSeed; varying vec4 vFr; varying vec3 vObj;
 float frH(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
@@ -104,9 +104,9 @@ varying float vAge; varying float vSeed; varying vec4 vFr; varying vec3 vObj;`;
     c = mix(c, c*1.45 + 0.012, le*0.6);
     if (uFrW.y > 0.0) c *= mix(0.62, 1.0, smoothstep(0.0, 0.22, frWv.y - frWv.x))*(0.92 + 0.16*frHf(floor(q*uFrW.x*1.0) + 3.0));
     c *= 1.0 - uFrW.z*(1.0 - smoothstep(0.0, 0.35, vFr.y));
-    diffuseColor.rgb = mix(diffuseColor.rgb, c, sk); }`;
+    diffuseColor.rgb = mix(diffuseColor.rgb, c, sk*(1.0 - vFr.z)); }`;
   const FROUGH = `
-  roughnessFactor = mix(roughnessFactor, mix(mix(uFrR.x, uFrR.y, smoothstep(0.42, 0.62, vAge)), uFrR.z, smoothstep(0.78, 0.95, vAge)), vFr.w);`;
+  roughnessFactor = mix(roughnessFactor, mix(mix(uFrR.x, uFrR.y, smoothstep(0.42, 0.62, vAge)), uFrR.z, smoothstep(0.78, 0.95, vAge)), vFr.w*(1.0 - vFr.z));`;
   const FBUMP = `
   { float hh = frNf(vObj*uFrG.z + vSeed*13.0)*smoothstep(0.74, 1.0, vAge)*uFrG.y*0.6*vFr.w;
     if (uFrW.y > 0.0) hh += uFrW.y*smoothstep(0.0, 0.3, frWv.y - frWv.x)*(1.0 - 0.5*frWv.x)*vFr.w;
@@ -276,7 +276,7 @@ float frNf(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
       const [sx, sy] = spine(t), [tx, ty] = tang(t), r = Rb * Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(1, t * 0.98 + 0.01))), 0.5) * (t < 0.15 ? 0.45 + 0.55 * t / 0.15 : 1) * (1 + 0.07 * Math.cos(5 * a)) * (t > 0.9 ? 0.7 + 0.3 * (1 - t) / 0.1 : 1);
       /* (the section in the plane square to the spine: n = (-ty, tx, 0), z) */
       return [sx + (-ty) * Math.cos(a) * r, sy + tx * Math.cos(a) * r, Math.sin(a) * r];
-    }, (t, a) => [0.5 + 0.5 * Math.cos(a), 0, 0, t > 0.965 ? 0 : 1], (t) => t > 0.965 ? [0.05, 0.04, 0.03] : [1, 1, 1]);
+    }, (t, a) => [0.5 + 0.5 * Math.cos(a), 0, t > 0.965 ? 1 : 0, 1], (t) => t > 0.965 ? [0.05, 0.04, 0.03] : [1, 1, 1]);
     return join([body, stalk([V(-0.012, -0.004, 0), V(-0.005, -0.001, 0), V(0.004, 0, 0)], 0.006, 0.005, () => [0.2, 0.24, 0.1], 6)]);
   }
   /* ── a coconut (Cocos nucifera): 20-30 cm, ovoid and three-sided, its ridges plainer toward its pointed end; at its
