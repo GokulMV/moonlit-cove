@@ -58,24 +58,11 @@ const Life = (() => {
     });
   }
 
-  /* a sergeant major for the schools: deep-bodied and flat, silver with a yellow back and five black bars; its tail and
-     a long dorsal fin; aT 0 at its nose to 1 at the tip of its tail (how much it bends as it swims). 13 cm long, its nose
-     toward +x */
+  /* a sergeant major for the schools: models/life/reef.js's own, built lite (its body, fins and eyes as one geometry,
+     painted vertex by vertex); aT 0 at its nose to 1 at the tip of its tail (how much it bends as it swims). 13 cm long,
+     its nose toward +x */
   function schoolFishGeo() {
-    const M = Models, yellow = [0.86, 0.6, 0.12], silver = [0.74, 0.79, 0.82], black = [0.02, 0.022, 0.025];
-    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-    const body = M.loft([[-0.05, 0, 0, 0, 2], [-0.04, 0.006, 0.014, 0, 2], [-0.01, 0.011, 0.032, 0.002, 2], [0.02, 0.012, 0.031, 0.002, 2], [0.045, 0.008, 0.018, 0, 2], [0.06, 0, 0, -0.002, 2]], 16, 12,
-      (x, y, z, u, a) => { const up = Math.cos(a), bar = [0.03, 0.012, -0.006, -0.024, -0.04].some(b => Math.abs(x - b) < 0.0045); const c = silver.map((v, i) => v + (yellow[i] - v) * sm(0.15, 0.7, up)); return bar && up > -0.5 ? black : c; });
-    const fin = (pts, col) => { const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pts.flat(), 3)); g.computeVertexNormals(); return M.paint(g, () => col); };
-    const tail = fin([[-0.048, 0.004, 0], [-0.075, 0.022, 0], [-0.066, 0, 0], [-0.048, -0.004, 0], [-0.066, 0, 0], [-0.075, -0.022, 0]], yellow.map(v => v * 0.9));
-    const dors = fin([[0.03, 0.028, 0], [-0.03, 0.03, 0], [0.0, 0.042, 0], [-0.03, 0.03, 0], [-0.045, 0.02, 0], [-0.035, 0.033, 0]], yellow.map(v => v * 0.8));
-    /* an eye either side: a black pupil in a pale ring, set high toward the snout */
-    const eyes = [];
-    for (const sd of [-1, 1]) {
-      const ring = new T.SphereGeometry(0.0062, 10, 8); ring.scale(0.9, 1, 0.45); ring.translate(0.036, 0.004, sd * 0.0098); eyes.push({ geo: ring, c: [0.8, 0.78, 0.66] });
-      const pup = new T.SphereGeometry(0.0038, 10, 8); pup.scale(0.9, 1, 0.45); pup.translate(0.0365, 0.004, sd * 0.0118); eyes.push({ geo: pup, c: [0.01, 0.01, 0.012] });
-    }
-    const g = M.mergeC([{ geo: body }, { geo: tail }, { geo: dors }, ...eyes]), P = g.attributes.position, aT = new Float32Array(P.count);
+    const g = Models.make('life/reeffish', { lite: true }).userData.parts, P = g.attributes.position, aT = new Float32Array(P.count);
     for (let i = 0; i < P.count; i++) aT[i] = Math.max(0, Math.min(1, (0.06 - P.getX(i)) / 0.135));
     g.setAttribute('aT', new T.BufferAttribute(aT, 1));
     return g;
@@ -130,7 +117,7 @@ void main(){
   vec2 off = vec2(aFish.y, aFish.z) + vec2(sin(uTime*0.9 + aFish.w*6.0)*0.35, sin(uTime*0.6 + aFish.w*4.0)*0.3);
   vec2 p = S.xy + vec2(c*off.x - s*off.y, s*off.x + c*off.y);
   { float hf = waveH(p), gf = shoreDZv(p.x); p += vec2(-gf, 1.0)/sqrt(1.0 + gf*gf)*0.9*hf; }   /* (carried by the swell, as its fish is) */
-  float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0), fy = -0.2 - 0.32*fract(aFish.w*3.3), bed = bedAt(p);
+  float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0), fy = -0.26 - 0.36*fract(aFish.w*3.3), bed = bedAt(p);
   vec3 L = normalize(uKeyDirT);
   vec2 at = throwTo(p, fy, bed, L);
   float lift = max(0.0, fy + bed);
@@ -140,7 +127,7 @@ void main(){
   vec2 w = vec2(cos(yaw)*q.x - sin(yaw)*q.y, sin(yaw)*q.x + cos(yaw)*q.y);
   vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
   float g = shoreDZv(p.x), dist = (shoreZv(p.x) - p.y)/sqrt(1.0 + g*g);
-  vA = S.w*smoothstep(0.8, 1.8, dist)*smoothstep(8.0, 5.0, dist)*smoothstep(0.12, 0.35, L.y);
+  vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*smoothstep(0.12, 0.35, L.y);
   gl_Position = projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
   const SHOAL_FS = `
@@ -176,7 +163,7 @@ void main(){
   float ph = uTime*(8.0 + 3.0*fract(aFish.w*3.1)) + aFish.w*30.0, bend = 0.25*aT*aT;
   p.z += sin(ph - aT*2.6)*bend*0.07*sc;
   float cy = cos(yaw), sy = sin(yaw);
-  vec3 w = vec3(pc.x + cy*p.x - sy*p.z, -0.2 - 0.32*fract(aFish.w*3.3) + p.y, pc.y + sy*p.x + cy*p.z);
+  vec3 w = vec3(pc.x + cy*p.x - sy*p.z, -0.26 - 0.36*fract(aFish.w*3.3) + p.y, pc.y + sy*p.x + cy*p.z);
   /* the swell passing over carries each fish with it: up and down with the surface, shoreward under a crest and back
      again under the trough (the water itself goes round like that as a wave goes by) */
   { float hf = waveH(pc), gf = shoreDZv(pc.x); vec2 lf = vec2(-gf, 1.0)/sqrt(1.0 + gf*gf); w.y += 0.72*hf; w.xz += lf*0.9*hf; }
@@ -184,7 +171,7 @@ void main(){
   float hs = waveH(w.xz);
   vDepth = max(0.0, hs - w.y);
   float g = shoreDZv(pc.x), dist = (shoreZv(pc.x) - pc.y)/sqrt(1.0 + g*g);
-  vA = S.w*smoothstep(0.8, 1.8, dist)*smoothstep(8.0, 5.0, dist)*step(0.01, sc);
+  vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*step(0.01, sc);
   /* (and a few centimetres nearer still: the sea's mesh only follows the waves between its own points) */
   vec3 ray = w - cameraPosition; float k = ray.y < -1e-4 ? clamp((hs + 0.015 - cameraPosition.y)/ray.y, 0.0, 1.0) : 1.0;
   vec3 pt = cameraPosition + ray*k, vv = pt - cameraPosition; float dd = length(vv);
@@ -423,8 +410,8 @@ void main(){
         const k = i * 4, S = schools[af[k] | 0]; if (!S || S.z === undefined || S.k < 0.3) continue;
         const ox = af[k + 1] + Math.sin(t * 0.9 + af[k + 3] * 6) * 0.35, oz = af[k + 2] + Math.sin(t * 0.6 + af[k + 3] * 4) * 0.3, c = Math.cos(S.h), sn = Math.sin(S.h);
         const x = S.x + c * ox - sn * oz, z = S.z + sn * ox + c * oz, d = Math.hypot(x - cam.x, z - cam.z); if (d > 28) continue;
-        const g = Layout.shoreDZ(x), dist = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); if (dist < 1.2 || dist > 7) continue;
-        const sc = 0.8 + 0.4 * (af[k + 3] * 7.7 % 1), y = -0.2 - 0.32 * (af[k + 3] * 3.3 % 1);
+        const g = Layout.shoreDZ(x), dist = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); if (dist < 6 || dist > 13) continue;
+        const sc = 0.8 + 0.4 * (af[k + 3] * 7.7 % 1), y = -0.26 - 0.36 * (af[k + 3] * 3.3 % 1);
         list.push({ kind: 'reeffish', x, y, z, r: 0.12, yaw: -(S.h + 0.25 * Math.sin(t * 2.3 + af[k + 3] * 9)), size: sc * 0.13 / 0.11, reach: 28,
           take() { aVis.array[i] = 0; aVis.needsUpdate = true; }, give() { aVis.array[i] = 1; aVis.needsUpdate = true; } });
       }
@@ -463,6 +450,8 @@ void main(){
       return Tu;
     });
 
+    /* rock under the water here (a reef, or the foot of a headland), which the schools keep off */
+    const rockAt = (x, z) => !!world && ((world.reefTop ? world.reefTop(x, z) > -1.3 : false) || world.massif(x, z) > 0.4);
     /* advance: t in seconds of scene time, cx the camera's x; returns splashes to show and hear */
     function update(t, dt, cx, opt = {}) {
       const out = [];
@@ -490,16 +479,21 @@ void main(){
         j.g.rotation.set(0, Math.atan2(-j.dz, j.dx), Math.atan(slope) + 0.4 * Math.sin(u * 9) * (1 - u), 'YZX');
         j.tail.rotation.y = Math.sin(t * 30) * 0.5;
       }
-      /* the shoals drift along the shallows near the camera, keeping to a few metres out, turning now and then */
+      /* the shoals drift along the coast near the camera out past the surf, in water a metre or so deep (never in the
+         wash at the sand's edge), turning now and then, and turning back from rock: a reef or a headland's foot */
       const nOut = Math.round(NS * Math.min(1, (opt.fish ?? 0.5) * 1.2)); sg.instanceCount = nOut * NF; fs.instanceCount = nOut * NF;
       schools.forEach((S, i) => {
-        if (S.z === undefined || Math.abs(S.x - cx) > 60) { S.x = cx + (r() - 0.5) * 50; S.z = Layout.shoreZ(S.x) - (2 + r() * 3.5); S.h = r() < 0.5 ? 0 : Math.PI; S.k = 0; }
+        if (S.z === undefined || Math.abs(S.x - cx) > 60) {
+          for (let k = 0; k < 8; k++) { S.x = cx + (r() - 0.5) * 50; S.z = Layout.shoreZ(S.x) - (7 + r() * 3.5); if (!rockAt(S.x, S.z)) break; }
+          S.h = r() < 0.5 ? 0 : Math.PI; S.k = 0; S.block = false;
+        }
         const g = Layout.shoreDZ(S.x), along = Math.atan2(g, 1), sd = Layout.shoreZ(S.x) - S.z;
-        const sense = Math.cos(S.h - along) >= 0 ? 0 : Math.PI, toLine = Math.max(-0.6, Math.min(0.6, (sd - 3.6) * 0.2));
+        const sense = Math.cos(S.h - along) >= 0 ? 0 : Math.PI, toLine = Math.max(-0.6, Math.min(0.6, (sd - 8.5) * 0.2));
         const want = along + sense + (sense ? -toLine : toLine);
         S.turn += (r() - 0.5) * dt * 1.5; S.turn *= Math.pow(0.5, dt);
         S.h += (Math.atan2(Math.sin(want - S.h), Math.cos(want - S.h)) * 0.4 + S.turn) * dt;
         if (r() < dt * 0.02) S.h += Math.PI;
+        { const ahead = rockAt(S.x + Math.cos(S.h) * 3, S.z + Math.sin(S.h) * 3); if (ahead && !S.block) S.h += Math.PI; S.block = ahead; }
         S.x += Math.cos(S.h) * S.v * dt; S.z += Math.sin(S.h) * S.v * dt;
         S.k = Math.min(1, S.k + dt * 0.3);
         if (i >= nOut) S.k = 0;       /* a school called back in fades in */

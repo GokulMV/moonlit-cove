@@ -289,22 +289,13 @@ void main(){
 
     /* ── hermit crabs along the tide line: a borrowed shell on its back, red legs and claws out in front; it wanders a
        little, stops, wanders on; comes near, and it pulls into its shell and is only a shell ── */
-    const M = Models, red = [0.62, 0.14, 0.07];
-    const shellG = (() => { const w = M.make('life/whelk', { tone: [0.42, 0.3, 0.18], lite: true }); w.updateMatrixWorld(true); let g = null; w.traverse(o => { if (o.isMesh && !g) { g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); } }); return g; })();
-    shellG.rotateZ(0.35); shellG.rotateY(Math.PI); shellG.scale(0.85, 0.85, 0.85);
-    { shellG.computeBoundingBox(); const c = shellG.boundingBox.getCenter(new T.Vector3()); shellG.translate(-0.005 - c.x, 0.017 - c.y, -c.z); }
-    const bodyG = (() => {
-      const parts = [];
-      for (const sd of [-1, 1]) for (const x0 of [0.012, 0.006]) parts.push({ geo: M.tube(new T.CatmullRomCurve3([new T.Vector3(x0, 0.012, sd * 0.004), new T.Vector3(x0 + 0.008, 0.016, sd * 0.012), new T.Vector3(x0 + 0.014, 0.004, sd * 0.019)]), 6, 4, t => 0.0018 * (1 - 0.6 * t)), c: red });
-      for (const [sd, k] of [[-1, 1.5], [1, 0.9]]) { const s = new T.SphereGeometry(1, 8, 6); s.scale(0.006 * k, 0.0035 * k, 0.003 * k); s.translate(0.03, 0.011, sd * 0.004); parts.push({ geo: s, c: red }); }
-      for (const sd of [-1, 1]) { const e = new T.SphereGeometry(0.0015, 6, 5); e.translate(0.0225, 0.025, sd * 0.003); parts.push({ geo: e, c: [0.02, 0.02, 0.02] }); }
-      return M.mergeC(parts);
-    })();
-    const NH = 10, hm = Mats.lit({ vertexColors: true, roughness: 0.4, side: T.DoubleSide }),   /* (the shell is one sheet, wound round: seen from inside it too) */
-       shellI = new T.InstancedMesh(shellG, hm, NH), bodyI = new T.InstancedMesh(bodyG, hm, NH);
+    /* (the shell and the crab as models/life/hermit.js builds them, each one geometry; ap: the middle of the shell's
+       mouth, where the crab draws in) */
+    const HP = Models.make('life/hermit', { lite: true, parts: true }).userData.parts, AP = HP.ap;
+    const NH = 10, shellI = new T.InstancedMesh(HP.shell, Mats.lit({ vertexColors: true, roughness: 0.38 }), NH), bodyI = new T.InstancedMesh(HP.body, Mats.lit({ vertexColors: true, roughness: 0.5 }), NH);
     shellI.count = bodyI.count = 0; shellI.frustumCulled = bodyI.frustumCulled = false; root.add(shellI, bodyI);
     const crabs = Array.from({ length: NH }, () => ({ x: NaN, z: 0, h: 0, st: 'walk', tm: 0, out: 1, size: 1.8 + r() * 0.8, held: false }));
-    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), p3 = new T.Vector3();
+    const m4 = new T.Matrix4(), mB = new T.Matrix4(), mS = new T.Matrix4(), mT = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), p3 = new T.Vector3();
     function place(c, cx) { for (let k = 0; k < 12; k++) { const x = cx + (r() - 0.5) * 50, sz = Layout.shoreZ(x), z = sz + 0.9 + r() * 2.4; if (world && world.massif(x, z) > 0.05) continue; if (Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 4) continue; Object.assign(c, { x, z, h: r() * TAU, st: 'walk', tm: 2 + r() * 4, out: 1 }); return; } }
     let lastT = null;
     function update(t, cam) {
@@ -321,7 +312,11 @@ void main(){
         else if (c.st === 'stop') { if ((c.tm -= dt) <= 0) { c.st = 'walk'; c.tm = 2 + r() * 5; } c.out = Math.min(1, c.out + dt * 3); }
         else if (c.st === 'hide') { c.out = Math.max(0, c.out - dt * 5); if (!near && (c.tm -= dt) <= 0) c.st = 'stop'; }
         e.set(0, -c.h, 0); q.setFromEuler(e); sc.setScalar(c.size); p3.set(c.x, 0.0, c.z); m4.compose(p3, q, sc); shellI.setMatrixAt(n, m4);
-        const o = Math.max(0.06, c.out); sc.set(c.size * (0.3 + 0.7 * o), c.size * (0.3 + 0.7 * o), c.size * o);   /* (never flat to nothing: a zero scale leaves its normals undefined) */ p3.set(c.x - Math.cos(c.h) * 0.01 * (1 - c.out), 0, c.z - Math.sin(c.h) * 0.01 * (1 - c.out)); m4.compose(p3, q, sc); bodyI.setMatrixAt(n, m4);
+        /* (the crab drawn in toward the middle of the shell's mouth, smaller and further in the more it hides; never to
+           nothing, as a zero scale leaves its normals undefined) */
+        const o = Math.max(0.06, c.out), k = 0.14 + 0.86 * o;
+        mB.makeTranslation(AP.x, AP.y, AP.z).multiply(mS.makeScale(k, k, k)).multiply(mT.makeTranslation(-AP.x - 0.005 * (1 - o), -AP.y, -AP.z));
+        sc.setScalar(c.size); m4.compose(p3, q, sc).multiply(mB); bodyI.setMatrixAt(n, m4);
         c.slot = n; n++;
       }
       shellI.count = bodyI.count = n; shellI.instanceMatrix.needsUpdate = bodyI.instanceMatrix.needsUpdate = true;

@@ -148,6 +148,44 @@ const Models = (() => {
     if (paint) g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     g.setIndex(idx); g.computeBoundingSphere(); return g;
   }
+  /* a fin with thickness, an aerofoil in section (a flipper, a fluke, a dorsal fin): along its span s (0 at the root to 1
+     at the tip) at(s) → { le: [x, y, z] its leading edge, ch: [x, y, z] from there to the trailing edge, up: [x, y, z] the
+     way its thicker side faces, th: its thickness as a part of the chord, camber: how much it bows toward up }; n sections
+     along, m round each; both ends closed. paint(x, y, z, s, c, top) → [r, g, b], c 0 at the leading edge to 1 at the
+     trailing one, top on the up side */
+  function foil(n, m, at, paint) {
+    const pos = [], col = [], idx = [], ring = [];
+    const yt = (x, th) => 5 * th * (0.2969 * Math.sqrt(Math.max(x, 0)) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x);
+    for (let i = 0; i <= n; i++) {
+      const s = i / n, A = at(s), L = A.ch, cl = Math.hypot(L[0], L[1], L[2]) || 1e-9, U = A.up, th = A.th ?? 0.12, cb = A.camber || 0;
+      ring.push(pos.length / 3);
+      for (let k = 0; k < m; k++) {
+        const q = k / m * Math.PI * 2, x = 0.5 * (1 + Math.cos(q)), top = q < Math.PI, off = (top ? 1 : -1) * yt(x, th) * cl + cb * cl * 4 * x * (1 - x);
+        const p = [A.le[0] + L[0] * x + U[0] * off, A.le[1] + L[1] * x + U[1] * off, A.le[2] + L[2] * x + U[2] * off];
+        pos.push(...p); if (paint) col.push(...paint(p[0], p[1], p[2], s, x, top));
+      }
+    }
+    for (let i = 0; i < n; i++) for (let k = 0; k < m; k++) { const a = ring[i] + k, b = ring[i] + (k + 1) % m, c = ring[i + 1] + k, d = ring[i + 1] + (k + 1) % m; idx.push(a, c, b, b, c, d); }
+    /* (the ends: a fan to the middle of each end ring) */
+    for (const [i, flipIt] of [[0, true], [n, false]]) {
+      let cx = 0, cy = 0, cz = 0; for (let k = 0; k < m; k++) { cx += pos[(ring[i] + k) * 3]; cy += pos[(ring[i] + k) * 3 + 1]; cz += pos[(ring[i] + k) * 3 + 2]; }
+      const c = pos.length / 3; pos.push(cx / m, cy / m, cz / m); if (paint) col.push(...col.slice(ring[i] * 3, ring[i] * 3 + 3));
+      for (let k = 0; k < m; k++) { const a = ring[i] + k, b = ring[i] + (k + 1) % m; flipIt ? idx.push(c, b, a) : idx.push(c, a, b); }
+    }
+    /* (faces turned outward: the top's middle must face the way up does) */
+    let N = normalsOf(pos, idx); { const j = (ring[n >> 1] + (m >> 2)) * 3, U = at((n >> 1) / n).up; if (N[j] * U[0] + N[j + 1] * U[1] + N[j + 2] * U[2] < 0) { for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; } N = normalsOf(pos, idx); } }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(N, 3));
+    if (paint) g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeBoundingSphere(); return g;
+  }
+  /* a picture painted texel by texel, for a model's map: fn(u, v) → [r, g, b] (linear); v runs as the geometry's uv does
+     (the picture is not flipped) */
+  function texFrom(W, H, fn, o = {}) {
+    const cv = canvas(W, H), x = cv.getContext('2d'), im = x.createImageData(W, H), D = im.data, enc = v => 255 * Math.pow(Math.max(0, Math.min(1, v)), 1 / 2.2);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const c = fn((i + 0.5) / W, (j + 0.5) / H), k = (j * W + i) * 4; D[k] = enc(c[0]); D[k + 1] = enc(c[1]); D[k + 2] = enc(c[2]); D[k + 3] = c.length > 3 ? 255 * c[3] : 255; }
+    x.putImageData(im, 0, 0);
+    const t = Mats.tex(cv, o); t.flipY = false; t.needsUpdate = true; t.userData.keep = true; return t;
+  }
   /* a geometry painted all over: fn(x, y, z, nx, ny, nz) → [r, g, b] as its vertex colours */
   function paint(g, fn) {
     const P = g.attributes.position, N = g.attributes.normal, c = new Float32Array(P.count * 3);
@@ -199,5 +237,5 @@ const Models = (() => {
              L(L(h3(xi, yi, zi + 1), h3(xi + 1, yi, zi + 1), fx), L(h3(xi, yi + 1, zi + 1), h3(xi + 1, yi + 1, zi + 1), fx), fy), fz);
   }
   const fbm = (x, y, z, o = 3) => { let s = 0, a = 0.5, f = 1, n = 0; for (let i = 0; i < o; i++) { s += a * vn(x * f + i * 17.3, y * f - i * 9.1, z * f + i * 5.7); n += a; a *= 0.5; f *= 2.03; } return s / n; };
-  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit, litP, tube, spline, loft, sheet, paint, mergeC, normalsOf, M4, limb, vn, fbm };
+  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit, litP, tube, spline, loft, sheet, foil, texFrom, paint, mergeC, normalsOf, M4, limb, vn, fbm };
 })();

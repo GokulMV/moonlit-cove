@@ -7,6 +7,7 @@
    node tools/build3d.mjs page    one self-contained file, dist/moonlit-cove.html (three.js from a CDN,
                                   sounds inlined), plus dist/page-local.html for tests run offline
    node tools/build3d.mjs dev     the engine test bench, dist/dev3d.html
+   node tools/build3d.mjs studio  the model studio, dist/studio.html (tools/studio.mjs draws models in it)
    ───────────────────────────────────────────────────────────── */
 import fs from 'fs'; import path from 'path'; import crypto from 'crypto';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -63,6 +64,14 @@ if (which === 'dev') {
   const html = src('dev.html').replace('/*@THREE*/', LOCAL_THREE).replace('/*@JS*/', () => sounds() + '\n;\n' + ENGINE.map(src).join('\n;\n'));
   fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
   fs.writeFileSync(path.join(root, 'dist', 'dev3d.html'), html); console.log('dist/dev3d.html', (html.length / 1024).toFixed(0) + 'KB');
+}
+if (which === 'studio') {
+  /* the model studio, for looking models over: three.js and the engine's files, and the studio itself (tools/) */
+  const studio = fs.readFileSync(path.join(root, 'tools', 'studio-page.js'), 'utf8');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Model studio</title><style>body{margin:0;background:#222}canvas{display:block;width:100%}</style></head><body>
+<script src="${LOCAL_THREE}"></script><script>const SND = {};\n${ENGINE.map(src).join('\n;\n').replace(/<\/script>/g, '<\\/script>')}\n;\n${studio}</script></body></html>`;
+  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'dist', 'studio.html'), html); console.log('dist/studio.html', (html.length / 1024).toFixed(0) + 'KB');
 }
 if (which === 'page') {
   const snd = sounds(), cdn = page(CDN_THREE, snd), local = page(LOCAL_THREE, snd);

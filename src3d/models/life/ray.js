@@ -6,24 +6,38 @@
 (() => {
   const T = THREE, M = Models, TAU = Math.PI * 2;
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; }, mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   M.add('life/ray', () => {
     const g = new T.Group();
     /* the outline round the body's middle (angle from the snout, in degrees → how far out) */
     const rim = M.spline([[0, 0.31], [14, 0.2], [32, 0.2], [60, 0.33], [88, 0.48], [100, 0.52], [112, 0.4], [135, 0.24], [160, 0.17], [180, 0.15]]);
     const R = th => { const d = Math.abs(((th * 180 / Math.PI + 540) % 360) - 180); return rim(d)[0]; };
     const C0 = [-0.04, 0];                                       /* (the middle of the body, a little behind the wings' widest) */
-    const r = M.rng(23), spots = Array.from({ length: 120 }, () => { const a = r() * TAU, d = Math.sqrt(r()); return [C0[0] + Math.cos(a) * d * 0.5, Math.sin(a) * d * 0.5, 0.011 + r() * 0.012]; });
+    /* the spots: scattered evenly (none too near another), smaller toward the edges of the wings; some are rings */
+    const r = M.rng(23), spots = [];
+    for (let k = 0; k < 4000 && spots.length < 150; k++) { const a = r() * TAU, d = Math.sqrt(r()) * 0.55, x = C0[0] + Math.cos(a) * d, z = Math.sin(a) * d, sr = (0.0085 + r() * 0.0075) * (1.15 - 0.6 * d / 0.55);
+      if (spots.every(([sx, sz, s2]) => Math.hypot(x - sx, z - sz) > (sr + s2) * 1.9 + 0.012)) spots.push([x, z, sr, r() < 0.3]); }
     const ink = lin('#1d2733'), inkD = lin('#121a23'), white = lin('#eef0ec');
     const top = (s, c) => { const th = c * TAU, rr = s * R(th), x = C0[0] + Math.cos(th) * rr, z = Math.sin(th) * rr, body = Math.max(0, 1 - Math.hypot((x - 0.02) / 0.24, z / 0.13));
       return [x, 0.075 * Math.pow(body, 0.7) + 0.006 * (1 - s), z]; };
-    const topCol = (s, c, p) => { for (const [sx, sz, sr] of spots) if (Math.hypot(p[0] - sx, p[2] - sz) < sr) return white; return mix(ink, inkD, 0.5 + 0.5 * Math.sin(p[0] * 31 + p[2] * 17)); };
-    const topG = M.sheet(24, 110, top, topCol);
+    /* (its back painted on a picture over the sheet's own (around, out) coordinates, each texel at its place on the plan) */
+    const spotAt = (x, z) => { for (const [sx, sz, sr, ring] of spots) { const d = Math.hypot(x - sx, z - sz); if (d < sr) return ring ? (d > sr * 0.55 ? 1 : 0.1) : 1 - Math.max(0, (d - sr * 0.8) / (sr * 0.2)) * 0.3; } return 0; };
+    const topTex = M.texFrom(1024, 512, (u, v) => { const p = top(v, u); return mix(mix(ink, inkD, 0.5 + 0.5 * M.fbm(p[0] * 9, p[2] * 9, 3, 2) - 0.25), white, spotAt(p[0], p[2])); });
+    const topG = M.sheet(24, 110, top, null);
     /* (the belly: the same outline, flatter, white, facing down) */
     const belly = M.sheet(12, 110, (s, c) => { const p = top(s, c); return [p[0], -0.35 * (p[1] - 0.006 * (1 - s)) - 0.002, p[2]]; }, () => white);
     { const I = belly.index.array; for (let i = 0; i < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } const N = belly.attributes.normal.array; for (let i = 0; i < N.length; i++) N[i] = -N[i]; }
-    const skinM = M.lit('#ffffff', { vertexColors: true, roughness: 0.45 });
+    const skinM = M.litP('#ffffff', { map: topTex, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35 });
     const tm = new T.Mesh(topG, skinM), bm = new T.Mesh(belly, M.lit('#ffffff', { vertexColors: true, roughness: 0.55 }));
     g.add(tm, bm);
+    /* the head, standing out in front of the wings: domed, its snout flattened like a duck's bill; spotted above, white
+       beneath */
+    const head = M.loft([[0.06, 0.07, 0.04, 0.03, 2.2], [0.13, 0.092, 0.05, 0.032, 2.3], [0.19, 0.088, 0.046, 0.03, 2.35], [0.245, 0.068, 0.034, 0.024, 2.4], [0.29, 0.05, 0.02, 0.017, 2.3], [0.325, 0.03, 0.011, 0.012, 2.1], [0.338, 0, 0, 0.011, 2]], 40, 40,
+      (x, y, z, u, a) => { const up = Math.cos(a); return up < -0.15 ? white : mix(mix(ink, inkD, 0.4), white, spotAt(x + 0.05 * Math.sin(z * 40), z * 1.3) * sm(0.0, 0.3, up)); });
+    g.add(new T.Mesh(head, M.litP('#ffffff', { vertexColors: true, roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.35 })));
+    /* a small dorsal fin where the tail begins, and the pelvic fins either side of it */
+    g.add(new T.Mesh(M.foil(8, 14, s => ({ le: [-0.14 - 0.03 * s, 0.035 + 0.045 * s, 0], ch: [-0.06 * (1 - s) - 0.006, 0, 0], up: [0, 0, 1], th: 0.2 })), M.lit('#1a222c', { roughness: 0.5 })));
+    for (const sd of [-1, 1]) g.add(new T.Mesh(M.foil(8, 14, s => ({ le: [-0.11 - 0.05 * s, 0.006, sd * (0.04 + 0.07 * s)], ch: [-0.07 * (1 - 0.6 * s), 0, 0], up: [0, 1, 0], th: 0.12 })), M.lit('#1d2733', { roughness: 0.5 })));
     /* the eyes, bulging either side of the head, a spiracle behind each */
     const eyeM = M.litP('#0b0b0c', { roughness: 0.08, clearcoat: 1 }), ringM = M.lit('#3a4552', { roughness: 0.5 });
     for (const sd of [-1, 1]) {
