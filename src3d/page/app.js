@@ -370,6 +370,35 @@
   $('lBrand').addEventListener('click', () => setBrand(!st.brand));
   syncBrand();
 
+  /* ── full screen: the page and nothing over it, the screen kept from sleeping, for watching a long while; the
+     browser's own Esc (or the button, which hides itself until the pointer moves) brings everything back ── */
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  let wake = null, idleT = 0, fsHeld = false, fsWatch = 0;
+  const lockWake = async () => { try { if ('wakeLock' in navigator && !wake && document.visibilityState === 'visible') { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { /* not granted: the screen may dim */ } };
+  const unlockWake = () => { try { if (wake) wake.release(); } catch (e) { /* already gone */ } wake = null; };
+  const immersive = () => document.body.classList.contains('immersive');
+  const poke = () => { document.body.classList.remove('idle'); clearTimeout(idleT); if (immersive()) idleT = setTimeout(() => document.body.classList.add('idle'), 2500); };
+  function setImmersive(on) {
+    document.body.classList.toggle('immersive', on); const b = $('bFull');
+    b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen'); b.title = on ? 'Leave full screen (Esc)' : 'Full screen (Esc to leave)';
+    if (on) { lockWake(); poke(); } else { fsHeld = false; clearInterval(fsWatch); unlockWake(); clearTimeout(idleT); document.body.classList.remove('idle'); }
+    setTimeout(() => dispatchEvent(new Event('resize')), 60);
+  }
+  async function toggleFull() {
+    if (immersive()) { if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { /* already out */ } } setImmersive(false); return; }
+    const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { try { await req.call(el, { navigationUI: 'hide' }); fsHeld = !!fsEl(); } catch (e) { /* refused (an iPhone): the view alone, in the page */ } }
+    setImmersive(true);
+    /* (however the full screen ends — Esc, the browser's own control, a tab switch — everything comes back) */
+    clearInterval(fsWatch); if (fsHeld) fsWatch = setInterval(() => { if (fsHeld && !fsEl()) setImmersive(false); }, 300);
+  }
+  $('bFull').addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (!fsEl() && immersive()) setImmersive(false); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && immersive()) lockWake(); });
+  addEventListener('pointermove', poke, { passive: true }); addEventListener('pointerdown', poke, { passive: true });
+  /* (where the browser gave no full screen of its own, Esc still leaves) */
+  addEventListener('keydown', e => { if (e.key === 'Escape' && immersive() && !fsEl()) setImmersive(false); });
+
   /* ── credits: every sound, typeface, library and idea that came from someone else ── */
   function renderCredits() {
     $('cYear').textContent = String(Math.max(2026, new Date().getFullYear()));

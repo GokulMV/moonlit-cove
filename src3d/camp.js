@@ -792,7 +792,7 @@ void main(){
   function sideTable(root, refs) {
     const K = Layout.crate, tg = grp(K.x, 0, K.z, K.rot); root.add(tg);
     const tb = Models.make('camp/sidetable'); tg.add(tb); const top = tb.userData.top;
-    const g = Models.make('camp/radio'); g.position.set(-0.22, top, -0.09); g.rotation.y = 0.22; tg.add(g); g.userData.pick = 'radio';
+    const g = Models.make('camp/radio'); g.position.set(-0.22, top, -0.09); g.rotation.y = Math.PI + 0.42; tg.add(g); g.userData.pick = 'radio';   /* (its face, its dial and knobs, toward the fire, the log and the first chair) */
     refs.radio = { group: g, set: g.userData.set };
     const jg = grp(0.08, top + 0.0031, 0.095, -0.06); tg.add(jg);
     refs.journal = Book.build(jg, { W: 0.17, H: 0.24, cloth: '#4a2a18', ribbon: '#a3262a', T: 0.014 }); refs.journalGroup = jg;

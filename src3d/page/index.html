@@ -17,6 +17,7 @@
   </header>
   <button class="brand-show glass" id="bBrandShow" type="button" hidden title="Show the name" aria-label="Show the name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
 
+  <button class="full glass" id="bFull" type="button" title="Full screen (Esc to leave)" aria-label="Full screen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fx-in" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="fx-out" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
   <button class="sky glass" id="sky" type="button" aria-label="Sky and time settings">
     <canvas id="moonIcon" width="64" height="64" aria-hidden="true"></canvas>
     <span class="sky-text"><b id="skyPhase">Moon</b><span id="skyTime">--:--</span></span>
@@ -253,7 +254,7 @@
   <div class="intro" id="intro">
     <div class="loader" aria-hidden="true"><div class="ld-stage" id="ldStage"></div></div>
     <p class="intro-note" id="introNote" role="status">Setting up the cove…</p>
-    <section class="intro-card" aria-labelledby="iName">
+    <section class="intro-card" aria-labelledby="introName">
       <h2 id="introName">GK’s Hideaway</h2>
       <p class="intro-role" id="introRole">GokulMV · Senior Consultant at Thoughtworks</p>
       <div class="intro-sky"><canvas id="iMoon" width="64" height="64" aria-hidden="true"></canvas><span><b id="iSky">The sky</b><span id="iSkyTime">--:--</span></span></div>

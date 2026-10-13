@@ -47,6 +47,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); out
 .brand-show svg { width: 16px; height: 16px; }
 
 /* sky chip */
+/* full screen: the button under the sky's; in it, nothing over the view but the view, and the way out shows itself
+   again when the pointer moves */
+.full { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 74px); right: max(var(--gut), 22px); width: 38px; height: 38px; display: grid; place-items: center; padding: 0; color: var(--dim); pointer-events: auto; border-radius: 50%; transition: opacity .6s, color .2s; }
+.full:hover { color: var(--fg); }
+.full svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.full .fx-out, body.immersive .full .fx-in { display: none; }
+body.immersive .full .fx-out { display: inline; }
+body.immersive .full { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+body.immersive #hud .brand, body.immersive #hud .brand-show, body.immersive #hud .sky, body.immersive #hud #spots, body.immersive #hud .dock, body.immersive #hud .hint,
+body.immersive #hud .walkbar, body.immersive #hud .walkhud, body.immersive #hud .bouquet, body.immersive #hud .toast { opacity: 0 !important; pointer-events: none !important; transition: opacity .6s; }
+body.immersive.idle #hud .full { opacity: 0; }
+body.immersive.idle, body.immersive.idle #scene { cursor: none; }
 .sky { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 20px); right: max(var(--gut), 22px); display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; }
 .sky canvas { width: 32px; height: 32px; }
 .sky-text { display: grid; text-align: left; }

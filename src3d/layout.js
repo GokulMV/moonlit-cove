@@ -146,9 +146,10 @@ const Layout = (() => {
 
   const fire = { x: 6.9, z: -4.5 };
   const grate = { x: 6.94, z: -4.55, rot: 0.2 };     /* grill straddling the fire ring */
-  /* the two chairs by the fire turned toward each other as much as to the fire (each faces halfway between the two), so
-     whoever sits in one has the other turned to them across the fire's corner */
-  const chairs = [{ x: 5.7, z: -3.1, face: [7.45, -4.07] }, { x: 8.4, z: -3.5, face: [6.44, -3.92] }];
+  /* the two chairs by the fire turned toward each other as much as to the fire, so whoever sits in one has the other
+     turned to them across the fire's corner; the striped one (the second) turned on round toward the sea, so from it
+     the fire is off to the left and the water and the moon over it lie ahead */
+  const chairs = [{ x: 5.7, z: -3.1, face: [7.45, -4.07] }, { x: 8.4, z: -3.5, face: [7.15, -5.6] }];
   const driftwood = { x: 7.0, z: -6.05, len: 2.6, rot: 0.15 };
   /* an old crate between the chairs, the radio on it turned toward the first chair and the fire */
   const crate = { x: 7.05, z: -2.95, rot: 0.04 };     /* the side table between the chairs: the radio and the journal on it */
