@@ -393,7 +393,10 @@ void crExtra(inout ReflectedLight rl, vec3 alb, vec3 n){
   /* (fur: the light caught along its outline, where the eye looks through the tips of the hairs) */
   if (pat > 0.5 && pat < 1.5) rl.indirectDiffuse += alb*uAmbF*pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0)*0.9;
   /* (thin things — an ear, a wing's membrane — with the sun behind them) */
-  if (vM.w > 0.0 && (pat < 5.5 || pat > 6.5)){ vec3 Lv = normalize((viewMatrix*vec4(uKeyDirT, 0.0)).xyz); rl.directDiffuse += alb*uKeyColT*max(-dot(n, Lv), 0.0)*vM.w; }
+  if (vM.w > 0.0 && (pat < 5.5 || pat > 6.5)){ vec3 Lv = normalize((viewMatrix*vec4(uKeyDirT, 0.0)).xyz);
+    /* (a membrane of skin passes the light warm and red, far more than its dark face reflects) */
+    vec3 tr = pat > 7.5 && pat < 8.5 ? mix(alb, vec3(0.42, 0.11, 0.045), 0.85)*0.32 : alb;
+    rl.directDiffuse += tr*uKeyColT*max(-dot(n, Lv), 0.0)*vM.w; }
 }`;
   const COATS = new Map();
   function coat(dens = 3) {
