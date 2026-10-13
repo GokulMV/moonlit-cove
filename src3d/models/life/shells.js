@@ -117,30 +117,49 @@
     const w = new T.Group(); w.add(g); return w;
   });
 
-  /* ── a spired whelk: whorls coiling up to a point, knobbed at their shoulders and wound round with cords, its mouth
-     flaring, orange-pink and glossy within ── */
+  /* ── a whelk: a tall spire of six and a half whorls, each rounded and wound with spiral cords crossed by fine growth
+     lines, cream and fawn with a band of brown; the mouth oval, its outer lip a little thickened, glossy white and apricot
+     within, drawn down at the base into the short open canal of the siphon. Right-handed: held point up with its mouth
+     toward you, the mouth is on the right ── */
   M.add('life/whelk', (o = {}) => {
-    const g = new T.Group(), tone = o.tone || lin('#d8b48c'), N = 5.6, k = Math.log(2.2) / TAU, H = 1.35;
-    const A = 0.01, B = 0.0085;          /* the coil's and the tube's size at the start of the last whorl */
-    const th1 = N * TAU;
-    /* t along the coil (0 at the apex), p round the tube */
-    const at = (t, p) => {
-      const th = t * th1, gr = Math.exp(k * (th - th1)), rc = A * gr, rt = B * gr, cx = rc * Math.cos(th), cz = rc * Math.sin(th), cy = -H * rc * 2.4;
-      const nodes = 1 + 0.16 * Math.pow(Math.max(0, Math.cos(th * 9)), 6) * Math.max(0, Math.sin(p)), cord = 1 + 0.025 * Math.cos(p * 16);
-      const flare = 1 + 0.55 * Math.pow(Math.max(0, (t - 0.94) / 0.06), 2);
-      const rr = rt * nodes * cord * flare, ox = Math.cos(th) * Math.cos(p) * rr, oz = Math.sin(th) * Math.cos(p) * rr, oy = Math.sin(p) * rr * 1.2;
-      return [cx + ox, cy + oy, cz + oz];
+    const g = new T.Group(), lite = !!o.lite, NW = 6.5, Wg = 1.85, k = Math.log(Wg) / TAU, th1 = NW * TAU, th0 = 1.2;
+    const A = 0.0068, RA = 0.0082, RB = 0.0112, D = 0.0405, TH = 0.0007;
+    const gr = th => Math.exp(k * (th - th1));
+    const centre = th => { const sc = gr(th); return new T.Vector3(A * sc * Math.cos(th), -D * sc, A * sc * Math.sin(th)); };
+    const tone = o.tone || lin('#cfb48a'), BROWN = lin('#6e4a2e'), CREAM = lin('#f1e6d2');
+    const relief = (th, ph) => lite ? 1 : 1 + 0.03 * Math.pow(Math.max(0, Math.cos(ph * 14)), 2) + 0.012 * Math.max(0, Math.sin(th * 34)) * 0.6 + 0.005 * Math.sin(th * 83);
+    const surf = (th, ph, inset = 0) => {
+      const sc = gr(th), c = centre(th), lip = 1 + 0.05 * Math.pow(Math.max(0, (th - (th1 - 0.35)) / 0.35), 2), f = inset ? 1 : relief(th, ph);
+      const cp = Math.cos(ph), sp = Math.sin(ph);
+      /* (the siphonal canal: the base of the last half whorl drawn down and a little out) */
+      const cw = Math.max(0, (th - (th1 - Math.PI)) / Math.PI), canal = Math.pow(Math.max(0, -sp - 0.3) / 0.7, 2) * cw * cw;
+      const rr = (RA * sc * lip * f - inset) * cp * (1 - 0.25 * canal), yy = (RB * sc * lip * f - inset) * sp * (1 + 0.32 * canal);
+      return [c.x + rr * Math.cos(th), c.y + yy, c.z + rr * Math.sin(th)];
     };
-    const geo = M.sheet(o.lite ? 72 : 420, o.lite ? 8 : 40, (s, c) => at(0.02 + s * 0.98, c * TAU), (s, c) => {
-      const t = 0.02 + s * 0.98, th = t * th1, p = c * TAU, band = 0.5 + 0.5 * Math.sin(p * 3 + th * 0.3);
-      let col = mix(tone, tone.map(v => v * 0.55), band * 0.5 * (0.6 + 0.4 * Math.sin(th * 7)));
-      col = mix(col, lin('#f5ead8'), 0.3 * Math.pow(Math.max(0, Math.cos(p * 16)), 4));
-      /* the inside of the mouth: where the last of the whorl opens, and toward the apex less so */
-      if (t > 0.97) col = mix(col, lin('#f08a5a'), Math.min(1, (t - 0.97) / 0.03) * (0.5 + 0.5 * Math.cos(p - Math.PI)));
-      return col;
+    const ns = lite ? 160 : 620, nc = lite ? 13 : 56;
+    const outer = M.sheet(ns, nc, (s, c) => surf(th0 + s * (th1 - th0), c * TAU), (s, c, p) => {
+      const th = th0 + s * (th1 - th0), ph = c * TAU, sp = Math.sin(ph);
+      let col = mix(tone, BROWN, 0.75 * Math.exp(-(((sp - 0.15) / 0.24) ** 2)));          /* the brown band round each whorl */
+      col = mix(col, CREAM, lite ? 0.15 : 0.32 * Math.pow(Math.max(0, Math.cos(ph * 14)), 2));
+      col = mix(col, BROWN, 0.18 * (0.5 + 0.5 * Math.sin(th * 5.1 + 1.3 * M.vn(th, ph, 2))));
+      col = mix(col, lin('#e4dccd'), Math.max(0, 1 - th / (2.2 * TAU)) * 0.7);            /* worn toward the apex */
+      return col.map(v => v * (0.9 + 0.18 * M.vn(p[0] * 2200, p[1] * 2200, p[2] * 2200)));
     });
-    geo.rotateX(Math.PI * 0.5); geo.rotateZ(0.25);
-    g.add(new T.Mesh(geo, M.litP('#ffffff', { vertexColors: true, roughness: 0.32, clearcoat: 0.5, clearcoatRoughness: 0.2, side: T.DoubleSide })));
+    const inA = th1 - 1.1 * TAU, inner = M.sheet(lite ? 24 : 110, nc, (s, c) => surf(inA + s * (th1 - inA), c * TAU, TH * (0.4 + 0.6 * s)), (s) => mix(lin('#ece2d6'), lin('#e9a777'), Math.max(0, (s - 0.7) / 0.3) * 0.6));
+    const lip = M.sheet(lite ? 3 : 8, nc, (u, c) => { const a2 = surf(th1, c * TAU), b2 = surf(th1, c * TAU, TH), n = centre(th1).sub(centre(th1 - 0.02)).normalize(), bulge = Math.sin(Math.PI * u) * TH * 0.6;
+      return [a2[0] + (b2[0] - a2[0]) * u + n.x * bulge, a2[1] + (b2[1] - a2[1]) * u + n.y * bulge, a2[2] + (b2[2] - a2[2]) * u + n.z * bulge]; }, () => lin('#f3e9dc'));
+    const flip = q => { const I = q.index.array; for (let i = 0; i < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } const N = q.attributes.normal.array; for (let i = 0; i < N.length; i++) N[i] = -N[i]; return q; };
+    { const N = outer.attributes.normal, j = (ns - 4) * (nc + 1), v = new T.Vector3(N.getX(j), N.getY(j), N.getZ(j)), pp = new T.Vector3().fromBufferAttribute(outer.attributes.position, j), cc = centre(th0 + (ns - 4) / ns * (th1 - th0)); if (v.dot(pp.sub(cc)) < 0) flip(outer); else flip(inner); }
+    { const N = lip.attributes.normal, i = Math.floor(lip.attributes.position.count / 2), v = new T.Vector3(N.getX(i), N.getY(i), N.getZ(i)), n = centre(th1).sub(centre(th1 - 0.02)).normalize(); if (v.dot(n) < 0) flip(lip); }
+    const tip = M.paint(new T.SphereGeometry(RB * gr(th0) * 1.2, 8, 6), () => lin('#e4dccd')); tip.translate(...centre(th0).toArray());
+    const outerAll = M.mergeC([{ geo: outer }, { geo: lip }, { geo: tip }]);
+    /* (lying on its side on the sand, as a whelk does, its mouth down a little) */
+    for (const q of [outerAll, inner]) { q.rotateZ(Math.PI / 2 - 0.25); q.rotateX(-0.5); }
+    /* (the shift worked out once: translating the first updates its bounding box) */
+    outerAll.computeBoundingBox(); const bb = outerAll.boundingBox, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, cy = bb.min.y;
+    for (const q of [outerAll, inner]) q.translate(-cx, -cy, -cz);
+    g.add(new T.Mesh(outerAll, M.litP('#ffffff', { vertexColors: true, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3 })));
+    g.add(new T.Mesh(inner, M.litP('#ffffff', { vertexColors: true, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.06 })));
     return g;
   });
 })();

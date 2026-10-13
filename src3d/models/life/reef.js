@@ -138,27 +138,67 @@
   });
 
   /* ── a cleaner shrimp: a translucent red body with a white stripe along its back, white antennae ── */
+  /* ── a cleaner shrimp, 6 cm: the carapace over its front, a toothed rostrum jutting from between the eyes; the six
+     segments of its abdomen arched down toward the tail fan, each overlapping the next, their side plates hanging down;
+     red down each flank, a white stripe along the middle of its back from the rostrum to the tail, translucent; stalked
+     black eyes; five pairs of slender jointed legs, the first two with tiny pincers; the swimmerets fringed beneath; the
+     tail fan of five blades, red tipped white; three long white antennae either side ── */
   M.add('life/shrimp', () => {
-    const g = new T.Group(), red = lin('#d43a2a'), white = lin('#f6f2ea');
-    const body = M.loft([[-0.03, 0, 0, 0.002, 2], [-0.026, 0.002, 0.003, 0.003, 2], [-0.012, 0.0045, 0.006, 0.004, 2], [0.004, 0.0055, 0.0068, 0.005, 2], [0.016, 0.005, 0.0062, 0.0055, 2], [0.024, 0.003, 0.0035, 0.006, 2], [0.03, 0, 0, 0.0065, 2]], 48, 24,
-      (x, y, z, u, a) => { const stripe = Math.abs(Math.sin(a)) < 0.28 && Math.cos(a) > 0 ? 1 : 0, seg = (u * 9) % 1; return stripe ? white : mix(red, red.map(v => v * 0.6), seg < 0.12 ? 1 : 0); },
-      { shape: (x, y, z) => [x, y + 0.012 * Math.exp(-(((x + 0.006) / 0.018) ** 2)) * 0.4 - 0.0005 * x * x / 0.0009, z] });
-    g.add(new T.Mesh(body, M.litP('#ffffff', { vertexColors: true, roughness: 0.25, clearcoat: 1, transmission: 0, transparent: true, opacity: 0.92 })));
+    const g = new T.Group(), red = lin('#cf3424'), redD = lin('#8a1c12'), white = lin('#f7f3ec'), clear = lin('#f0b2a2');
+    /* the body, lofted along x from the tail (−0.027) to the tip of the rostrum (0.034), and bent down behind the carapace */
+    const XB = 0.004, KAP = 20, NSEG = 6;
+    const bend = (x, y, z) => { if (x >= XB) return [x, y, z]; const sArc = XB - x, ph = KAP * sArc, r = 1 / KAP + y; return [XB - r * Math.sin(ph), -1 / KAP + r * Math.cos(ph), z]; };
+    const segAt = x => x >= XB ? -1 : Math.min(NSEG - 1, Math.floor((XB - x) / 0.031 * NSEG));
+    const body = M.loft([[-0.027, 0, 0, 0, 2], [-0.025, 0.0018, 0.0026, 0.0, 2], [-0.018, 0.0028, 0.0036, 0.0002, 2], [-0.008, 0.0038, 0.0047, 0.0004, 2], [0.0, 0.0047, 0.0055, 0.0006, 2],
+      [0.008, 0.0052, 0.0062, 0.0008, 2.1], [0.016, 0.005, 0.006, 0.0008, 2.1], [0.022, 0.0036, 0.0045, 0.0009, 2], [0.026, 0.0016, 0.0024, 0.0016, 2], [0.034, 0, 0, 0.0028, 2]], 120, 36,
+      (x, y, z, u, a) => {
+        const up = Math.cos(a), sg = segAt(x), f = sg >= 0 ? ((XB - x) / 0.031 * NSEG) % 1 : 0;
+        let c = mix(clear, red, 0.75 + 0.25 * Math.abs(Math.sin(a)));
+        if (up > 0.82) c = white;                                         /* the white line down its back */
+        else if (up > 0.6) c = mix(red, white, (up - 0.6) / 0.22 * 0.6);
+        if (up < -0.6) c = mix(c, clear, 0.6);                             /* paler, clearer beneath */
+        if (sg >= 0 && f < 0.1) c = mix(c, redD, 0.5);                     /* each segment's edge, a darker line */
+        if (x > 0.026) c = mix(red, white, 0.5);                           /* the rostrum */
+        return c;
+      }, { shape: (x, y, z, u, a) => {
+        /* the segments: each a little swollen toward its back edge, which overlaps the next; their side plates hang down */
+        const sg = segAt(x), f = sg >= 0 ? ((XB - x) / 0.031 * NSEG) % 1 : 0, k = sg >= 0 ? 1 + 0.06 * f : 1;
+        const down = sg >= 0 && Math.cos(a) < -0.2 ? 0.0011 * Math.sin(Math.PI * f) * (1 - sg / 7) : 0;
+        /* (the rostrum's teeth, along its top) */
+        const teeth = x > 0.024 && Math.cos(a) > 0.5 ? 0.0003 * Math.max(0, Math.sin(x * 2600)) : 0;
+        return bend(x, y * k - down + teeth, z * k);
+      } });
+    g.add(new T.Mesh(body, M.litP('#ffffff', { vertexColors: true, roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.15, transparent: true, opacity: 0.93 })));
     const legM = M.lit('#ffffff', { vertexColors: true, roughness: 0.4 });
-    const leg = (pts, r, col) => new T.Mesh(M.paint(M.tube(new T.CatmullRomCurve3(pts.map(p => new T.Vector3(...p))), 8, 5, t => r * (1 - 0.6 * t)), () => col), legM);
-    /* five pairs of walking legs, the swimmerets beneath the tail, the tail fan */
-    for (const sd of [-1, 1]) for (let i = 0; i < 5; i++) { const x0 = 0.012 - i * 0.004; g.add(leg([[x0, 0.0, sd * 0.003], [x0 + 0.002, -0.004, sd * 0.007], [x0 + 0.004, -0.009, sd * 0.009]], 0.0006, i % 2 ? red : white)); }
-    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) { const x0 = -0.004 - i * 0.005; g.add(leg([[x0, 0.0, sd * 0.002], [x0 - 0.001, -0.004, sd * 0.003]], 0.0005, red)); }
-    const fan = M.sheet(4, 8, (s, c) => { const a = (c - 0.5) * 1.6; return [-0.03 - s * 0.012 * Math.cos(a), 0.002, Math.sin(a) * s * 0.01]; }, (s, c) => mix(red, white, s > 0.7 ? 0.8 : 0));
-    g.add(new T.Mesh(fan, M.lit('#ffffff', { vertexColors: true, roughness: 0.4, side: T.DoubleSide })));
-    /* eyes, and the long white antennae (three pairs) */
-    const eyeM = M.litP('#090909', { roughness: 0.1, clearcoat: 1 }), ants = [];
-    for (const sd of [-1, 1]) {
-      const e = new T.Mesh(new T.SphereGeometry(0.0016, 12, 10), eyeM); e.position.set(0.029, 0.009, sd * 0.003); g.add(e);
-      for (let k = 0; k < 3; k++) { const a = new T.Object3D(); a.position.set(0.03, 0.007, sd * 0.002); g.add(a); ants.push({ a, sd, k });
-        a.add(leg([[0, 0, 0], [0.02, 0.008 + k * 0.004, sd * (0.006 + k * 0.004)], [0.05, 0.004 + k * 0.01, sd * (0.012 + k * 0.01)]], 0.00028, white)); }
+    const tubeOf = (pts, r0, r1, col) => new T.Mesh(M.paint(M.tube(new T.CatmullRomCurve3(pts.map(p => new T.Vector3(...p))), 12, 6, t => r0 + (r1 - r0) * t), (x, y, z) => typeof col === 'function' ? col(x, y, z) : col), legM);
+    /* five pairs of walking legs from under the carapace, jointed: out, then down to the ground; banded red and white */
+    const band = (x, y) => (Math.floor(-y * 900) % 2 ? red : white);
+    for (const sd of [-1, 1]) for (let i = 0; i < 5; i++) {
+      const x0 = 0.017 - i * 0.0035, k = i < 2 ? 0.8 : 1;
+      g.add(tubeOf([[x0, -0.003, sd * 0.002], [x0 + 0.0025 * k, -0.0055, sd * 0.0075], [x0 + 0.004 * k - i * 0.001, -0.0118, sd * 0.0095]], 0.0005, 0.00025, band));
+      /* (the first two pairs end in tiny pincers) */
+      if (i < 2) for (const t of [-1, 1]) g.add(tubeOf([[x0 + 0.004 * k - i * 0.001, -0.0118, sd * 0.0095], [x0 + 0.0058 * k - i * 0.001, -0.0124 + t * 0.0004, sd * 0.0098]], 0.00025, 0.0001, white));
     }
-    g.userData.anim = t => { for (const n of ants) n.a.rotation.z = 0.2 * Math.sin(t * (2 + n.k) + n.sd); };
+    /* the swimmerets under the abdomen, feathery paddles */
+    for (const sd of [-1, 1]) for (let i = 0; i < 5; i++) { const x = XB - (i + 0.5) * 0.031 / NSEG, p0 = bend(x, -0.0035, sd * 0.0016), p1 = bend(x - 0.0012, -0.0085, sd * 0.0028); g.add(tubeOf([p0, p1], 0.0004, 0.0002, clear)); }
+    /* the tail fan at the end of the abdomen, turned as the abdomen ends: the telson in the middle, two blades either side */
+    {
+      const ph = KAP * (XB + 0.027), end = bend(-0.0262, 0, 0), fan = new T.Object3D(); fan.position.set(...end); fan.rotation.z = ph; g.add(fan);
+      const fanM = M.lit('#ffffff', { vertexColors: true, roughness: 0.35, side: T.DoubleSide, transparent: true, opacity: 0.95 });
+      const blade = (ang, len, w) => M.sheet(6, 8, (s, c) => { const a = ang + (c - 0.5) * w; return [-Math.cos(a) * s * len, 0.0002 * Math.sin(Math.PI * c), Math.sin(a) * s * len]; }, (s, c) => mix(red, white, s > 0.72 ? 0.85 : 0.1 * Math.sin(c * 20)));
+      fan.add(new T.Mesh(blade(0, 0.0105, 0.32), fanM));
+      for (const sd of [-1, 1]) for (const [ang, len] of [[0.42, 0.011], [0.78, 0.0095]]) fan.add(new T.Mesh(blade(sd * ang, len, 0.36), fanM));
+    }
+    /* the eyes on short stalks, either side of the rostrum's base */
+    const eyeM = M.litP('#070707', { roughness: 0.12, clearcoat: 1 }), ants = [];
+    for (const sd of [-1, 1]) {
+      g.add(tubeOf([[0.023, 0.0035, sd * 0.0012], [0.0262, 0.0045, sd * 0.0032]], 0.0007, 0.0007, red));
+      const e = new T.Mesh(new T.SphereGeometry(0.0016, 14, 10), eyeM); e.position.set(0.0268, 0.0047, sd * 0.0037); g.add(e);
+      /* three long white antennae a side, waving */
+      for (let k = 0; k < 3; k++) { const a = new T.Object3D(); a.position.set(0.026, 0.002, sd * 0.0018); g.add(a); ants.push({ a, sd, k });
+        a.add(tubeOf([[0, 0, 0], [0.018, 0.006 + k * 0.004, sd * (0.004 + k * 0.004)], [0.04, 0.01 + k * 0.009, sd * (0.01 + k * 0.009)], [0.056, 0.006 + k * 0.012, sd * (0.016 + k * 0.012)]], 0.00032, 0.0001, white)); }
+    }
+    g.userData.anim = t => { for (const n of ants) { n.a.rotation.z = 0.18 * Math.sin(t * (1.8 + n.k * 0.6) + n.sd); n.a.rotation.y = n.sd * 0.15 * Math.sin(t * (1.3 + n.k * 0.4)); } };
     g.userData.anim(0);
     return g;
   });

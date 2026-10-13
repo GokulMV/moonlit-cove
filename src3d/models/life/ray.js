@@ -21,8 +21,12 @@
     const top = (s, c) => { const th = c * TAU, rr = s * R(th), x = C0[0] + Math.cos(th) * rr, z = Math.sin(th) * rr, body = Math.max(0, 1 - Math.hypot((x - 0.02) / 0.24, z / 0.13));
       return [x, 0.075 * Math.pow(body, 0.7) + 0.006 * (1 - s), z]; };
     /* (its back painted on a picture over the sheet's own (around, out) coordinates, each texel at its place on the plan) */
-    const spotAt = (x, z) => { for (const [sx, sz, sr, ring] of spots) { const d = Math.hypot(x - sx, z - sz); if (d < sr) return ring ? (d > sr * 0.55 ? 1 : 0.1) : 1 - Math.max(0, (d - sr * 0.8) / (sr * 0.2)) * 0.3; } return 0; };
-    const topTex = M.texFrom(1024, 512, (u, v) => { const p = top(v, u); return mix(mix(ink, inkD, 0.5 + 0.5 * M.fbm(p[0] * 9, p[2] * 9, 3, 2) - 0.25), white, spotAt(p[0], p[2])); });
+    /* (the spots binned on a grid of 4 cm cells, so each texel looks at only the few near it) */
+    const GRID = new Map(), cellOf = (x, z) => Math.floor(x / 0.04) * 1000 + Math.floor(z / 0.04);
+    for (const sp of spots) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const k = cellOf(sp[0] + i * 0.04, sp[1] + j * 0.04); if (!GRID.has(k)) GRID.set(k, []); if (!GRID.get(k).includes(sp)) GRID.get(k).push(sp); }
+    const spotAt = (x, z) => { for (const [sx, sz, sr, ring] of GRID.get(cellOf(x, z)) || []) { const d = Math.hypot(x - sx, z - sz); if (d < sr) return ring ? (d > sr * 0.55 ? 1 : 0.1) : 1 - Math.max(0, (d - sr * 0.8) / (sr * 0.2)) * 0.3; } return 0; };
+    /* (painted once, kept for every ray after) */
+    const topTex = Models.__rayTex || (Models.__rayTex = M.texFrom(1024, 512, (u, v) => { const p = top(v, u); return mix(mix(ink, inkD, 0.5 + 0.5 * M.fbm(p[0] * 9, p[2] * 9, 3, 2) - 0.25), white, spotAt(p[0], p[2])); }));
     const topG = M.sheet(24, 110, top, null);
     /* (the belly: the same outline, flatter, white, facing down) */
     const belly = M.sheet(12, 110, (s, c) => { const p = top(s, c); return [p[0], -0.35 * (p[1] - 0.006 * (1 - s)) - 0.002, p[2]]; }, () => white);

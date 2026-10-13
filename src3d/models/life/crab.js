@@ -6,7 +6,8 @@ Models.add('life/crab', (o = {}) => {
   const T = THREE, M = Models, g = new T.Group(), r = M.rng(o.seed || 7);
   const W = 0.022, Lh = 0.0175, H = 0.0088, CY = 0.0055;   /* the shell's half-width (z), half-length (x), half-height, centre */
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; };
-  const SAND = lin('#cdb58a'), DUSK = lin('#9f845a'), PALE = lin('#e9dcc0'), mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const SAND = lin('#d6c497'), DUSK = lin('#9c8460'), PALE = lin('#efe5cf'), SPECK = lin('#6a5638'), LILAC = lin('#d8c3d2'), mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
   /* ── the shell ── */
   /* (the grooves between its regions: an H across the middle of the back, and the cervical groove curving round it) */
@@ -17,24 +18,32 @@ Models.add('life/crab', (o = {}) => {
     const cv = Math.exp(-(((ax - 0.42 + 0.5 * az * az) / 0.05) ** 2)) * (az < 0.8 ? 1 : 0);     /* the cervical groove */
     return Math.min(1, h1 + h2 * 0.8 + cv * 0.7);
   };
-  const shell = M.loft([
-    [-Lh, 0, 0, CY, 3], [-Lh + 0.0016, W * 0.6, H * 0.5, CY, 3.2], [-Lh * 0.55, W * 0.88, H * 0.88, CY, 3.6], [0, W * 0.97, H, CY, 3.9],
-    [Lh * 0.55, W, H * 0.95, CY, 3.9], [Lh * 0.88, W * 0.98, H * 0.74, CY - 0.0003, 3.6], [Lh * 0.99, W * 0.9, H * 0.42, CY - 0.0006, 3], [Lh + 0.0006, 0, 0, CY - 0.0006, 3]
-  ], 56, 72, (x, y, z, u, a) => {
-    const top = y > CY, gr = top ? grooves(x, z) : 0, mott = M.fbm(x * 260, y * 260, z * 260, 3), gran = M.vn(x * 1400, y * 1400, z * 1400);
-    let c = mix(SAND, DUSK, Math.max(0, (mott - 0.45) * 1.4) + 0.5 * gr);
-    if (!top) c = mix(c, PALE, 0.6);
-    /* the mouthparts, a dark square plate under the front between the claws */
-    if (!top && x > Lh * 0.45 && Math.abs(z) < W * 0.32) c = mix(c, lin('#8a7354'), 0.55);
-    return c.map(v => v * (0.94 + 0.12 * gran));
-  }, { shape: (x, y, z) => {
+  const SECS = [[-Lh, 0, 0, CY, 3], [-Lh + 0.0016, W * 0.6, H * 0.5, CY, 3.2], [-Lh * 0.55, W * 0.88, H * 0.88, CY, 3.6], [0, W * 0.97, H, CY, 3.9],
+    [Lh * 0.55, W, H * 0.95, CY, 3.9], [Lh * 0.88, W * 0.98, H * 0.74, CY - 0.0003, 3.6], [Lh * 0.99, W * 0.9, H * 0.42, CY - 0.0006, 3], [Lh + 0.0006, 0, 0, CY - 0.0006, 3]];
+  const prof = M.spline(SECS.map(r => [r[0], r[1], r[2], r[3], r[4]]));
+  /* its colour, painted on a picture of the whole shell, each texel worked back to where on the shell it lies: sand
+     mottled paler and darker, freckled with fine dark specks, the grooves darker, the front edge pale; beneath, paler,
+     the mouthparts a darker square between the claws */
+  const shellCol = (x, z, top) => {
+    const mott = M.fbm(x * 260, z * 260, 3, 3), gr = top ? grooves(x, z) : 0;
+    let c = mix(SAND, DUSK, Math.max(0, (mott - 0.42) * 1.5) + 0.55 * gr);
+    if (top) { const sp = M.vn(x * 5200, z * 5200, 4.2); if (sp > 0.74) c = mix(c, SPECK, 0.7 * sm(0.74, 0.86, sp)); c = mix(c, PALE, 0.35 * sm(Lh * 0.82, Lh * 0.98, x)); }
+    else { c = mix(c, PALE, 0.65); if (x > Lh * 0.45 && Math.abs(z) < W * 0.32) c = mix(c, lin('#8a7354'), 0.5); }
+    return c.map(v => v * (0.95 + 0.1 * M.vn(x * 1400, z * 1400, 7.7)));
+  };
+  /* (painted once, kept for every crab after) */
+  const shellTex = Models.__crabTex || (Models.__crabTex = M.texFrom(512, 512, (u, v) => {
+    const x = SECS[0][0] + u * (SECS[SECS.length - 1][0] - SECS[0][0]), a = Math.PI + v * Math.PI * 2, [w, , , sq] = prof(x), sa = Math.sin(a), z = Math.max(0, w) * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / sq);
+    return shellCol(x, z, Math.cos(a) > 0);
+  }));
+  const shell = M.loft(SECS, 56, 72, null, { shape: (x, y, z) => {
     /* domed above, flatter beneath; the grooves pressed in, and a fine granulation all over */
     let yy = y > CY ? CY + (y - CY) * 1.05 : CY + (y - CY) * 0.55;
     if (y > CY) yy -= 0.00045 * grooves(x, z);
     const gr = M.vn(x * 1300, y * 1300, z * 1300) - 0.5;
     return [x, yy + gr * 0.00012, z * (1 + gr * 0.004)];
   } });
-  const shellM = M.lit('#ffffff', { vertexColors: true, roughness: 0.62 });
+  const shellM = M.litP('#ffffff', { map: shellTex, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.4 });
   g.add(new T.Mesh(shell, shellM));
 
   /* ── legs and claws: chains of joints, each segment along its joint's +x ── */
@@ -70,37 +79,44 @@ Models.add('life/crab', (o = {}) => {
     legs.push({ J, sd, i, base: J.map(j => j.rotation.z), yaw });
   });
   /* the claws: held folded in front of the mouth, the right one the bigger */
-  const clawM = M.lit('#ffffff', { vertexColors: true, roughness: 0.42 });
+  const clawM = M.litP('#ffffff', { vertexColors: true, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.35 });
   const claws = [];
   for (const sd of [1, -1]) {
     const big = sd > 0, k = big ? 1.15 : 0.72;
     const J = chain(g, [Lh * 0.82, CY - 0.002, sd * W * 0.62], [
       [seg(0.013 * k + 0.003, 0.0032 * k + 0.0008, 0.003 * k + 0.0007, 0.75), 0.013 * k + 0.003, -sd * 0.55, -0.25, 0],
       [seg(0.006 * k + 0.002, 0.003 * k + 0.0007, 0.0034 * k + 0.0006, 0.8), 0.006 * k + 0.002, sd * 1.25, 0.1, 0, 0.0034 * k + 0.0007]]);
-    /* the palm, swollen, with the fixed finger running on from it and the movable one hinged above */
-    const L = 0.017 * k, Hh = 0.0078 * k, Th = 0.0048 * k, hand = new T.Object3D(); hand.position.x = 0.006 * k + 0.002; hand.rotation.y = sd * 0.35; J[1].add(hand);
-    const palm = M.loft([[0, 0.002 * k, 0.003 * k, 0, 2], [L * 0.15, Th, Hh * 0.9, 0, 2.3], [L * 0.6, Th * 1.05, Hh, 0, 2.5], [L * 0.92, Th * 0.8, Hh * 0.8, -0.001 * k, 2.4], [L, 0, 0, -0.0015 * k, 2]], 28, 28,
-      (x, y) => { const t = x / L; return mix(mix(PALE, SAND, 0.5 + 0.3 * (y > 0 ? 1 : 0)), lin('#c9a7b5'), big ? 0.25 * Math.max(0, -y / Hh) : 0).map(v => v * (0.95 + 0.1 * M.vn(x * 900, y * 900, 3))); });
+    /* the hand: the palm swollen and granular, white flushed lilac (the big one more so); the fixed finger running on
+       from its lower edge, the movable one hinged above, both stout and toothed along the edges that meet, their tips
+       brown */
+    const L = 0.016 * k, Hh = 0.0082 * k, Th = 0.0046 * k, hand = new T.Object3D(); hand.position.x = (0.006 * k + 0.002) * 0.92; hand.rotation.y = sd * 0.35; J[1].add(hand);
+    const gran = (x, y, z) => M.vn(x * 2400 + sd * 9, y * 2400, z * 2400);
+    const palm = M.loft([[0, 0.0022 * k, 0.003 * k, 0, 2], [L * 0.15, Th * 0.92, Hh * 0.86, 0, 2.3], [L * 0.6, Th, Hh, 0, 2.5], [L * 0.9, Th * 0.82, Hh * 0.8, -0.001 * k, 2.4], [L, Th * 0.45, Hh * 0.45, -0.0018 * k, 2.1]], 32, 32,
+      (x, y, z) => { const gg = gran(x, y, z); let c = mix(PALE, LILAC, (big ? 0.55 : 0.3) * sm(-Hh * 0.6, Hh * 0.4, -y)); c = mix(c, SAND, 0.25 * sm(0, Hh, y)); if (gg > 0.72) c = mix(c, lin('#fbf7ef'), 0.6); return c.map(v => v * (0.95 + 0.08 * M.vn(x * 900, y * 900, 3))); },
+      { shape: (x, y, z) => { const gg = gran(x, y, z), b = gg > 0.72 ? 0.00022 * sm(0.72, 0.85, gg) : 0, l = Math.hypot(y, z) || 1; return [x, y + y / l * b, z + z / l * b]; } });
     hand.add(new T.Mesh(palm, clawM));
-    const finger = (len, rr, up) => { const geo = new T.ConeGeometry(rr, len, 10, 6); geo.rotateZ(-Math.PI / 2); geo.translate(len / 2, 0, 0);
-      const P = geo.attributes.position; for (let i = 0; i < P.count; i++) { const t = P.getX(i) / len; P.setY(i, P.getY(i) + (up ? -1 : 1) * 0.35 * len * t * t); } geo.scale(1, 1, 0.7); geo.computeVertexNormals();
-      return M.paint(geo, x => mix(PALE, lin('#fbf6ee'), x / len)); };
-    const fixed = new T.Mesh(finger(0.011 * k, 0.0022 * k, true), clawM); fixed.position.set(L * 0.9, -Hh * 0.45, 0); fixed.rotation.z = -0.12; hand.add(fixed);
-    const dact = new T.Object3D(); dact.position.set(L * 0.86, Hh * 0.35, 0); hand.add(dact);
-    const df = new T.Mesh(finger(0.0125 * k, 0.0021 * k, true), clawM); dact.add(df);
+    const finger = (len, rr, dn) => M.loft([[0, rr * 0.8, rr, 0, 2.2], [len * 0.45, rr * 0.72, rr * 0.88, 0, 2.2], [len * 0.85, rr * 0.38, rr * 0.42, 0, 2], [len, rr * 0.08, rr * 0.08, 0, 2]], 14, 14,
+      (x) => mix(PALE, lin('#5a4630'), sm(0.6, 0.95, x / len)),
+      { shape: (x, y, z) => { const t = x / len, teeth = y * dn > 0 ? 0 : 0.0003 * Math.max(0, Math.sin(t * 20)) * (1 - t); return [x, y + dn * 0.3 * len * t * t + dn * teeth, z]; } });
+    const fixed = new T.Mesh(finger(0.0085 * k, 0.0023 * k, 1), clawM); fixed.position.set(L * 0.9, -Hh * 0.42, 0); fixed.rotation.z = -0.1; hand.add(fixed);
+    const dact = new T.Object3D(); dact.position.set(L * 0.85, Hh * 0.32, 0); hand.add(dact);
+    dact.add(new T.Mesh(finger(0.0095 * k, 0.0021 * k, -1), clawM));
     claws.push({ J, dact, big });
   }
   /* the eyes: tall stalks from the front corners, each topped by a long dark eye with a pale band below it */
-  const eyeM = M.litP('#1b1d20', { roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.06 });
+  const eyeM = M.litP('#ffffff', { vertexColors: true, roughness: 0.25, clearcoat: 0.6, clearcoatRoughness: 0.15 });
   const stalkM = M.lit('#ffffff', { vertexColors: true, roughness: 0.5 });
   const eyes = [];
   for (const sd of [1, -1]) {
     const e = new T.Object3D(); e.position.set(Lh * 0.96, CY + H * 0.45, sd * W * 0.52); e.rotation.order = 'YXZ'; e.rotation.set(sd * 0.32, 0, -0.28); g.add(e);
     const st = M.paint(new T.CylinderGeometry(0.0019, 0.0023, 0.012, 12, 4), (x, y) => mix(SAND, PALE, (y + 0.006) / 0.012)); st.translate(0, 0.006, 0); e.add(new T.Mesh(st, stalkM));
-    /* the eye wraps round the stalk's end, long and dark, a pale cap above it */
-    const ball = new T.SphereGeometry(1, 24, 18); ball.scale(0.0033, 0.0068, 0.0033); const em = new T.Mesh(ball, eyeM); em.position.y = 0.0118; e.add(em);
-    const cap = new T.SphereGeometry(0.0022, 12, 8); const cm = new T.Mesh(M.paint(cap, () => PALE), stalkM); cm.position.y = 0.0182; cm.scale.set(1, 0.8, 1); e.add(cm);
-    const band = new T.Mesh(M.paint(new T.TorusGeometry(0.0026, 0.0007, 8, 18), () => DUSK), stalkM); band.rotation.x = Math.PI / 2; band.position.y = 0.0062; e.add(band);
+    /* the eye: the cornea swells round the stalk's end, long and dark (club-shaped, bigger on its outer side), and above
+       it a short pale horn, the style */
+    const ball = M.paint(new T.SphereGeometry(1, 28, 20), (x, y, z) => { const f = 0.8 + 0.2 * Math.abs(Math.sin(x * 9e3) * Math.sin(y * 9e3 + 1) * Math.sin(z * 9e3 + 2)); return [0.06 * f, 0.055 * f, 0.05 * f]; });
+    ball.scale(0.0036, 0.0074, 0.0034); const em = new T.Mesh(ball, eyeM); em.position.set(0, 0.0112, sd * 0.0005); e.add(em);
+    const sty = M.paint(new T.ConeGeometry(0.0014, 0.0048, 10, 3), (x, y) => mix(PALE, SAND, 0.4 + (y + 0.0024) * 120)); sty.translate(0, 0.0024, 0);
+    const cm = new T.Mesh(sty, stalkM); cm.position.y = 0.0176; e.add(cm);
+    const band = new T.Mesh(M.paint(new T.TorusGeometry(0.0026, 0.0007, 8, 18), () => DUSK), stalkM); band.rotation.x = Math.PI / 2; band.position.y = 0.0058; e.add(band);
     eyes.push({ e, sd, z0: e.rotation.z, x0: e.rotation.x });
   }
   g.userData.anim = t => {

@@ -84,18 +84,23 @@
 
   M.add('life/butterfly', (o = {}) => {
     const kind = Math.max(0, Math.min(3, o.kind | 0)), g = new T.Group(), P = PAL[kind];
-    const dark = lin(kind === 2 ? '#3b3a36' : kind === 3 ? '#2a2f3d' : '#2a1d14'), fur = lin(kind === 2 ? '#c9c4b0' : kind === 3 ? '#5b6a8a' : '#3a2a1c');
+    /* (the body's colours, each kind its own: the tiger black with white flecks, the emigrant pale lemon, the white grey with
+       pale hairs, the blue blue-grey) */
+    const dark = lin(['#1c1612', '#b9a35a', '#3b3a36', '#2a2f3d'][kind]), fur = lin(['#3a2a1c', '#efe4a8', '#c9c4b0', '#6a7a9e'][kind]);
     /* the body: thorax furred, the abdomen ringed, the head with its eyes */
     const bodyM = M.lit('#ffffff', { vertexColors: true, roughness: 0.8 });
     const abd = M.loft([[-0.0215, 0, 0, 0.0006, 2], [-0.02, 0.0009, 0.0009, 0.0007, 2], [-0.014, 0.0016, 0.0017, 0.0009, 2], [-0.006, 0.0019, 0.0021, 0.001, 2], [-0.0025, 0.0016, 0.0018, 0.001, 2], [-0.001, 0, 0, 0.001, 2]], 30, 16,
-      (x, y, z, u) => { const ring = 0.5 + 0.5 * Math.cos(u * TAU * 4.5); return mix(dark, fur, 0.35 * ring + (y < 0.0008 ? 0.3 : 0)); });
-    const thx = new T.SphereGeometry(1, 18, 14); thx.scale(0.0042, 0.0029, 0.0029); thx.translate(0.0012, 0.0012, 0);
-    M.paint(thx, (x, y, z) => mix(dark, fur, 0.5 + 0.5 * M.vn(x * 3000, y * 3000, z * 3000)));
+      (x, y, z, u) => { const ring = 0.5 + 0.5 * Math.cos(u * TAU * 4.5); let c = mix(dark, fur, 0.35 * ring + (y < 0.0008 ? 0.3 : 0)); if (kind === 0 && M.vn(x * 6000, y * 6000, z * 6000) > 0.78) c = mix(c, [0.9, 0.9, 0.88], 0.8); return c; });
+    /* (the thorax furred: tufts break its outline) */
+    const thx = new T.SphereGeometry(1, 36, 28); thx.scale(0.0042, 0.0029, 0.0029); thx.translate(0.0012, 0.0012, 0);
+    { const P = thx.attributes.position; for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i) - 0.0012, z = P.getZ(i), k = 1 + 0.09 * (M.vn(x * 5000, y * 5000, z * 5000) - 0.4) + 0.05 * M.vn(x * 12000, y * 12000, z * 12000); P.setXYZ(i, 0.0012 + (x - 0.0012) * k, 0.0012 + y * k, z * k); } thx.computeVertexNormals(); }
+    M.paint(thx, (x, y, z) => mix(dark, fur, 0.35 + 0.6 * M.vn(x * 4000, y * 4000, z * 4000)));
     const head = new T.SphereGeometry(0.0021, 16, 12); head.translate(0.006, 0.0013, 0); M.paint(head, () => dark);
     g.add(new T.Mesh(M.mergeC([{ geo: abd }, { geo: thx }, { geo: head }]), bodyM));
-    /* the compound eyes: big, dark, glossy */
-    const eyeM = M.litP('#2b2016', { roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 });
-    for (const sd of [-1, 1]) { const e = new T.Mesh(new T.SphereGeometry(0.0015, 16, 12), eyeM); e.position.set(0.0067, 0.0017, sd * 0.0014); g.add(e); }
+    /* the compound eyes: big, dark olive-brown, finely faceted (a soft sheen, not a mirror) */
+    const eyeG = M.paint(new T.SphereGeometry(0.00138, 24, 18), (x, y, z) => { const f = 0.8 + 0.2 * Math.abs(Math.sin(x * 26000) * Math.sin(y * 26000 + 1) * Math.sin(z * 26000 + 2)); return [0.16 * f, 0.13 * f, 0.08 * f]; });
+    const eyeM = M.litP('#ffffff', { vertexColors: true, roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.35 });
+    for (const sd of [-1, 1]) { const e = new T.Mesh(eyeG, eyeM); e.position.set(0.0067, 0.0016, sd * 0.00135); g.add(e); }
     /* the tongue, coiled up under the head */
     const coil = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * TAU * 2.2, r = 0.0011 * (1 - i / 48); coil.push(new T.Vector3(0.0078 + r * Math.cos(a) * 0.5, -0.0002 - r * Math.sin(a), 0)); }
     g.add(new T.Mesh(M.tube(new T.CatmullRomCurve3(coil), 60, 5, () => 0.00018), M.lit('#3a2a1a', { roughness: 0.6 })));

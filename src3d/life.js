@@ -249,22 +249,24 @@ ${GLSL.WAVEH}
 ${ONTOP}
 attribute vec3 color;
 uniform vec3 uCol; uniform float uVC;
-varying vec3 vC, vN, vW; varying float vDepth;
+varying vec3 vC, vN, vW; varying float vDepth; varying vec2 vUv;
 void main(){
   vec4 w = modelMatrix*vec4(position, 1.0);
-  vN = normalize(mat3(modelMatrix)*normal); vC = uCol*mix(vec3(1.0), color, uVC); vW = w.xyz;
+  vN = normalize(mat3(modelMatrix)*normal); vC = uCol*mix(vec3(1.0), color, uVC); vW = w.xyz; vUv = uv;
   float hs = waveH(w.xz); vDepth = max(0.0, hs - w.y);
   gl_Position = projectionMatrix*viewMatrix*vec4(onTop(w.xyz, hs), 1.0);
 }`;
   const UW_FS = `
-uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay, uFade;
-varying vec3 vC, vN, vW; varying float vDepth;
+uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay, uFade, uHasMap; uniform sampler2D uMap;
+varying vec3 vC, vN, vW; varying float vDepth; varying vec2 vUv;
 void main(){
   vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW);
   float tr = exp(-vDepth*1.4);
   vec3 L = uAmbF*0.95 + uKeyColT*max(dot(n, uKeyDirT), 0.0)*tr*1.15;
   vec3 h = normalize(uKeyDirT + V); float sp = pow(max(dot(n, h), 0.0), 30.0)*0.3*tr;
-  vec3 col = vC*L + uKeyColT*sp;
+  /* (a painted model's picture, where it has one) */
+  vec3 base = uHasMap > 0.5 ? vC*texture2D(uMap, vUv).rgb : vC;
+  vec3 col = base*L + uKeyColT*sp;
   col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + uKeyColT*0.3), col*1.1, exp(-vDepth*0.75));
   float under = smoothstep(0.0, 0.04, vDepth), fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
   float a = uFade*mix(1.0, (0.35 + 0.65*exp(-vDepth*0.7))*(1.0 - 0.85*fres), under)*(0.45 + 0.55*uDay);
@@ -427,13 +429,15 @@ void main(){
     const lightU = { uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF };
     const turtleM = new T.ShaderMaterial({ uniforms: Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, lightU, Mats.coastU), vertexShader: TURTLE_VS, fragmentShader: TURTLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide });
     const turtleSh = new T.Mesh(tg, turtleM); turtleSh.frustumCulled = false; turtleSh.renderOrder = 4; root.add(turtleSh);
-    /* every part of a model given the look through the water (UW_VS, UW_FS); uFade how much of it shows */
+    /* every part of a model given the look through the water (UW_VS, UW_FS); uFade how much of it shows; (a stand-in for
+       the parts with no picture of their own) */
+    const WHITE1 = new T.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); WHITE1.needsUpdate = true;
     const uwBase = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uDay: U.uDay }, lightU, Mats.coastU);
     function underwater(o, uFade) {
       o.traverse(m => {
         if (!m.isMesh) return;
         const src = m.material, col = src.color ? src.color.clone() : new T.Color(1, 1, 1);
-        m.material = new T.ShaderMaterial({ uniforms: Object.assign({ uCol: { value: col }, uVC: { value: src.vertexColors && m.geometry.attributes.color ? 1 : 0 }, uFade }, uwBase),
+        m.material = new T.ShaderMaterial({ uniforms: Object.assign({ uCol: { value: col }, uVC: { value: src.vertexColors && m.geometry.attributes.color ? 1 : 0 }, uFade, uMap: { value: src.map || WHITE1 }, uHasMap: { value: src.map ? 1 : 0 } }, uwBase),
           vertexShader: UW_VS, fragmentShader: UW_FS, transparent: true, depthWrite: true, side: src.side ?? T.FrontSide });
         m.renderOrder = 5; m.frustumCulled = false; m.castShadow = m.receiveShadow = false;
       });

@@ -11,8 +11,11 @@
   M.add('life/bat', () => {
     const g = new T.Group(), fur = lin('#5a4130'), furD = lin('#3a2a20'), skin = lin('#2a201c');
     const furM = M.lit('#ffffff', { vertexColors: true, roughness: 0.95 });
-    const body = M.loft([[-0.04, 0, 0, 0, 2], [-0.032, 0.012, 0.01, 0, 2], [-0.012, 0.019, 0.017, 0, 2], [0.008, 0.017, 0.016, 0.001, 2], [0.022, 0.012, 0.011, 0.002, 2], [0.03, 0, 0, 0.003, 2]], 30, 28,
-      (x, y, z) => mix(fur, furD, 0.4 + 0.4 * M.vn(x * 600, y * 600, z * 600) + (y < 0 ? -0.2 : 0.1)));
+    /* (furred: the coat's tufts break its outline, a little paler and greyer beneath) */
+    const tuft = (x, y, z) => 0.0009 * (M.vn(x * 900, y * 900, z * 900) - 0.35) + 0.0005 * M.vn(x * 2600, y * 2600, z * 2600);
+    const body = M.loft([[-0.04, 0, 0, 0, 2], [-0.032, 0.012, 0.01, 0, 2], [-0.012, 0.019, 0.017, 0, 2], [0.008, 0.017, 0.016, 0.001, 2], [0.022, 0.012, 0.011, 0.002, 2], [0.03, 0, 0, 0.003, 2]], 60, 56,
+      (x, y, z) => mix(mix(fur, furD, 0.35 + 0.5 * M.vn(x * 700, y * 700, z * 700)), lin('#7a6656'), y < -0.004 ? 0.45 : 0),
+      { shape: (x, y, z) => { const r = Math.hypot(y, z) || 1, k = tuft(x, y, z); return [x, y + y / r * k, z + z / r * k]; } });
     g.add(new T.Mesh(body, furM));
     const head = new T.Object3D(); head.position.set(0.034, 0.004, 0); g.add(head);
     head.add(new T.Mesh(M.loft([[-0.012, 0, 0, 0, 2], [-0.006, 0.011, 0.01, 0, 2], [0.006, 0.01, 0.009, 0.0, 2], [0.016, 0.005, 0.005, -0.002, 2], [0.02, 0, 0, -0.002, 2]], 20, 24,
@@ -30,7 +33,8 @@
        the wrist, the four long fingers from there, the leg back to the ankle */
     const Sh = [0.012, 0.0], El = [-0.002, 0.03], Wr = [0.034, 0.052], Hp = [-0.03, 0.0], An = [-0.05, 0.026];
     const tips = [[0.066, 0.118], [0.034, 0.168], [-0.006, 0.128], [-0.024, 0.082]];   /* the second finger to the fifth */
-    const memM = M.litP('#ffffff', { vertexColors: true, roughness: 0.82, specularIntensity: 0.3, sheen: 0.08, sheenColor: new T.Color('#5a3222'), side: T.DoubleSide });
+    /* (skin, matt: a little sheen, no gloss) */
+    const memM = M.litP('#ffffff', { vertexColors: true, roughness: 0.78, clearcoat: 0, specularIntensity: 0.25, sheen: 0.25, sheenRoughness: 0.6, sheenColor: new T.Color('#6a3a28'), side: T.DoubleSide });
     const boneM = M.lit('#2a1f1a', { roughness: 0.55 });
     const wings = [];
     for (const sd of [1, -1]) {
@@ -87,7 +91,7 @@
       }
       for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { const a = i * (m + 1) + j, b = a + m + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
       const tg = new T.BufferGeometry(); tg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); tg.setIndex(idx); tg.computeVertexNormals();
-      g.add(new T.Mesh(tg, M.litP('#2e211c', { roughness: 0.82, specularIntensity: 0.3, sheen: 0.08, sheenColor: new T.Color('#5a3222'), side: T.DoubleSide })));
+      g.add(new T.Mesh(tg, M.litP('#2e211c', { roughness: 0.78, clearcoat: 0, specularIntensity: 0.25, sheen: 0.25, sheenRoughness: 0.6, sheenColor: new T.Color('#6a3a28'), side: T.DoubleSide })));
       g.add(new T.Mesh(M.tube(new T.CatmullRomCurve3([new T.Vector3(-0.034, -0.002, 0), new T.Vector3(-0.07, -0.004, 0), new T.Vector3(-0.088, -0.003, 0)]), 10, 6, t => 0.0022 * (1 - 0.6 * t)), boneM));
     }
     g.userData.anim = (t, flying) => {

@@ -37,9 +37,10 @@
     const hg = x.createLinearGradient(hu - 10, 0, W, 0); hg.addColorStop(0, 'rgba(0,0,0,0)'); hg.addColorStop(0.3, 'rgba(30,40,40,0.18)'); x.fillStyle = hg; x.fillRect(hu - 10, 0, W - hu + 10, H);
     for (const sd of [-1, 1]) {
       const vc = 0.5 + sd * 0.25;
-      x.fillStyle = 'rgba(200,170,90,0.28)'; x.beginPath(); x.ellipse(0.84 * W, vc * H, 30, 70, 0, 0, TAU); x.fill();
-      x.strokeStyle = 'rgba(30,36,38,0.8)'; x.lineWidth = 3; x.beginPath(); x.ellipse(0.85 * W, vc * H, 22, 96, 0, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); x.stroke();
-      b.strokeStyle = '#3a3a3a'; b.lineWidth = 4; b.beginPath(); b.ellipse(0.85 * W, vc * H, 22, 96, 0, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); b.stroke();
+      /* (the gill cover's back edge: a curve down the cheek, bowed toward the tail; a faint gold flush in front of it) */
+      x.fillStyle = 'rgba(200,170,90,0.1)'; x.beginPath(); x.ellipse(0.875 * W, vc * H, 26, 0.17 * H, 0, 0, TAU); x.fill();
+      x.strokeStyle = 'rgba(30,36,38,0.7)'; x.lineWidth = 3; x.beginPath(); x.ellipse(0.865 * W, vc * H, 24, 0.19 * H, 0, Math.PI / 2 + 0.15, Math.PI * 1.5 - 0.15); x.stroke();
+      b.strokeStyle = '#3a3a3a'; b.lineWidth = 4; b.beginPath(); b.ellipse(0.865 * W, vc * H, 24, 0.19 * H, 0, Math.PI / 2 + 0.15, Math.PI * 1.5 - 0.15); b.stroke();
       /* the dark spot at the root of the pectoral fin */
       x.fillStyle = 'rgba(25,32,40,0.75)'; x.beginPath(); x.ellipse(0.745 * W, (0.5 + sd * 0.12) * H, 10, 8, 0, 0, TAU); x.fill();
     }
@@ -75,7 +76,7 @@
         /* the gill cover standing a hair proud of the flank in front of its edge */
         const gill = 1 + 0.035 * (1 / (1 + Math.exp(-(x - 0.122) / 0.0016))) * (1 - 1 / (1 + Math.exp(-(x - 0.15) / 0.004)));
         return [x, y * (Math.cos(a) > 0 ? 1 : gill), z * gill]; } });
-    const skinM = M.litP('#ffffff', { map: skinTex, bumpMap: bumpTex, bumpScale: 1.2, roughness: 0.32, metalness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.25 });
+    const skinM = M.litP('#ffffff', { map: skinTex, bumpMap: bumpTex, bumpScale: 1.2, roughness: 0.34, metalness: 0.2, clearcoat: 0.5, clearcoatRoughness: 0.28 });
     g.add(new T.Mesh(body, skinM));
     /* the mouth: a small dark line round the snout's tip */
     const lip = []; for (let i = 0; i <= 16; i++) { const a = -1.3 + i / 16 * 2.6; lip.push(new T.Vector3(0.1715 - 0.006 * Math.abs(Math.sin(a)) ** 1.5, -0.002 - 0.0016 * Math.cos(a), Math.sin(a) * 0.0068)); }

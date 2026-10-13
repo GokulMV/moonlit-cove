@@ -40,21 +40,38 @@
       const ring = new T.Mesh(new T.TorusGeometry(0.0065, 0.0012, 8, 24), ringM); ring.position.z = 0.0018; e.add(ring);
       const lid = new T.Mesh(new T.SphereGeometry(0.0069, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), featherM); M.paint(lid.geometry, () => white); lid.rotation.x = Math.PI / 2; lid.scale.set(1, 1, 0.01); e.add(lid); lids.push(lid);
     }
-    /* the folded wings along its sides, the black primaries crossing over the tail */
-    const wingG = M.sheet(36, 12, (s, c) => {
-      const x = 0.07 - s * 0.36, w = 0.06 * Math.sin(Math.PI * Math.min(1, 0.25 + s * 0.8)) * (s > 0.7 ? 1 - (s - 0.7) * 1.8 : 1);
-      const y = LEG + 0.11 - c * w * 1.4 - s * 0.02, z = 0.055 * Math.cos((c - 0.3) * 1.2) * (1 - 0.55 * s * s) + 0.004;
+    /* the folded wings along its sides: the grey coverts and secondaries (their trailing edges white), three broad
+       tertials over the back of the wing tipped white, and the long black primaries, each a feather of its own, white at
+       their tips, the outer two with a white spot (the mirror), crossing over the tail */
+    const wingG = M.sheet(30, 12, (s, c) => {
+      const S = s * 0.66, x = 0.07 - S * 0.36, w = 0.06 * Math.sin(Math.PI * Math.min(1, 0.25 + S * 0.8));
+      const y = LEG + 0.11 - c * w * 1.4 - S * 0.02, z = 0.055 * Math.cos((c - 0.3) * 1.2) * (1 - 0.55 * S * S) + 0.004;
       return [x, y, z]; },
-      (s, c) => {
-        if (s < 0.62) return mix(grey, greyD, c * 0.4).map(v => v * (0.95 + 0.08 * Math.pow(Math.sin(s * 60 + c * 4), 8)));
-        /* the primaries: black, a white spot near each tip, the very tips white; a white crescent along the tertials */
-        const fe = Math.pow(0.5 + 0.5 * Math.sin(c * 22), 4), tip = s > 0.96, mirror = s > 0.86 && s < 0.92 && c > 0.3 && c < 0.7;
-        return tip || mirror ? white : mix(black, lin('#3a3a3a'), 0.4 * fe);
-      });
-    const wings = [];
-    for (const sd of [-1, 1]) { const w = new T.Mesh(wingG, M.lit('#ffffff', { vertexColors: true, roughness: 0.7, side: T.DoubleSide })); if (sd < 0) w.scale.z = -1; g.add(w); wings.push(w); }
+      (s, c) => { let col = mix(grey, greyD, c * 0.35).map(v => v * (0.95 + 0.07 * Math.pow(Math.sin(s * 40 + c * 4), 8)));
+        /* (rows of coverts, each a shade lighter at its edge; the secondaries' white trailing edge) */
+        col = col.map(v => v * (0.97 + 0.05 * Math.pow(0.5 + 0.5 * Math.sin(s * 26), 6)));
+        return c > 0.86 ? mix(col, white, (c - 0.86) / 0.14) : col; });
+    const wings = [], featherG = (len, w0, col, tipW = 0.07, mirror = false) => M.loft([[0, 0, 0, 0, 2], [len * 0.04, w0 * 0.7, 0.0016, 0, 2], [len * 0.3, w0, 0.0018, 0, 2], [len * 0.75, w0 * 0.8, 0.0014, 0, 2], [len * 0.96, w0 * 0.38, 0.001, 0, 2], [len, 0, 0, 0, 2]], 30, 10,
+      (x) => { const t = x / len; return t > 1 - tipW ? white : mirror && t > 0.8 && t < 0.88 ? white : col; }, { shape: (x, y, z) => [x, y + 0.004 * Math.sin(Math.PI * x / len), z] });
+    const featM = M.lit('#ffffff', { vertexColors: true, roughness: 0.72 });
+    for (const sd of [-1, 1]) {
+      const wg = new T.Group(); g.add(wg); wings.push(wg);
+      const w = new T.Mesh(wingG, M.lit('#ffffff', { vertexColors: true, roughness: 0.7, side: T.DoubleSide })); if (sd < 0) w.scale.z = -1; wg.add(w);
+      /* (the primaries: six, the outermost uppermost and longest, fanned a little) */
+      for (let i = 0; i < 6; i++) {
+        const f = new T.Mesh(featherG(0.16 + 0.007 * (5 - i), 0.0105 - 0.0006 * i, mix(black, lin('#2a2a2a'), 0.15 * i), 0.06 + 0.01 * (i > 3 ? 1 : 0), i < 2), featM);
+        f.position.set(-0.115 - 0.006 * i, LEG + 0.099 - 0.004 * i, sd * (0.04 - 0.004 * i)); f.rotation.order = 'YXZ'; f.rotation.set(sd * (0.18 + 0.02 * i), Math.PI - sd * (0.1 + 0.03 * i), -0.05 - 0.012 * i);
+        wg.add(f);
+      }
+      /* (the tertials over the back of the folded wing, grey, tipped with white) */
+      for (let i = 0; i < 3; i++) {
+        const f = new T.Mesh(featherG(0.085 - 0.01 * i, 0.017, mix(grey, greyD, 0.3), 0.22), featM);
+        f.position.set(-0.07 - 0.012 * i, LEG + 0.112 - 0.006 * i, sd * (0.03 + 0.008 * i)); f.rotation.order = 'YXZ'; f.rotation.set(sd * 0.35, Math.PI - sd * 0.12, -0.06);
+        wg.add(f);
+      }
+    }
     /* the white tail beneath the wingtips */
-    const tail = M.sheet(8, 10, (s, c) => [-0.17 - s * 0.07, LEG + 0.085 - s * 0.012, (c - 0.5) * (0.05 + 0.03 * s)], () => white);
+    const tail = M.sheet(8, 16, (s, c) => { const e = 1 - 0.25 * Math.pow(2 * c - 1, 2); return [-0.17 - s * 0.075 * e, LEG + 0.085 - s * 0.012, (c - 0.5) * (0.05 + 0.035 * s)]; }, () => white);
     g.add(new T.Mesh(tail, M.lit('#ffffff', { vertexColors: true, roughness: 0.8, side: T.DoubleSide })));
     /* the legs and their webbed feet */
     const legM = M.lit('#ffffff', { vertexColors: true, roughness: 0.55 });
