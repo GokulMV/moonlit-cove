@@ -78,6 +78,43 @@ float rkH(vec3 p, float nk, float ck){
   float a = vnz(p*2.1), b = 1.0 - abs(2.0*vnz(p*5.7 + 3.0) - 1.0), c = vnz(p*15.0 + 7.0), d = vnz(p*41.0 + 1.0);
   return 0.026*a + 0.02*b*b + 0.014*c + 0.006*nk*d - 0.022*ck*rkCrack(p);
 }`;
+  /* the canopy's crowns, worked out where each point of it lies (world x, z): a Voronoi of crowns about 6 m across,
+     big ones of 11 m standing up out of them here and there. cnAt sets the colour the point takes (its crown's own
+     green and how deep in shade) and the slope of its dome (for the normal); far off, where a crown is only a few
+     pixels across, the shading fades to its average so it never shimmers */
+  const CANOPY = `
+vec3 cnTint = vec3(1.0), cnGrad = vec3(0.0);
+vec2 cnH2(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p)*43758.5453); }
+/* one size of crowns: the dome's height at p (0..1), how far into shade (past every crown's rim, or in the crease
+   where one crown tucks under the next), and which crown. Each crown is a round dome of its own size; where two
+   overlap the higher shows, so they meet along curves, never in straight lines. gr: the dome's slope, per metre */
+vec4 cnLayer(vec2 p, float S, out vec2 gr){
+  vec2 q = p/S, g = floor(q), f = q - g; float best = -1.0, second = -1.0, id = 0.0, R = 1.0; vec2 r1 = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+    vec2 c = vec2(float(i), float(j)), h = cnH2(g + c), r = c + 0.1 + 0.8*h - f;
+    float Ri = 0.5 + 0.38*fract(h.x*7.31 + h.y*3.1), hh = 1.0 - dot(r, r)/(Ri*Ri);
+    if (hh > best){ second = best; best = hh; r1 = r; id = h.x + h.y*0.37; R = Ri; } else if (hh > second) second = hh;
+  }
+  gr = best > 0.0 ? r1*2.0/(R*R*S) : vec2(0.0);
+  float gapK = smoothstep(0.1, -0.05, best), crease = smoothstep(0.16, 0.0, best - second)*step(0.0, second);
+  return vec4(max(best, 0.0), max(gapK, 0.55*crease), fract(id*13.7), fract(id*3.1));
+}
+void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
+  float fw = length(fwidth(w.xz)) + 1e-4;
+  vec2 g1, g2, g3; vec4 A = cnLayer(w.xz, S1, g1), B = cnLayer(w.xz + vec2(31.7, 17.3), S2, g2), Cl = cnLayer(w.xz*1.0 + vec2(5.3, 71.9), S1*0.3, g3);
+  /* (the big crowns stand over the small where theirs is higher, and only here and there) */
+  float big = step(0.6, B.w)*step(A.x*H1, B.x*H2 + 0.3);
+  vec4 C = big > 0.5 ? B : A; vec2 gr = big > 0.5 ? g2*H2 : g1*H1;
+  /* each crown's green: from yellow-green through to a cool blue-green, lighter or darker; and over it its clumps of
+     leaves, each a small dome of its own */
+  vec3 tint = mix(vec3(1.12, 1.06, 0.72), vec3(0.84, 1.0, 1.18), C.z)*(0.72 + 0.56*C.w);
+  float kc = 1.0 - smoothstep(0.09, 0.3, fw/(S1*0.3));
+  tint *= (0.56 + 0.44*sqrt(C.x))*mix(1.0, 0.74 + 0.38*sqrt(Cl.x) - 0.28*Cl.y, kc*(1.0 - C.y))*(0.85 + 0.25*vnz(w*(5.3/S1)))*mix(1.0, gap, C.y);
+  /* (fading to the average where a crown is only a few pixels across) */
+  float k = 1.0 - smoothstep(0.09, 0.3, fw/S1);
+  cnTint = mix(vec3(0.64), tint, k);
+  cnGrad = (vec3(gr.x, 0.0, gr.y)*(1.0 - C.y) + vec3(g3.x, 0.0, g3.y)*H1*0.32*kc)*k;
+}`;
   function patch(m, key) {
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
@@ -129,7 +166,8 @@ float rkH(vec3 p, float nk, float ck){
       vec3 g = vec3(RKL(vWPos + vec3(e, 0.0, 0.0)) - h0, RKL(vWPos + vec3(0.0, e, 0.0)) - h0, RKL(vWPos + vec3(0.0, 0.0, e)) - h0)/e;
       #undef RKL
       vec3 gv = mat3(viewMatrix)*(g*vRock*smoothstep(90.0, 20.0, rkD2));
-      normal = normalize(normal - (gv - dot(gv, normal)*normal)); } }`);
+      normal = normalize(normal - (gv - dot(gv, normal)*normal)); } }
+  ${key === 'land' ? '{ vec3 gv = mat3(viewMatrix)*(cnGrad*(1.0 - vRock)); normal = normalize(normal - (gv - dot(gv, normal)*normal)); }' : ''}`);
       /* hills and headlands: rock on the steep and seaward parts, leaf litter and scrub elsewhere */
       if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   float wetK = 0.0;
@@ -151,7 +189,10 @@ float rkH(vec3 p, float nk, float ck){
       rockC = mix(rockC, vec3(0.3, 0.29, 0.26)*(0.85 + 0.3*vnz(vWPos*40.0)), lg*0.3);
       rockC = mix(rockC, vec3(0.36, 0.19, 0.05)*(0.8 + 0.4*vnz(vWPos*33.0)), lo*0.45);
     }
-    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3);
+    /* (under the trees and on the hills the ground is thick with shrubs and saplings, crown against crown, shade in
+       between: from above it is no lawn) */
+    ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}
+    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;
     diffuseColor.rgb = mix(vegC, rockC, vRock);
     float sea = smoothstep(5.0, -0.5, vWPos.z - shoreZc(vWPos.x));
     wetK = smoothstep(${key === 'reef' ? '0.75, 0.0' : '1.8, 0.1'}, vWPos.y)*sea*vRock;
@@ -169,10 +210,12 @@ float rkH(vec3 p, float nk, float ck){
     #undef SDH
     vec3 gv = mat3(viewMatrix)*(g*mk);
     normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
-      /* the forest canopy seen from afar: clumps of leaves, light through the edges */
+      /* the forest canopy seen from afar: the crowns of the trees packed edge to edge (CANOPY), each a dome of leaves of
+         its own green, lit on its sunny side, clumps of leaves over it, the gaps between them in deep shade; light
+         through the edges */
       if (key === 'canopy') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  { float a = vnz(vWPos*vec3(1.1, 1.6, 1.1)), b = vnz(vWPos*3.3 + 5.0), c = vnz(vWPos*9.0);
-    diffuseColor.rgb *= 0.5 + 0.55*a + 0.35*b*c + 0.15*c; }`);
+  cnAt(vWPos, 6.2, 11.5, 2.6, 4.2, 0.3); diffuseColor.rgb *= cnTint;`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  { vec3 gv = mat3(viewMatrix)*cnGrad; normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
       if (key === 'van') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   { /* two-tone paint split at the belt line, a thin bright trim, dark wheel wells and underside */
     vec3 lp = (uVanInv*vec4(vWPos, 1.0)).xyz;
@@ -186,7 +229,7 @@ float rkH(vec3 p, float nk, float ck){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};

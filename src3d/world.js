@@ -57,8 +57,15 @@ const World = (() => {
     h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
 
   /* ── the land (all in coast coordinates: World turns them into the world's where it hands things out) ── */
-  /* hills behind the beach, so the forest climbs away from the sand */
-  const hill = (x, z) => { const e = z - Co.vegZ(x) - 9; if (e <= 0) return -0.06; const k = e < 100 ? (e / 100) ** 2 * (3 - 2 * e / 100) : 1; return k * (16 + 22 * fbmX(x, z, 0.012, 3.1, 3)) + 2.5 * fbmX(x, z, 0.06, 1.7, 2) * Math.min(1, e / 20); };
+  /* hills behind the beach, so the forest climbs away from the sand: rising inland, cut by the streams into spurs
+     with V-shaped gullies between them, running down toward the sea (and wandering as they go), deeper the higher
+     the hill */
+  const hill = (x, z) => {
+    const e = z - Co.vegZ(x) - 9; if (e <= 0) return -0.06;
+    const k = e < 100 ? (e / 100) ** 2 * (3 - 2 * e / 100) : 1;
+    const gy = Math.abs(2 * vnX(x + 26 * Math.sin(z * 0.013) + 9 * Math.sin(z * 0.041), 0, 1 / 46, 33) - 1);
+    return k * (16 + 22 * fbmX(x, z, 0.012, 3.1, 3)) * (0.74 + 0.34 * Math.pow(gy, 0.75)) + 1.2 * fbmX(x, z, 0.06, 1.7, 2) * Math.min(1, e / 20);
+  };
   /* a headland: a promontory of stepped rock rising off the back of the beach where the coast bulges out; the sea runs
      round a strip of sand at its foot. Each its own: height, the step of its terraces, the sand left at its foot */
   const ztOf = h => h.zt === undefined ? (h.zt = Co.shoreZ(h.hx) + h.gap) : h.zt;     /* where its rock begins */
@@ -587,11 +594,13 @@ void main(){
       for (let j = 0; j < nd; j++) {
         const d = DS_[j], z = z0 + d, k = (j * nx + i) * 3, bse = land(x, z);
         const ramp = sm(0, 10, d) * sm(DEEP, DEEP - 40, d), far = sm(70, 200, d);
-        const f1 = cell2(x, z, 1024 / 190, 3.0), id = cellId, bump = Math.max(0, 1 - f1 * f1 * 1.6);
-        const hc = (6 + 5 * fbmX(x, z, 0.017, 3.3, 3)) * ramp;
-        Pa[k] = x - o.x; Pa[k + 1] = bse + 0.15 + hc + (bump * 2.8 - 0.9) * ramp * (1 - 0.7 * far); Pa[k + 2] = z - o.z;
-        const hue = h3(id * 13.1, 2.0, 5.0), lum = (0.55 + 0.6 * bump * (1 - 0.6 * far)) * (0.55 + 0.45 * ramp) * (0.85 + 0.3 * id);
-        C[k] = (0.016 + 0.01 * hue) * lum; C[k + 1] = (0.034 + 0.012 * id) * lum; C[k + 2] = (0.014 + 0.006 * hue) * lum;   /* (the shade between the crowns) */
+        /* (its crowns are drawn by its shader, mats.js CANOPY, each a dome of its own green with shade between: the blanket
+           itself only rises and falls with the stands of forest, its greens changing from one stand to the next) */
+        const hc = (6 + 5 * fbmX(x, z, 0.017, 3.3, 3)) * ramp, st = fbmX(x, z, 0.011, 6.1, 3), st2 = fbmX(x, z, 0.04, 8.3, 2);
+        /* (it lies a little below the crowns' middles, so most of each crown stands out of it, and is the shade under them) */
+        Pa[k] = x - o.x; Pa[k + 1] = bse + 0.15 + hc * 0.74 + 1.2 * (st2 - 0.5) * ramp; Pa[k + 2] = z - o.z;
+        const lum = 0.74 * (0.8 + 0.4 * st2) * (0.6 + 0.4 * ramp) * (1 - 0.15 * far), hue = st;
+        C[k] = (0.028 + 0.022 * hue) * lum; C[k + 1] = (0.062 + 0.018 * st2) * lum; C[k + 2] = (0.022 + 0.012 * (1 - hue)) * lum;
         if (late()) yield;
       }
     }
@@ -604,7 +613,7 @@ void main(){
      green, now and then one in flower or in new bronze leaf. They stand in the canopy, a third of each above it, so the
      hills' skyline is crowns. Far off, every other one, a little bigger. The grid is drawn from hashes of its cells, so
      the crowns are the same whichever chunk builds first */
-  const CROWN_G = [[8.5, 3, 420, 500], [15, 420, DEEP, 520]];     /* [cell, from and to how deep, hash salt]: near the shore, and over the mountains */
+  const CROWN_G = [[5.6, 3, 420, 500], [12, 420, DEEP, 520]];     /* [cell, from and to how deep, hash salt]: near the shore, and over the mountains */
   const GREENS = [[0.036, 0.074, 0.025], [0.045, 0.086, 0.028], [0.058, 0.094, 0.032], [0.032, 0.066, 0.036], [0.054, 0.074, 0.03], [0.042, 0.08, 0.031], [0.03, 0.058, 0.026]];
   function* crowns(c, coarse, o, mat, quad) {
     const X0c = X0 + c * CW, campX = Layout.camp.x + o.x, out = [];

@@ -611,9 +611,12 @@ void main(){
     /* a point on the crown's surface (not much of its underside), drawn in by k */
     const surf = k => { let x, y, z, l; do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; l = Math.hypot(x, y, z); } while (l > 1 || l < 0.2 || y / l < -0.45); return [x / l * A * k, yc + y / l * B * k, z / l * A * k]; };
     /* the crown's mass, clumps over its surface, small leafy tufts over those */
-    ball(0, yc - B * 0.1, 0, Math.min(A, B) * 0.8, 0.55, 0.05);
-    for (let i = 0, n = 34 + Math.floor(r() * 10); i < n; i++) { const [x, y, z] = surf(0.78); ball(x, y, z, (0.17 + 0.13 * r()) * A, 0.82 + 0.3 * r(), 0.14); }
-    for (let i = 0; i < 110; i++) { const [x, y, z] = surf(0.98); ball(x, y, z, (0.04 + 0.04 * r()) * A, 0.75 + 0.35 * r(), 0.25); }
+    /* (a real crown is no ball of balls: its leaves hang in many small sprays, thick in some places and thin in others,
+       so its edge is ragged and the sky shows through it here and there) */
+    const thick = (x, y, z) => vn2(x * 2.2 + v * 5.1 + z * 1.3, y * 2.2 - z * 0.7);
+    ball(0, yc - B * 0.1, 0, Math.min(A, B) * 0.74, 0.5, 0.08);
+    for (let i = 0, n = 62 + Math.floor(r() * 14); i < n; i++) { const [x, y, z] = surf(0.8); if (thick(x, y, z) < 0.3) continue; ball(x, y, z, (0.1 + 0.1 * r()) * A, 0.8 + 0.32 * r(), 0.22); }
+    for (let i = 0; i < 320; i++) { const [x, y, z] = surf(0.97); if (thick(x, y, z) < 0.38) continue; ball(x, y, z, (0.026 + 0.03 * r()) * A, 0.72 + 0.38 * r(), 0.32); }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const k = j * N + i, o = ((y0 + j) * W + x0 + i) * 4;
       if (zb[k] < -8) { px[o] = 128; px[o + 1] = 128; px[o + 2] = 100; px[o + 3] = 0; continue; }
