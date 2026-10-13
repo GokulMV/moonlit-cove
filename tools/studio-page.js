@@ -90,7 +90,7 @@ const Studio = (() => {
 
   let cur = [];
   const clear = () => { for (const m of cur) { scene.remove(m); m.traverse(k => { if (k.isMesh && !k.userData.shared) k.geometry.dispose(); }); } cur = []; };
-  const place = (name, o = {}) => { const m = Models.make(name, o.opts || {}); if (m.userData.anim) m.userData.anim(o.t ?? 0.6, !!o.flying); m.traverse(k => { if (k.isMesh) { k.castShadow = !k.userData.noShadow; k.receiveShadow = true; } }); cur.push(m); scene.add(m); return m; };
+  const place = (name, o = {}) => { if (typeof Rig !== 'undefined') { Rig.rec.furDebug = !!(o.opts && o.opts.furDebug); Rig.rec.noShells = !!(o.opts && o.opts.noShells); } const m = Models.make(name, o.opts || {}); if (m.userData.anim) m.userData.anim(o.t ?? 0.6, !!o.flying); m.traverse(k => { if (k.isMesh) { k.castShadow = !k.userData.noShadow; k.receiveShadow = true; } }); cur.push(m); scene.add(m); return m; };
   const trisOf = list => { let n = 0; for (const m of list) m.traverse(k => { if (k.isMesh) { const c = (k.geometry.index ? k.geometry.index.count : k.geometry.attributes.position.count) / 3; n += k.isInstancedMesh ? c * k.count : (k.geometry.isInstancedBufferGeometry ? c * k.geometry.instanceCount : c); } }); return Math.round(n); };
 
   /* the six sides: [azimuth from the front (+x) round toward +z, elevation] (3/4 front left, the right side, head on,
@@ -186,6 +186,38 @@ const Studio = (() => {
     frame(c, L.rad, Object.assign({ view: [Math.PI / 2 - 0.06, 0.08] }, o), w, h);
     return { url: shoot(w, h), size: box.getSize(new T.Vector3()).toArray().map(v => +v.toFixed(3)), tris: trisOf(cur) };
   }
-  return { sheet, hero, lineup, R, scene };
+  /* a section through one of a model's sculpts (Rig.sculpt, by the name it was given): plane 'z' a side view (x across,
+     y up, at z = at), 'x' head on (z across, y up), 'y' from above (x across, z down the page); box [u0, u1, v0, v1] in
+     metres, ppm pixels to the metre; inside shaded by which shape it is nearest, lines every millimetre out from the
+     surface, a grid every 5 mm and centimetre; ref: polylines [[u, v], …] drawn over it in red */
+  function slice(name, o = {}) {
+    Rig.rec.on = true; Rig.rec.list = [];
+    try { Models.make(name, o.opts || {}); } finally { Rig.rec.on = false; }
+    const sc = Rig.rec.list.find(r => r.o.name === (o.part || 'head')); if (!sc) throw new Error('no sculpt called ' + o.part);
+    const f = Rig.field(sc.list, sc.o), [u0, u1, v0, v1] = o.box, ppm = o.ppm || 5000, W = Math.round((u1 - u0) * ppm), H = Math.round((v1 - v0) * ppm), at = o.at || 0, pl = o.plane || 'z';
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'), im = x.createImageData(W, H), D = im.data, tagC = {};
+    const P3 = (u, v) => pl === 'z' ? [u, v, at] : pl === 'x' ? [at, v, u] : [u, at, v];
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const u = u0 + (i + 0.5) / ppm, v = pl === 'y' ? v0 + (j + 0.5) / ppm : v1 - (j + 0.5) / ppm, p = P3(u, v), d = f(...p), k = (j * W + i) * 4;
+      let col;
+      if (d < 0) { const t = f.tagAt(...p); if (!tagC[t]) { const h = [...t].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) % 360; tagC[t] = new THREE.Color().setHSL(h / 360, 0.45, 0.62); } col = [tagC[t].r * 255, tagC[t].g * 255, tagC[t].b * 255]; }
+      else col = [250, 250, 248];
+      const mm = Math.abs(d) * 1000, line = Math.abs(mm - Math.round(mm)) < 0.06 * (1 + 0.15 * mm) && mm < 12 ? 0.75 : 1;
+      D[k] = col[0] * line; D[k + 1] = col[1] * line; D[k + 2] = col[2] * line; D[k + 3] = 255;
+    }
+    x.putImageData(im, 0, 0);
+    /* (the surface itself, dark: where the field changes sign between neighbouring pixels) */
+    x.fillStyle = '#111';
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const u = u0 + (i + 0.5) / ppm, v = pl === 'y' ? v0 + (j + 0.5) / ppm : v1 - (j + 0.5) / ppm, a = f(...P3(u, v)) < 0, b = f(...P3(u + 1 / ppm, v)) < 0, cc = f(...P3(u, v + 1 / ppm)) < 0; if (a !== b || a !== cc) x.fillRect(i, j, 1.6, 1.6); }
+    const toPx = (u, v) => [(u - u0) * ppm, pl === 'y' ? (v - v0) * ppm : (v1 - v) * ppm];
+    x.lineWidth = 1; x.font = '11px monospace'; x.fillStyle = '#333';
+    for (let g = Math.ceil(u0 * 200) / 200; g <= u1; g += 0.005) { const [px] = toPx(g, 0), cm = Math.abs(g * 100 - Math.round(g * 100)) < 1e-6; x.strokeStyle = cm ? 'rgba(0,0,90,0.45)' : 'rgba(0,0,90,0.15)'; x.beginPath(); x.moveTo(px, 0); x.lineTo(px, H); x.stroke(); if (cm) x.fillText((g * 100).toFixed(0), px + 2, 11); }
+    for (let g = Math.ceil(v0 * 200) / 200; g <= v1; g += 0.005) { const [, py] = toPx(0, g), cm = Math.abs(g * 100 - Math.round(g * 100)) < 1e-6; x.strokeStyle = cm ? 'rgba(0,0,90,0.45)' : 'rgba(0,0,90,0.15)'; x.beginPath(); x.moveTo(0, py); x.lineTo(W, py); x.stroke(); if (cm) x.fillText((g * 100).toFixed(0), 2, py - 2); }
+    x.strokeStyle = 'rgba(220,20,20,0.9)'; x.lineWidth = 2;
+    for (const L of o.ref || []) { x.beginPath(); L.forEach(([u, v], i) => { const [px, py] = toPx(u, v); i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke(); }
+    x.fillStyle = '#000'; let ty = H - 6; for (const t in tagC) { x.fillStyle = '#' + tagC[t].getHexString(); x.fillRect(W - 110, ty - 9, 10, 10); x.fillStyle = '#000'; x.fillText(t, W - 96, ty); ty -= 14; }
+    return { url: c.toDataURL('image/png'), size: [W, H] };
+  }
+  return { sheet, hero, lineup, slice, R, scene };
 })();
 window.Studio = Studio;
