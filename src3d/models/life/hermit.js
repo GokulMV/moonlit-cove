@@ -47,7 +47,7 @@
       const zig = Math.sin(th * 5.3 + 1.7 * Math.abs(((ph / TAU * 6 + seed) % 1) - 0.5) * 4 + 2.1 * M.vn(th * 0.9, ph * 0.8, seed));
       let col = mix(TONE, BROWN, sm(0.25, 0.6, zig) * (0.55 + 0.45 * sm(-0.6, 0.4, sp)));
       col = mix(col, BROWN, 0.35 * sm(0.55, 0.95, sp));
-      const cord = lite ? 0.3 : Math.pow(Math.max(0, Math.cos(ph * 12)), 2.5);
+      const cord = lite ? 1.4 : Math.pow(Math.max(0, Math.cos(ph * 12)), 2.5);
       col = mix(col, CREAM, 0.28 * cord);
       col = mix(col, CHALK, sm(2.6 * TAU, 1.2 * TAU, th) * 0.8);
       return col.map(v => v * (0.88 + 0.2 * M.vn(p[0] * 2400, p[1] * 2400, p[2] * 2400)));
