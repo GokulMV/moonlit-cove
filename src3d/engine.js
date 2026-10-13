@@ -436,6 +436,8 @@ const Engine = (() => {
       if (!d.hit) {
         const c = swashAt(d.wx, d.wz, wt);
         if (!c || c.back || c.depth < 0.04) continue;
+        /* (from where it stands now: a chair turned since the camp went up goes over from there) */
+        d.p0.copy(d.o.position); d.q0.copy(d.o.quaternion);
         d.hit = Object.assign({ t: wt, seed: surge.rng() }, c);
         if (d.lantern !== undefined) surge.lantOut[d.lantern] = wt;
         if (d.candle) surge.candleOut = wt;
@@ -1161,9 +1163,12 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
   /* a chair turned by ry from where it was set out (it turns about its seat; what lies on it turns with it) */
   function turnChair(i, ry) {
     const ch = camp && camp.chairs && camp.chairs[i]; if (!ch) return;
-    const want = (ch.userData.ry0 || 0) + ry; if (Math.abs(ch.rotation.y - want) < 1e-5) return;
+    const want = (ch.userData.ry0 || 0) + ry, r = ch.rotation; if (Math.abs(r.y - want) < 1e-5 && Math.abs(r.x) < 1e-6 && Math.abs(r.z) < 1e-6) return;
     if (surge.dyn.some(d => d.o === ch && d.hit)) return;            /* (knocked over by a wave: let it lie) */
-    ch.rotation.y = want; ch.updateMatrixWorld(true);
+    /* (all three angles: a chair stood up again after a wave has its turn read back from its quaternion, and one turned
+       more than a right angle comes back as half a turn about x and z, which turning y alone would leave in, the chair
+       facing the wrong way) */
+    r.set(0, want, 0); ch.updateMatrixWorld(true);
   }
   /* what lies on a seat goes out of sight while you sit there (you would be sitting on it) */
   function seatProps(i, hidden) { const S = SEATS[i]; if (!S || S.kind !== 'chair' || !camp.chairProps) return; (camp.chairProps[S.i] || []).forEach(o => { o.visible = !hidden; }); }
