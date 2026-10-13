@@ -142,7 +142,7 @@
     const top = ls + 0.012 - sink, sh = 0.03 + 0.06 * R(), green = [0.035, 0.075, 0.018];
     parts.push([body(new T.LineCurve3(V(0, top - 0.01, 0), V(0, top + sh, 0)), 3, 6, t => 0.0032 * (1 - 0.4 * t), () => [0.06, 0.09, 0.025]), new T.Matrix4()]);
     for (let k = 0, np = 1 + Math.floor(R() * 2); k < np; k++) for (const sd of [0, Math.PI]) {
-      const L = (0.05 + 0.04 * R()) * (k ? 0.7 : 1), az = sd + k * Math.PI / 2 + (R() - 0.5) * 0.3, g = blade(L, L * 0.45, green.map(q => q * (0.9 + 0.2 * R())), 0.22, 0.1);
+      const L = (0.05 + 0.04 * R()) * (k ? 0.7 : 1), az = sd + k * Math.PI / 2 + (R() - 0.5) * 0.3, gk = 0.9 + 0.2 * R(), g = blade(L, L * 0.45, green.map(q => q * gk), 0.22, 0.1);
       const m = new T.Matrix4().makeRotationY(-az).multiply(new T.Matrix4().makeRotationZ(0.55 - 0.25 * k)); m.setPosition(0, top + sh * (1 - 0.35 * k), 0); parts.push([g, m]);
     }
     return parts;
@@ -252,7 +252,7 @@
      a star of six to eight leathery sepals spread flat, the style's stub on top) and a Bruguiera's propagules (a cigar-
      shaped green stem out of a red calyx of ten to fourteen narrow lobes) ── */
   function sonnFruit(R) {
-    const parts = [], gr = [0.09, 0.14, 0.04].map(q => q * (0.85 + 0.3 * R())), sep = [0.12, 0.16, 0.05];
+    const fk = 0.85 + 0.3 * R(), parts = [], gr = [0.09, 0.14, 0.04].map(q => q * fk), sep = [0.12, 0.16, 0.05];
     parts.push([body(new T.LineCurve3(V(0, 0.005, 0), V(0, -0.025, 0)), 2, 6, () => 0.0035, () => [0.12, 0.13, 0.06]), new T.Matrix4()]);
     const n = 6 + Math.floor(R() * 3);
     for (let k = 0; k < n; k++) { const a = k / n * TAU, gb = blade(0.022, 0.011, sep, 0.05, -0.25), m = new T.Matrix4().makeRotationY(-a).multiply(new T.Matrix4().makeRotationZ(-0.25)); m.setPosition(Math.cos(a) * 0.008, -0.028, Math.sin(a) * 0.008); parts.push([gb, m]); }
@@ -295,7 +295,7 @@
       const n = 3 + Math.floor(R() * 4), out = V(c.d.x, 0, c.d.z).normalize(), base = c.c.clone().addScaledVector(out, c.r * 0.5).add(V(0, -c.r * 0.5, 0));
       for (let k = 0; k < n && list.length / 2 < max; k++) {
         const at = base.clone().add(V((R() - 0.5) * 0.1, -0.02 * k, (R() - 0.5) * 0.1)), m = new T.Matrix4().makeRotationY(R() * TAU).premultiply(new T.Matrix4().makeRotationZ((R() - 0.5) * 0.5)); m.setPosition(at);
-        const w = [c.ph, 0.2, clamp(at.y / H), H], gc = [0.34, 0.38, 0.27].map(q => q * (0.85 + 0.25 * R()));
+        const w = [c.ph, 0.2, clamp(at.y / H), H], fk = 0.85 + 0.25 * R(), gc = [0.34, 0.38, 0.27].map(q => q * fk);
         list.push([body(new T.LineCurve3(V(0, 0.004, 0), V(0, -0.012, 0)), 2, 5, () => 0.0018, () => [0.3, 0.3, 0.2]), m.clone(), w]);
         const f = body(new T.LineCurve3(V(0, -0.01, 0), V(0, -0.038, 0)), 8, 10, tt => 0.011 * Math.pow(Math.sin(Math.PI * Math.min(1, 0.08 + tt * 0.92)), 0.65) * (1 - 0.55 * tt * tt), () => gc);
         f.scale(1, 1, 0.62); list.push([f, m.clone(), w]);
