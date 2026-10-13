@@ -12,6 +12,11 @@ for (const arg of process.argv.slice(2)) {
   const s = JSON.parse(arg);
   try {
     const url = await page.evaluate(s => {
+      if (s.card) {   /* (a species' leaf card: colour over grey, and its normal map) */
+        const S = 512, { col, nor } = FloraLeaf.paintCard(s.card, 301 + (s.k || 0) * 53 + s.card.length * 17), o = document.createElement('canvas'); o.width = S * 2; o.height = S; const x = o.getContext('2d');
+        x.fillStyle = '#8a8a8a'; x.fillRect(0, 0, S, S); const c1 = document.createElement('canvas'); c1.width = c1.height = S; c1.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(col.buffer.slice(0)), S, S), 0, 0); x.drawImage(c1, 0, 0);
+        x.putImageData(new ImageData(new Uint8ClampedArray(nor.buffer.slice(0)), S, S), S, 0); return o.toDataURL('image/png');
+      }
       if (s.litter) {   /* (the forest floor's tile: its colour, and its normal map beside it) */
         const L = FloraLitter.tex(s.litter), N = L.map.image.width, o = document.createElement('canvas'); o.width = N * 2; o.height = N; const x = o.getContext('2d');
         x.putImageData(new ImageData(new Uint8ClampedArray(L.map.image.data.buffer.slice(0)), N, N), 0, 0); x.putImageData(new ImageData(new Uint8ClampedArray(L.normalMap.image.data.buffer.slice(0)), N, N), N, 0);

@@ -38,7 +38,7 @@ const FloraLeaf = (() => {
       top: [90, 0.44, 0.32], tj: [8, 0.07, 0.045], under: [80, 0.15, 0.5], underK: 0.07, flush: [60, 0.45, 0.42], flushK: 0.12, yellow: 0.03, dmg: 0.15, twig: [30, 0.22, 0.32], gloss: [0.2, 20, 1.0] },
     /* the same sprays, bigger: a branchlet of several shoots on a card a metre or more across, for the crowns of the big
        trees, seen from tens of metres off */
-    diptL: null, koompL: null, laurelL: null, mangoL: null, rambL: null, durianL: null, cempL: null, figL: null,
+    diptL: null, koompL: null, laurelL: null, mangoL: null, rambL: null, durianL: null, cempL: null, figL: null, casuarL: null, terminL: null, barringL: null, hibiscL: null,
     /* a strangler fig: thick, glossy, dark, the midrib and veins paler; spirally set toward the twig's end; figs in pairs */
     fig: { back: [1.15, 1.22, 0.9], card: 0.62, L: [0.08, 0.14], W: [0.45, 0.55], shape: 'elliptic', tip: 0.04, veins: [7, 10], va: 1.1, arr: 'rosette', twigs: [3, 4], per: [6, 9], figs: 0.5,
       top: [108, 0.38, 0.18], tj: [6, 0.06, 0.03], under: [90, 0.22, 0.34], underK: 0.04, flush: [70, 0.35, 0.38], flushK: 0.15, yellow: 0.05, dmg: 0.3, twig: [35, 0.18, 0.3], gloss: [0.3, 26, 0.6] },
@@ -59,6 +59,21 @@ const FloraLeaf = (() => {
     avic: { back: [1.7, 1.7, 1.6], card: 0.5, L: [0.05, 0.08], W: [0.4, 0.48], shape: 'elliptic', tip: 0.02, veins: [6, 8], va: 0.9, arr: 'opposite', twigs: [3, 4], per: [4, 6],
       top: [95, 0.2, 0.3], tj: [6, 0.05, 0.035], under: [80, 0.08, 0.6], underK: 0.09, flush: [80, 0.2, 0.38], flushK: 0.07, yellow: 0.04, dmg: 0.2, twig: [35, 0.15, 0.35], gloss: [0.15, 18, 0.8] } };
 
+  /* ── the beach trees' ── */
+  Object.assign(KINDS, {
+    /* a casuarina (rhu): no leaves to speak of, but jointed grey-green branchlets 10-25 cm hanging in soft bunches */
+    casuar: { back: [1.1, 1.12, 1.05], card: 0.8, L: [0.14, 0.28], W: [0.018, 0.026], shape: 'needle', tip: 0, veins: [0, 0], va: 1, arr: 'needles', twigs: [4, 5], per: [60, 90],
+      top: [85, 0.16, 0.38], tj: [8, 0.06, 0.05], under: [90, 0.15, 0.32], underK: 0.0, flush: [80, 0.3, 0.34], flushK: 0.0, yellow: 0.04, dmg: 0, twig: [30, 0.2, 0.25], gloss: [0.1, 12, 0.9] },
+    /* a sea almond (Terminalia catappa): obovate, 15-25 cm, clustered at the twigs' ends, glossy; many turning red, orange
+       and yellow before they fall */
+    termin: { back: [1.15, 1.2, 0.95], card: 0.85, L: [0.15, 0.25], W: [0.5, 0.6], shape: 'obovate', tip: 0.0, veins: [8, 11], va: 1.05, arr: 'rosette', twigs: [3, 4], per: [6, 9], red: 0.1,
+      top: [100, 0.42, 0.24], tj: [6, 0.06, 0.04], under: [92, 0.25, 0.4], underK: 0.05, flush: [70, 0.4, 0.4], flushK: 0.1, yellow: 0.07, dmg: 0.3, twig: [25, 0.3, 0.3], gloss: [0.3, 26, 0.8] },
+    /* a sea poison tree (Barringtonia asiatica): huge, 30-40 cm, obovate, thick and shining, in rosettes */
+    barring: { back: [1.15, 1.2, 0.95], card: 0.95, L: [0.24, 0.38], W: [0.4, 0.48], shape: 'obovate', tip: 0.0, veins: [10, 14], va: 1.0, arr: 'rosette', twigs: [2, 3], per: [6, 9], red: 0.03,
+      top: [104, 0.42, 0.22], tj: [6, 0.06, 0.03], under: [92, 0.25, 0.38], underK: 0.04, flush: [70, 0.4, 0.38], flushK: 0.08, yellow: 0.05, dmg: 0.25, twig: [28, 0.3, 0.3], gloss: [0.36, 30, 0.7] },
+    /* a sea hibiscus (Hibiscus tiliaceus): heart-shaped, 10-15 cm, soft, pale beneath with fine hairs */
+    hibisc: { back: [1.3, 1.32, 1.2], card: 0.7, L: [0.09, 0.15], W: [0.85, 0.95], shape: 'cordate', tip: 0.04, veins: [5, 7], va: 0.75, arr: 'two', twigs: [3, 4], per: [4, 6],
+      top: [92, 0.4, 0.28], tj: [6, 0.06, 0.04], under: [85, 0.15, 0.5], underK: 0.1, flush: [80, 0.4, 0.4], flushK: 0.1, yellow: 0.08, dmg: 0.35, twig: [30, 0.25, 0.32], gloss: [0.15, 18, 1.0] } });
   /* ── the fruit trees' ── */
   Object.assign(KINDS, {
     /* a mango: lanceolate, 15-30 cm, leathery, in whorls at the twigs' ends; very dark green and glossy, paler beneath;
@@ -75,12 +90,14 @@ const FloraLeaf = (() => {
     cemp: { back: [1.15, 1.2, 0.95], card: 0.75, L: [0.1, 0.19], W: [0.45, 0.55], shape: 'obovate', tip: 0.02, veins: [7, 10], va: 1.0, arr: 'rosette', twigs: [3, 4], per: [6, 9],
       top: [108, 0.4, 0.18], tj: [6, 0.06, 0.03], under: [92, 0.25, 0.34], underK: 0.05, flush: [80, 0.4, 0.4], flushK: 0.1, yellow: 0.05, dmg: 0.25, twig: [30, 0.25, 0.28], gloss: [0.3, 26, 0.7] } });
   for (const [big, small, card, tw, per] of [['diptL', 'dipt', 1.15, [5, 6], [6, 9]], ['koompL', 'koomp', 1.0, [5, 6], [5, 7]], ['laurelL', 'laurel', 1.1, [5, 6], [5, 8]],
-    ['mangoL', 'mango', 1.1, [5, 6], [9, 13]], ['figL', 'fig', 1.05, [5, 6], [6, 9]], ['rambL', 'ramb', 1.0, [5, 6], [3, 5]], ['durianL', 'durian', 1.0, [5, 6], [5, 8]], ['cempL', 'cemp', 1.05, [5, 6], [6, 9]]])
+    ['mangoL', 'mango', 1.1, [5, 6], [9, 13]], ['figL', 'fig', 1.05, [5, 6], [6, 9]], ['casuarL', 'casuar', 1.1, [5, 6], [60, 90]], ['terminL', 'termin', 1.15, [5, 6], [6, 9]], ['barringL', 'barring', 1.2, [4, 5], [6, 9]], ['hibiscL', 'hibisc', 1.0, [5, 6], [4, 6]], ['rambL', 'ramb', 1.0, [5, 6], [3, 5]], ['durianL', 'durian', 1.0, [5, 6], [5, 8]], ['cempL', 'cemp', 1.05, [5, 6], [6, 9]]])
     KINDS[big] = Object.assign({}, KINDS[small], { card, twigs: tw, per });
   /* a leaf's half-width at t along its midrib (0 at the stalk, 1 at the tip), as a share of its half-width */
   function halfW(shape, t, tip) {
     let w;
     if (shape === 'obovate') w = Math.pow(Math.sin(Math.PI * Math.pow(t, 1.35)), 0.75);
+    else if (shape === 'cordate') w = Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(t, 0.62) * 1.02)), 0.7) * (t < 0.08 ? 0.75 + 3 * t : 1);
+    else if (shape === 'needle') w = t < 0.9 ? 1 : (1 - t) / 0.1;
     else if (shape === 'oblong') w = Math.pow(Math.sin(Math.PI * t), 0.45) * (1 - 0.15 * t);
     else if (shape === 'ovate') w = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.7)), 0.85);
     else w = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.9)), 0.8);
@@ -187,6 +204,10 @@ const FloraLeaf = (() => {
         /* (crowded toward the shoot's end, spiralling) */
         for (let i = 0; i < n; i++) { const t = 0.55 + 0.45 * Math.pow(i / Math.max(1, n - 1), 0.6), an = sh.a0 + (i * 2.4 % TAU) - Math.PI + (r() - 0.5) * 0.3; leafAt(Math.min(1, t), an, 0.4 + 0.6 * r(), r()); }
         if (K.figs && r() < K.figs) for (let i = 0; i < 2 + Math.floor(r() * 3); i++) { const [bx, by] = sh.f(0.4 + 0.5 * r()); figs.push([bx + (r() - 0.5) * 14, by + (r() - 0.5) * 14, (0.012 + 0.005 * r()) * ppm, r()]); }
+      } else if (K.arr === 'needles') {
+        /* (bunches of fine jointed branchlets from the shoot, hanging, each a long thin needle, a few crossing) */
+        for (let i = 0; i < n; i++) { const t = sh.t0 + (1 - sh.t0) * (i + 0.5) / n, [bx, by] = sh.f(t), an = Math.PI / 2 + (r() - 0.5) * 0.8, Lm = K.L[0] + (K.L[1] - K.L[0]) * r(), L = Lm * ppm;
+          leaves.push(leafOf(K, r, bx, by, an, L, Math.max(1.2, L * (K.W[0] + (K.W[1] - K.W[0]) * r())), r())); }
       } else if (K.arr === 'opposite') {
         for (let i = 0; i < n; i++) { const t = sh.t0 + (1 - sh.t0) * (0.35 + 0.65 * (i + 0.5) / n); for (const sd of [-1, 1]) leafAt(t, sh.a0 + sd * (0.75 + r() * 0.4) + (i % 2) * 0.5 * sd, 0.4 + 0.6 * r(), r()); }
         leafAt(1, sh.a0 + (r() - 0.5) * 0.4, 0.3 + 0.3 * r(), 0.9, true);
@@ -205,6 +226,7 @@ const FloraLeaf = (() => {
     /* (young leaves only at a shoot's tip, limp and red-brown; now and then an old one yellowing) */
     if (tip && u < K.flushK) { flush = true; [h, s, l] = K.flush; h += (r() - 0.5) * 12; s *= 0.8; l *= 0.85 + 0.2 * r(); L *= 0.75; W *= 0.8; }
     else if (!tip && u < K.yellow) { h = 46 + r() * 12; s = 0.45 + 0.15 * r(); l = 0.34 + 0.1 * r(); }
+    else if (!tip && K.red && u < K.yellow + K.red) { h = 2 + r() * 26; s = 0.55 + 0.2 * r(); l = 0.3 + 0.1 * r(); }
     else if (r() < K.underK) { under = true; [h, s, l] = K.under; h += (r() - 0.5) * 8; l *= 0.92 + 0.16 * r(); }
     l *= 0.7 + 0.3 * depth;                                 /* (the back of the spray in its own shade) */
     const dm = flush ? 0 : K.dmg;

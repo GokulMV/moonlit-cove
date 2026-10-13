@@ -48,6 +48,24 @@ const FloraGrow = (() => {
     understory: { H: [6, 13], bole: [0.4, 0.55], dbh: H => 0.02 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
       crown: { R: [0.24, 0.3], D: [0.38, 0.48], dome: 0.85, fR: [1.3, 1.8], clumps: [4, 6], cR: [0.55, 0.8], limbs: [3, 4], spread: 1.0 },
       leaf: 'under', bark: 'canopy', moss: 0.7, cards: 0.75 },
+    /* ── the beach trees ── */
+    /* a casuarina (Casuarina equisetifolia), 12-25 m: a straight trunk, rough grey-brown; a narrow, irregular, open crown
+       of wispy hanging branchlets, grey-green, like a pine's */
+    casuarina: { H: [12, 22], bole: [0.3, 0.42], dbh: H => 0.024 * H, taper: 0.6, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.17, 0.23], D: [0.6, 0.7], dome: 0.98, fR: [1.0, 1.4], clumps: [3, 5], cR: [0.55, 0.8], limbs: [7, 9], spread: 1.0, shape: 'ellipsoid', gaps: 0.15 },
+      leaf: 'casuarL', bark: 'meranti', barkTint: [0.55, 0.5, 0.46], moss: 0.1, cards: 1.3 },
+    /* a sea almond (Terminalia catappa), 10-18 m: its branches in tiers, level, a pagoda of flat layers of big leaves */
+    terminalia: { H: [10, 17], bole: [0.3, 0.4], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.42, 0.5], D: [0.5, 0.6], dome: 0.6, fR: [1.6, 2.2], clumps: [5, 7], cR: [0.7, 1.0], limbs: [4, 5], spread: 1.0, tiers: [3, 5] },
+      leaf: 'terminL', bark: 'canopy', barkTint: [0.62, 0.58, 0.54], moss: 0.3, cards: 1.0 },
+    /* a sea poison tree (Barringtonia asiatica), 8-15 m: a short trunk, a dense dark dome of huge leaves */
+    barringtonia: { H: [8, 14], bole: [0.25, 0.35], dbh: H => 0.04 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.42, 0.5], D: [0.55, 0.65], dome: 0.9, fR: [1.8, 2.4], clumps: [5, 7], cR: [0.8, 1.1], limbs: [3, 5], spread: 1.0 },
+      leaf: 'barringL', bark: 'canopy', moss: 0.3, cards: 1.1 },
+    /* a sea hibiscus (Hibiscus tiliaceus), 4-8 m: low, sprawling, wider than tall, its limbs leaning out over the sand */
+    hibiscus: { H: [4, 7], bole: [0.12, 0.2], dbh: H => 0.04 * H, taper: 0.6, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.6, 0.75], D: [0.55, 0.7], dome: 0.75, fR: [1.2, 1.7], clumps: [4, 6], cR: [0.55, 0.8], limbs: [4, 6], spread: 1.0 },
+      leaf: 'hibiscL', bark: 'canopy', barkTint: [0.6, 0.56, 0.5], moss: 0.2, cards: 1.0 },
     /* ── the fruit trees: short boles, low limbs, deep round crowns ── */
     /* a mango, 11-18 m: a stout short trunk, rough and dark; a dense, deep dome of dark leaves to near the ground */
     mango: { H: [11, 17], bole: [0.18, 0.26], dbh: H => 0.045 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
@@ -144,7 +162,19 @@ const FloraGrow = (() => {
        it, as many as it takes to cover it, each floret's own size) */
     const cb = Math.max(2, Rc - rfM * 0.6), ch = Math.max(2, Dc * S.crown.dome), Rd = (cb * cb + ch * ch) / (2 * ch), cy0 = boleH + Dc - rfM * 0.4 - Rd;
     const capA = 2 * Math.PI * Rd * ch, nF = Math.max(3, Math.round(capA / (Math.PI * rfM * rfM * 0.62))), cosMax = 1 - ch / Rd;
-    for (let i = 0; i < nF; i++) {
+    if (S.crown.tiers) {
+      /* (a pagoda: three to five level layers, each a ring of flattened florets round the trunk, smaller toward the top) */
+      const nT = Math.round(lerp(R, S.crown.tiers)), gap = Dc / (nT + 0.4);
+      for (let k = 0; k < nT; k++) { const y = boleH + gap * (k + 0.5), Rk = Rc * (1 - 0.6 * k / nT), n = Math.max(3, Math.round(TAU * Rk / (rfM * 1.3)));
+        for (let i = 0; i < n; i++) { const az = i / n * TAU + k * 0.7 + R() * 0.3, rr = Rk * (0.55 + 0.4 * R()); florets.push({ c: V(tx + Math.cos(az) * rr, y + (R() - 0.5) * 0.4, tz + Math.sin(az) * rr), r: lerp(R, S.crown.fR) * 0.85, ph: R(), flat: 0.45 }); }
+        florets.push({ c: V(tx, y + 0.2, tz), r: rfM * 0.7, ph: R(), flat: 0.45 }); }
+    } else if (S.crown.shape === 'ellipsoid') {
+      /* (a tall narrow crown: the florets over an upright ellipsoid, its foot left open where the trunk comes in; gaps) */
+      const cy = boleH + Dc * 0.5, ry = Dc * 0.5 - rfM * 0.5, rx = Math.max(1, Rc - rfM * 0.5), area = 4 * Math.PI * Math.pow((Math.pow(rx * rx, 1.6) * 2 + Math.pow(rx * ry, 1.6)) / 3, 1 / 1.6), n = Math.max(6, Math.round(area / (Math.PI * rfM * rfM * 0.42)));
+      for (let i = 0; i < n; i++) { const y = 1 - 2 * (i + 0.5) / n; if (y < -0.75) continue; const r = Math.sqrt(1 - y * y), az = i * 2.39996 + R() * 0.4, rf = lerp(R, S.crown.fR);
+        if (R() < (S.crown.gaps || 0)) continue;
+        florets.push({ c: V(tx + Math.cos(az) * r * rx * (0.85 + 0.25 * R()), cy + y * ry, tz + Math.sin(az) * r * rx * (0.85 + 0.25 * R())), r: rf, ph: R() }); }
+    } else for (let i = 0; i < nF; i++) {
       const rf = lerp(R, S.crown.fR), az = i * 2.39996 + R() * 0.35, ct = 1 - (1 - cosMax) * (i + 0.5 + (R() - 0.5) * 0.6) / nF, st = Math.sqrt(Math.max(0, 1 - ct * ct));
       const c = V(tx + Math.cos(az) * st * Rd * S.crown.spread, cy0 + ct * Rd + (R() - 0.5) * rf * 0.25, tz + Math.sin(az) * st * Rd * S.crown.spread);
       florets.push({ c, r: rf, ph: R() });
@@ -219,6 +249,7 @@ const FloraGrow = (() => {
         /* (the shell bulges where a clump is: nearest clump's pull) */
         let bulge = 0; for (const cl of myClumps) { const q = cl.c.clone().sub(f.c).normalize().dot(d); if (q > bulge) bulge = q; }
         const deep = R() < 0.12, rr = f.r * (deep ? 0.35 + 0.35 * R() : 0.72 + 0.22 * bulge * bulge + (R() - 0.5) * 0.18);
+        if (f.flat) d.y *= f.flat;
         const s = cardS * (0.8 + 0.45 * R()) * (lod ? 1.45 : 1), base = f.c.clone().addScaledVector(d, rr - s * 0.45);
         /* (the card points out from the floret's middle, a little upward, turned on itself at random) */
         const ax = d.clone().add(V(0, 0.3, 0)).normalize(); let side = V().crossVectors(ax, V(0, 1, 0)); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
@@ -261,3 +292,4 @@ Models.add('flora/canopy', (o = {}) => FloraGrow.model('canopy', o.seed || 1, o)
 Models.add('flora/mango-tree', (o = {}) => FloraGrow.model('mango', o.seed || 1, o));
 Models.add('flora/fig', (o = {}) => FloraGrow.model('fig', o.seed || 1, o));
 Models.add('flora/understory', (o = {}) => FloraGrow.model('understory', o.seed || 1, o));
+for (const k of ['casuarina', 'terminalia', 'barringtonia', 'hibiscus']) Models.add('flora/' + k, (o = {}) => FloraGrow.model(k, o.seed || 1, o));
