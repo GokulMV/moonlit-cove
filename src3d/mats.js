@@ -101,14 +101,17 @@ vec4 cnLayer(vec2 p, float S, out vec2 gr){
 }
 void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
   float fw = length(fwidth(w.xz)) + 1e-4;
-  vec2 g1, g2, g3; vec4 A = cnLayer(w.xz, S1, g1), B = cnLayer(w.xz + vec2(31.7, 17.3), S2, g2), Cl = cnLayer(w.xz*1.0 + vec2(5.3, 71.9), S1*0.3, g3);
+  /* (too far off for a crown to show: its average, and nothing more to work out) */
+  if (fw > 0.3*S1){ cnTint = vec3(0.64); cnGrad = vec3(0.0); return; }
+  float kc = 1.0 - smoothstep(0.09, 0.3, fw/(S1*0.3));
+  vec2 g1, g2, g3 = vec2(0.0); vec4 A = cnLayer(w.xz, S1, g1), B = cnLayer(w.xz + vec2(31.7, 17.3), S2, g2), Cl = vec4(0.0);
+  if (kc > 0.0) Cl = cnLayer(w.xz + vec2(5.3, 71.9), S1*0.3, g3);
   /* (the big crowns stand over the small where theirs is higher, and only here and there) */
   float big = step(0.6, B.w)*step(A.x*H1, B.x*H2 + 0.3);
   vec4 C = big > 0.5 ? B : A; vec2 gr = big > 0.5 ? g2*H2 : g1*H1;
   /* each crown's green: from yellow-green through to a cool blue-green, lighter or darker; and over it its clumps of
      leaves, each a small dome of its own */
   vec3 tint = mix(vec3(1.12, 1.06, 0.72), vec3(0.84, 1.0, 1.18), C.z)*(0.72 + 0.56*C.w);
-  float kc = 1.0 - smoothstep(0.09, 0.3, fw/(S1*0.3));
   tint *= (0.56 + 0.44*sqrt(C.x))*mix(1.0, 0.74 + 0.38*sqrt(Cl.x) - 0.28*Cl.y, kc*(1.0 - C.y))*(0.85 + 0.25*vnz(w*(5.3/S1)))*mix(1.0, gap, C.y);
   /* (fading to the average where a crown is only a few pixels across) */
   float k = 1.0 - smoothstep(0.09, 0.3, fw/S1);
