@@ -721,14 +721,10 @@ void main(){
   }
 
   function shoreBits(root, refs) {
-    const D = Layout.driftwood, r = Textures.rng(77);
-    const pts = []; for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new T.Vector3((t - 0.5) * D.len, 0.1 + Math.sin(t * 3) * 0.04, Math.sin(t * 2.2) * 0.14)); }
-    const dwM = Mats.lit({ map: Mats.tex(Paint.driftwood(), { repeat: true }), roughness: 0.95 });
-    const dw = mesh(Nature.taperTube(new T.CatmullRomCurve3(pts), 28, 10, t => (0.13 - 0.05 * t) * (1 + 0.12 * Math.sin(t * 23) + 0.25 * Math.exp(-t * 18)), 0.9), dwM);
-    dw.position.set(D.x, 0, D.z); dw.rotation.y = D.rot; root.add(dw);
-    const stub = mesh(Nature.taperTube(new T.CatmullRomCurve3([new T.Vector3(0.3, 0.12, 0), new T.Vector3(0.55, 0.28, -0.12), new T.Vector3(0.75, 0.36, -0.3)]), 8, 7, t => 0.05 - 0.03 * t, 0.5), dwM);
-    const dwg = grp(D.x, 0, D.z, D.rot); root.add(dwg); dw.position.set(0, 0, 0); dw.rotation.y = 0; dwg.add(dw);
-    stub.position.set(0, 0, 0); stub.rotation.y = 0; dwg.add(stub);
+    /* the driftwood log by the fire (models/beach/driftwood.js), sat on: its root end away from the fire's side */
+    const D = Layout.driftwood, dwg = grp(D.x, 0, D.z, D.rot); root.add(dwg);
+    dwg.add(Models.make('beach/driftwood', { len: D.len, seed: 5 }));
+    dwg.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
     refs.dyn.push({ o: dwg, kind: 'slide', half: 1.2, tip: 0.0, heavy: true }); refs.driftwood = dwg;
     /* the message in a bottle (models/beach/bottle.js), lying on the sand a little sunk into it, half as big again as
        life so it can be seen from the camp; uncork.js picks it up and opens it */
