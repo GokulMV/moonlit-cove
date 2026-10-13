@@ -84,7 +84,7 @@ const Studio = (() => {
     const lit = kind === 'forest' ? FloraLitter.tex({ N: 1024, tile: 2 }) : null;
     const t = lit ? lit.map : gTex[kind] || (gTex[kind] = groundTex(kind)), tile = lit ? lit.tile : kind === 'grid' ? 10 : 6;
     for (const m of lit ? [lit.map, lit.normalMap] : [t]) { m.repeat.set(2 * rad / tile, 2 * rad / tile); m.offset.set(-rad / tile + cx / tile, -rad / tile - cz / tile); }
-    Object.assign(groundMesh.material, { map: t, normalMap: lit ? lit.normalMap : null, roughness: kind === 'water' ? 0.15 : lit ? lit.rough : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
+    groundMesh.material.color.setScalar(lit ? 0.78 : 1); Object.assign(groundMesh.material, { map: t, normalMap: lit ? lit.normalMap : null, roughness: kind === 'water' ? 0.15 : lit ? lit.rough : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
     groundMesh.scale.setScalar(rad); groundMesh.position.set(cx, -0.002, cz); groundMesh.visible = true;
   }
 
