@@ -498,7 +498,7 @@ const Trees = (() => {
      deep inside or round the far side, nothing where something casts a shadow on it. Light coming through a leaf from
      behind it is yellower; waxy leaves shine. The crown leans on the breeze and each twig flutters ── */
   const LEAF_VS = `
-uniform float uTime;
+uniform float uTime; uniform vec2 uWindK;
 attribute vec4 aLeaf;   /* how far out in the crown (0 deep inside, 1 at its edge), how free to flutter, a die, which way the card faces */
 attribute vec3 aTan, aBit;
 varying vec2 vUv; varying vec3 vN; varying vec3 vT; varying vec3 vB; varying vec3 vWPos; varying vec4 vL; varying vec3 vTint;
@@ -519,8 +519,10 @@ void main(){
   mat3 mm = mat3(modelMatrix);
   vN = normalize(mm*n); vT = normalize(mm*tg); vB = normalize(mm*bt);
   float ph = o.x*0.21 + o.z*0.17;
-  wp.xz += vec2(0.55, -0.83)*(sin(uTime*0.62 + ph) + 0.4*sin(uTime*1.37 + ph*1.7))*0.0011*hy*hy;
-  wp.xyz += normalize(vN + vec3(0.0, 0.3, 0.0))*sin(uTime*2.7 + dot(wp.xyz, vec3(1.3, 0.9, 1.7)) + aLeaf.z*6.0)*0.035*aLeaf.y;
+  wp.xz += vec2(0.55, -0.83)*((sin(uTime*0.62 + ph) + 0.4*sin(uTime*1.37 + ph*1.7))*uWindK.x + uWindK.y)*0.0011*hy*hy;
+  /* (each twig flutters; in a gale faster and harder, a second, quicker shiver over the first) */
+  float fq = dot(wp.xyz, vec3(1.3, 0.9, 1.7)) + aLeaf.z*6.0;
+  wp.xyz += normalize(vN + vec3(0.0, 0.3, 0.0))*(sin(uTime*2.7 + fq)*(0.4 + 0.6*uWindK.x) + 0.6*sin(uTime*7.9 + fq*1.7)*max(uWindK.x - 1.0, 0.0))*0.035*aLeaf.y;
   vWPos = wp.xyz; vL = aLeaf;
   gl_Position = projectionMatrix*viewMatrix*wp;
 }`;
@@ -637,7 +639,7 @@ void main(){
     return (atlas = dataTex(mipChain(px, W, H, 127), false));
   }
   const CROWN_VS = `
-uniform float uTime;
+uniform float uTime; uniform vec2 uWindK;
 attribute vec4 aP;      /* the middle of the crown's picture (x, y, z), and how wide the picture is */
 attribute vec4 aQ;      /* how tall, which picture, a die, how far it sways */
 attribute vec3 aC;      /* its leaves' colour */
@@ -646,7 +648,7 @@ void main(){
   vec3 c = aP.xyz, f = normalize(cameraPosition - c);
   vec3 r = abs(f.y) > 0.995 ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), f)), u = cross(f, r);
   vec3 wp = c + r*position.x*aP.w + u*position.y*aQ.x;
-  wp.xz += vec2(0.55, -0.83)*sin(uTime*0.45 + aQ.z*31.0)*aQ.w*(position.y + 0.5);
+  wp.xz += vec2(0.55, -0.83)*(sin(uTime*0.45 + aQ.z*31.0)*uWindK.x + uWindK.y)*aQ.w*(position.y + 0.5);
   vUv = (vec2(mod(aQ.y, 4.0), floor(aQ.y/4.0)) + uv)*vec2(0.25, 0.5);
   vR = r; vU = u; vF = f; vW = wp; vC = aC;
   gl_Position = projectionMatrix*viewMatrix*vec4(wp, 1.0);
@@ -673,7 +675,7 @@ void main(){
 }`;
   /* the crowns' material: the scene's light and fog, the clouds' shadows (the ground's own uniforms, U) */
   function crownMaterial(U) {
-    const u = { uCrownT: { value: crownAtlas() }, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uFog: Mats.U.uFog, uKeyCol: U.uKeyCol };
+    const u = { uCrownT: { value: crownAtlas() }, uTime: Mats.U.uTime, uWindK: Mats.U.uWindK, uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uFog: Mats.U.uFog, uKeyCol: U.uKeyCol };
     for (const k of ['uWeather', 'uDriftW', 'uWind', 'uAltoD', 'uLdM', 'uCumulus', 'uStratus', 'uStorm', 'uAlto']) u[k] = U[k];
     return new T.ShaderMaterial({ uniforms: u, vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
   }

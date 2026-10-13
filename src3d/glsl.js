@@ -602,7 +602,7 @@ ${WAVEH}
 uniform int uNRip;          /* click splashes (row 1 of uSurgeT: x, z, start time, strength), uNRip of them */
 uniform float uUwMax;       /* the biggest clicked swell about (how far up the sand to look for its swash) */
 uniform vec4 uNearRect;
-uniform float uMist, uWet, uRough;
+uniform float uMist, uWet, uRough, uPud;
 uniform float uTideHi;       /* how far up the beach the last high water reached (m, as uTideZ is now) */
 uniform vec3 uShC;          /* where the key light's shadow map is centred (x, z) and how far it reaches */
 uniform int uDbgG;
@@ -905,6 +905,15 @@ void main(){
     float wet = max(max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg)), tideWet*0.42)*(1.0 - veg*0.4)*(1.0 - 0.5*mark);
     /* fresh from the water the sand is glassy, a film that sinks in within seconds; damp sand is only dark */
     float gloss = max(max(w.gloss, w.cover), uWet*0.55)*(1.0 - veg)*(1.0 - mark);
+    /* puddles: after a while of rain the hollows of the sand above the tide, the ruts and footprints in it and the
+       forest's floor hold water, more of them the longer it rains (uPud), the sand round them dark; they dry after */
+    float pud = 0.0;
+    if (uPud > 0.003 && s < -1.2 && dist < 150.0){
+      /* (the hollows: broad and smooth, water finding its level in them, so their edges are soft curves, never ragged) */
+      float hn = 0.72*tN(p, 5.2).r + 0.28*tN(p + 7.1, 2.4).g - 0.14*trample - 0.05*veg, lvl = 0.14 + 0.22*uPud;
+      pud = smoothstep(lvl + 0.01, lvl - 0.025, hn)*smoothstep(-1.2, -2.4, s)*smoothstep(150.0, 90.0, dist);
+      wet = max(wet, smoothstep(lvl + 0.07, lvl, hn)*uPud);
+    }
     vec3 a = alb*mix(1.0, 0.46, wet);
     a = mix(a, alb*1.2, mark*0.45);
     a = mix(a, dec.rgb/max(dec.a, 1e-3), dec.a);
@@ -923,6 +932,18 @@ void main(){
       vec3 sheen = skyRefl(R)*F + art*0.06;
       if (glit) sheen += (seaSpec(Ns, V, uMoonDirV, moonG, 0.006) + seaSpec(Ns, V, uSunDirV, sunG, 0.006))*(0.25 + 0.75*gloss);
       lit += sheen*mix(wet*0.45, max(wet, gloss), gloss)*0.85;
+    }
+    if (pud > 0.001){
+      /* still water: the murky bottom a little through it, the sky in it, the moon or the sun glancing off it, and while
+         it rains the drops' rings spreading over it */
+      vec2 rr = uWet > 0.01 ? rainRings(p, uTime*1.4)*0.55*uWet : vec2(0.0);
+      vec3 Np = normalize(vec3(rr.x, 1.0, rr.y));
+      float Fp = 0.02 + 0.98*pow(1.0 - max(dot(Np, V), 0.0), 5.0);
+      vec3 Rp = reflect(-V, Np); Rp.y = abs(Rp.y);
+      vec3 pl = a*mix(vec3(0.62, 0.55, 0.42), vec3(0.5, 0.42, 0.3), veg)*0.55*(uAmb*0.9 + keyC*max(Lk.y, 0.0)*0.5*shK + art*0.6);
+      pl = pl*(1.0 - Fp) + skyRefl(Rp)*Fp + art*0.03;
+      if (glit) pl += seaSpec(Np, V, uMoonDirV, moonG, 0.003) + seaSpec(Np, V, uSunDirV, sunG, 0.003);
+      lit = mix(lit, pl, pud);
     }
     sandC = lit;
   }

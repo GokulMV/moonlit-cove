@@ -77,7 +77,7 @@ const Flora = (() => {
   /* ── grass: swaying in the breeze, more toward its tips; lit like the foliage; shrinking away to nothing as it nears
      the edge of the ground it is laid on, so a chunk's grass never pops in or out ── */
   const GRASS_VS = `
-uniform float uTime; uniform vec3 uCamF;
+uniform float uTime; uniform vec3 uCamF; uniform vec2 uWindK;
 attribute vec3 color; attribute float aH;
 varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vH;
 void main(){
@@ -88,7 +88,7 @@ void main(){
   float fade = 1.0 - smoothstep(28.0, 40.0, distance(o.xz, uCamF.xz));
   vec4 wp = modelMatrix*p; wp.xyz = o + (wp.xyz - o)*fade;
   float h = max(position.y, 0.0), ph = o.x*0.37 + o.z*0.29;
-  wp.xz += vec2(0.55, -0.83)*(sin(uTime*1.7 + ph) + 0.5*sin(uTime*3.1 + ph*1.9))*0.09*h*h*fade;
+  wp.xz += vec2(0.55, -0.83)*((sin(uTime*1.7 + ph) + 0.5*sin(uTime*3.1 + ph*1.9) + 0.6*sin(uTime*6.7 + ph*2.3)*max(uWindK.x - 1.0, 0.0))*uWindK.x + 1.4*uWindK.y)*0.09*h*h*fade;
   vC = color*(0.8 + 0.4*fract(sin(dot(o.xz, vec2(12.9898, 78.233)))*43758.5453)); vN = normalize(mat3(modelMatrix)*n); vWPos = wp.xyz; vH = aH;
   gl_Position = projectionMatrix*viewMatrix*wp;
 }`;

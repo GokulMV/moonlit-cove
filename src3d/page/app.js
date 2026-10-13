@@ -448,6 +448,10 @@
     const a = 1 - Math.exp(-dt / (st.weather === 'auto' ? 40 : 5));
     for (const k of Object.keys(tgt)) st.wx[k] += (tgt[k] - st.wx[k]) * a;
     st.wx.wet += ((st.wx.rain > 0.3 ? 1 : 0) - st.wx.wet) * (1 - Math.exp(-dt / (st.wx.rain > 0.3 ? 8 : 60)));
+    /* puddles fill the hollows after a while of rain and dry slowly once it stops; the streams rise more slowly still and
+       fall back over minutes */
+    { const rk = Math.max(0, Math.min(1, (st.wx.rain - 0.25) / 0.6)), P = st.wx.pud || 0, F = st.wx.flood || 0;
+      st.wx.pud = P + (rk - P) * (1 - Math.exp(-dt / (rk > P ? 45 : 240))); st.wx.flood = F + (rk - F) * (1 - Math.exp(-dt / (rk > F ? 120 : 600))); }
     /* lightning: two or three quick pulses, a bolt, thunder a few seconds later */
     const now = performance.now() / 1000;
     if (st.wx.storm > 0.6 && now > st.nextBolt) {
@@ -1645,7 +1649,7 @@
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
-      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
+      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
     if (!st.shown && ++drawn >= 3) introReady();
     updateSky(ms, S);

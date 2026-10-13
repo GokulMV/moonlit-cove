@@ -747,7 +747,7 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
       uSunVis: { value: null }
     });
     /* (the clouds' own uniforms, the very same, for their shadows on the sand and the sea) */
@@ -908,7 +908,11 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     if (orchard) { const tc = iClock(), dtR = orchT === null ? 0 : Math.max(0, Math.min(0.1, tc - orchT)); orchT = tc; orchard.update(dtR, o.flow ?? 1, { wind: o.wind ?? 1 }); }
     /* the wind in the grown trees' leaves and twigs, and on the fruit hanging from them (FloraLeaf.WIND): a breeze, more
        of it and gustier as the weather turns (o.wind: 1 a breeze, 2.6 a storm) */
-    { const w = o.wind ?? 1, W = FloraLeaf.U.uWindV.value; W.set(Layout.wind[0], Layout.wind[1], Math.min(1.5, 0.45 + 0.42 * (w - 1)), Math.min(1, 0.5 + 0.3 * (w - 1))); }
+    { const w = o.wind ?? 1, W = FloraLeaf.U.uWindV.value; W.set(Layout.wind[0], Layout.wind[1], Math.min(1.5, 0.45 + 0.42 * (w - 1)), Math.min(1, 0.5 + 0.3 * (w - 1)));
+      /* (and on the shore's older trees, the camp's bushes and the grass: swaying further, and in a gale leaning over on it
+         and shivering, more as each gust comes through) */
+      const k = Math.max(0, w - 1), gust = Math.max(0, 0.5 + 0.5 * Math.sin(t * 0.23) * Math.sin(t * 0.071 + 1.3) + 0.25 * Math.sin(t * 0.53 + 0.4));
+      Mats.U.uWindK.value.set(1 + k * (0.55 + 0.5 * gust), k * (0.45 + 0.6 * gust)); }
     /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
        draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     /* (the surf is meshed round what is being looked at, and round any swell that has been sent in, so a swell clicked far
@@ -964,7 +968,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0, g = 1 - ov;
       V(gU.uAmb, S.amb); V(gU.uKeyDir, S.keyDir); V(gU.uKeyCol, S.keyCol); gU.uMoonGlit.value.set(S.moonGlit[0] * g, S.moonGlit[1] * g, S.moonGlit[2] * g); gU.uSunGlit.value.set(S.sunGlit[0] * g, S.sunGlit[1] * g, S.sunGlit[2] * g); }
     gU.uDay.value = S.day; gU.uShadowK.value = S.shadowK; gU.uWaveT.value = o.waveT ?? t; Mats.U.uTime.value = t;
-    gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0;
+    gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0; gU.uPud.value = o.pud || 0; Mats.U.uFlood.value = o.flood || 0;
     const wt = o.waveT ?? t;
     { const WT = 9.0, kb = Math.floor(wt / WT);
       for (let j = 0; j < 6; j++) { const k = kb - 3 + j, h = n => hash(k * n + 0.37);

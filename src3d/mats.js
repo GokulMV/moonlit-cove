@@ -10,6 +10,10 @@ const Mats = (() => {
     uFire: { value: V4(1, 0.5, 1, 1) }, uFirePos: { value: V3() },
     uLant: { value: [V4(), V4(), V4()] }, uVanPos: { value: V3() }, uVanDir: { value: V3(1, 0, 0) },
     uTime: { value: 0 }, uKeyDirT: { value: V3(0, 1, 0) }, uKeyColT: { value: V3() },
+    /* the wind on the leaves and the grass: x how far they sway (1 a breeze; more, and gusting, as the weather turns), y how
+       far they lean over and stay leaning on it (0 in a breeze); and how full the streams are after rain (0 low, 1 in
+       spate) */
+    uWindK: { value: new THREE.Vector2(1, 0) }, uFlood: { value: 0 },
     uVanInv: { value: new THREE.Matrix4() }, uHead: { value: V4() }, uHeadDir: { value: V3(1, 0, 0) }, uFireSh: { value: null }, uCanSh: { value: null }, uFireShM: { value: new THREE.Matrix4() }, uCanShM: { value: new THREE.Matrix4() }, uShOn: { value: 0 },
     uFog: { value: V4(0, 0, 0, 1) },
     uTorch: { value: V4() }, uTorchDir: { value: V3(0, 0, -1) }, uTorchSh: { value: null }, uTorchShM: { value: new THREE.Matrix4() }, uTorchShS: { value: new THREE.Vector2(1024, 1024) },
@@ -280,7 +284,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
   }
   /* lightweight foliage shader: lambert + moon translucency + camp lights, alpha cut-out, no shadow receive */
   const FOL_VS = `
-uniform float uTime;
+uniform float uTime; uniform vec2 uWindK;
 varying vec2 vUv; varying vec3 vN; varying vec3 vWPos; varying vec3 vTint;
 void main(){
   vUv = uv;
@@ -300,7 +304,7 @@ void main(){
   #ifdef SWAY
     /* a slow breeze: crowns lean and come back, each tree a little out of step */
     float ph = wp.x*0.21 + wp.z*0.17 - hy*0.05;
-    wp.xz += vec2(0.55, -0.83)*(sin(uTime*0.62 + ph) + 0.4*sin(uTime*1.37 + ph*1.7))*0.0016*hy*hy;
+    wp.xz += vec2(0.55, -0.83)*((sin(uTime*0.62 + ph) + 0.4*sin(uTime*1.37 + ph*1.7))*uWindK.x + uWindK.y)*0.0016*hy*hy;
   #endif
   vWPos = wp.xyz;
   vN = normalize(mat3(modelMatrix)*n);
