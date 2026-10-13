@@ -333,8 +333,8 @@ void crColour(inout vec3 c){
   else if (pat < 4.5){ c *= mix(1.0, 0.86 + 0.24*vnz(vRest*140.0) + 0.08*vnz(vRest*600.0), nk); c = mix(c, c*vec3(1.12, 0.92, 0.9), 0.5*smoothstep(0.55, 0.8, vnz(vRest*55.0 + 3.0))*nk); }
   else if (pat < 5.5) c *= 0.92 + 0.14*vnz(vRest*vec3(60.0, 500.0, 60.0));
   else if (pat < 6.5){
-    float r = vUv2.x, az = vUv2.y*6.28318, ir = vFur.y, pr = vFur.z;
-    vec3 iris = c*(0.62 + 0.62*vnz(vec3(cos(az)*11.0, sin(az)*11.0, r*20.0)))*mix(1.0, 0.45, smoothstep(ir*0.72, ir, r))*mix(0.7, 1.0, smoothstep(pr, pr + 0.1, r));
+    float r = vUv2.x, az = vUv2.y*6.28318, ir = vFur.y, pa = max(vM.w, 1.0), ca = cos(az), sa = sin(az), pr = vFur.z/sqrt(ca*ca*pa*pa + sa*sa);
+    vec3 iris = c*(0.62 + 0.62*vnz(vec3(ca*11.0, sa*11.0, r*20.0)))*mix(1.0, 0.45, smoothstep(ir*0.72, ir, r))*mix(0.7, 1.0, smoothstep(pr, pr + 0.1, r));
     c = r < pr ? vec3(0.006) : r < ir ? iris : vec3(vFur.w)*mix(0.55, 1.0, smoothstep(ir, ir + 0.25, r));
   }
   else if (pat < 7.5) c *= mix(1.0, 0.9 + 0.16*vnz(vRest*300.0), nk);
@@ -357,7 +357,7 @@ void crExtra(inout ReflectedLight rl, vec3 alb, vec3 n){
   /* (fur: the light caught along its outline, where the eye looks through the tips of the hairs) */
   if (pat > 0.5 && pat < 1.5) rl.indirectDiffuse += alb*uAmbF*pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0)*0.9;
   /* (thin things — an ear, a wing's membrane — with the sun behind them) */
-  if (vM.w > 0.0){ vec3 Lv = normalize((viewMatrix*vec4(uKeyDirT, 0.0)).xyz); rl.directDiffuse += alb*uKeyColT*max(-dot(n, Lv), 0.0)*vM.w; }
+  if (vM.w > 0.0 && (pat < 5.5 || pat > 6.5)){ vec3 Lv = normalize((viewMatrix*vec4(uKeyDirT, 0.0)).xyz); rl.directDiffuse += alb*uKeyColT*max(-dot(n, Lv), 0.0)*vM.w; }
 }`;
   const COATS = new Map();
   function coat(dens = 3) {
@@ -387,7 +387,7 @@ varying vec3 vRest; varying vec3 vRestN; varying vec4 vM; varying vec4 vFur; var
     const key = JSON.stringify([f, n]); if (FURM.has(key)) return FURM.get(key);
     const m = Mats.lit({ vertexColors: true, roughness: 0.92 }, 'fur'), prev = m.onBeforeCompile;
     const U = { uFurT: { value: furTex() }, uFurD: { value: f.dens || 3 }, uShellN: { value: n }, uRootK: { value: f.root ?? 0.45 }, uTipK: { value: new T.Vector3(...(f.tip || [1.08, 1.06, 1.04])) },
-      uGrav: { value: f.grav ?? 0.25 }, uBand: { value: new T.Vector4(...(f.band || [1, 1, 1, 0])) } };
+      uGrav: { value: f.grav ?? 0.25 }, uBand: { value: new T.Vector4(...(f.band || [1, 1, 1, 0])) }, uSparse: { value: f.sparse ?? 0 } };
     m.onBeforeCompile = (sh, r) => {
       prev(sh, r); Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
@@ -404,12 +404,12 @@ varying vec3 vRest; varying vec3 vRestN; varying vec4 vFur; varying float vShell
     transformed += normalize(objectNormal)*L*h + cb*L*h*h + gd*L*h*h*uGrav; }`);
       sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_pars_fragment>', `#include <clipping_planes_pars_fragment>
 varying vec3 vRest; varying vec3 vRestN; varying vec4 vFur; varying float vShell; varying float vSkin;
-uniform sampler2D uFurT; uniform float uFurD, uRootK; uniform vec3 uTipK; uniform vec4 uBand;`)
+uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTipK; uniform vec4 uBand;`)
         .replace('#include <color_fragment>', `#include <color_fragment>
   { if (vFur.x < 0.0004) discard;
     vec3 w = pow(abs(normalize(vRestN)), vec3(6.0)); w /= (w.x + w.y + w.z);
     vec4 f = texture2D(uFurT, vRest.yz*uFurD)*w.x + texture2D(uFurT, vRest.xz*uFurD + 0.37)*w.y + texture2D(uFurT, vRest.xy*uFurD + 0.71)*w.z;
-    if (f.r < vShell || vSkin > 0.5 && (f.g < 0.86 || vShell > 0.25 + 0.75*f.b)) discard;
+    if (f.r < vShell || f.g < uSparse || vSkin > 0.5 && uSparse < 0.01 && (f.g < 0.86 || vShell > 0.25 + 0.75*f.b)) discard;
     diffuseColor.rgb *= mix(uRootK, 1.0, vShell)*(0.8 + 0.4*f.g)*(0.9 + 0.2*f.b);
     diffuseColor.rgb *= mix(vec3(1.0), uBand.rgb, uBand.a*(smoothstep(0.42, 0.56, vShell) - smoothstep(0.66, 0.8, vShell)));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*uTipK, smoothstep(0.6, 1.0, vShell)); }`);
@@ -537,6 +537,51 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK; uniform vec3 uTipK; unifor
   }
   const qE = (x = 0, y = 0, z = 0, o = 'XYZ') => new T.Quaternion().setFromEuler(new T.Euler(x, y, z, o));
 
+  /* ── eyes: a ball at c of radius r looking along ax (normalised), its uv how far round from the middle of its cornea
+     (0 there, 1 at its rim) and round it; o: { iris (radius, in that measure), pupil, white (how bright), wide (the
+     pupil's width over its height), col, bone }. Its upper lid: a shell over it, open as far as `open` (radians above
+     the eye's middle its edge stands), turned on the lid bone to blink ── */
+  function eye(S, c, r, ax, o = {}) {
+    const g = new T.SphereGeometry(r, 28, 20), A = new T.Vector3(...ax).normalize(), up = new T.Vector3(0, 1, 0);
+    g.applyQuaternion(new T.Quaternion().setFromUnitVectors(up, A)); g.translate(...c);
+    const P = g.attributes.position, U = g.attributes.uv, side = new T.Vector3().crossVectors(up, A).normalize(), u2 = new T.Vector3().crossVectors(A, side);
+    for (let i = 0; i < P.count; i++) { const n = new T.Vector3(P.getX(i) - c[0], P.getY(i) - c[1], P.getZ(i) - c[2]).normalize();
+      U.setXY(i, Math.acos(clamp(n.dot(A), -1, 1)) / (Math.PI / 2), (Math.atan2(n.dot(side), n.dot(u2)) / TAU + 1) % 1); }
+    return { geo: g, bind: rigid(S, o.bone || 'head'), col: o.col || [0.3, 0.2, 0.1], mat: [o.rough ?? 0.1, o.coat ?? 0.55, PAT.eye, o.wide || 1], eye: [0, o.iris ?? 0.44, o.pupil ?? 0.15, o.white ?? 0.05] };
+  }
+  function lid(S, c, r, ax, bone, col, open = 0.35, mat) {
+    const A = new T.Vector3(...ax).normalize(), g = new T.SphereGeometry(r, 24, 10, Math.PI * 0.06, Math.PI * 0.88, 0, Math.PI / 2 - open);
+    /* (built round +y with its open side toward +z, then turned so its open side faces along the eye) */
+    const X = new T.Vector3().crossVectors(new T.Vector3(0, 1, 0), A).normalize(), Y = new T.Vector3().crossVectors(A, X);
+    g.applyMatrix4(new T.Matrix4().makeBasis(X, Y, A));
+    g.translate(...c);
+    return { geo: g, bind: rigid(S, bone), col, mat: mat || [0.6, 0.05, PAT.skin, 0] };
+  }
+  /* a chain of bones turned (in the model's frame) so that each points from its joint toward the next of pts (a
+     point for each joint and one for the last bone's tail): directions only, so the bones keep their lengths */
+  function chainTo(P, names, pts) {
+    const S = P.S;
+    names.forEach((n, i) => { const rest = (i < names.length - 1 ? S.head[names[i + 1]] : S.tail[n]).clone().sub(S.head[n]).normalize(), want = new T.Vector3(...pts[i + 1]).sub(new T.Vector3(...pts[i])).normalize();
+      P.aim(n, new T.Quaternion().setFromUnitVectors(rest, want)); });
+  }
+  /* hairs as fine tubes, each from a root along a way, curving as it goes: roots [{ p, d (its way, scaled to its
+     length), bend ([x, y, z] it bows toward by its tip), r }], bind as any part's; col(s, i), m sides round */
+  function strands(roots, bind, col, { m = 3, n = 6, mat } = {}) {
+    const pos = [], nor = [], idx = [], cols = [], W = [];
+    roots.forEach((q, i) => {
+      const P0 = new T.Vector3(...q.p), D = new T.Vector3(...q.d), Bd = new T.Vector3(...(q.bend || [0, 0, 0])), L = D.length(), t0 = D.clone().normalize();
+      const a = Math.abs(t0.y) < 0.9 ? new T.Vector3(0, 1, 0) : new T.Vector3(1, 0, 0), u = new T.Vector3().crossVectors(t0, a).normalize(), v = new T.Vector3().crossVectors(t0, u);
+      const base = pos.length / 3;
+      for (let k = 0; k <= n; k++) {
+        const s = k / n, c = P0.clone().addScaledVector(D, s).addScaledVector(Bd, s * s), rr = (q.r || 0.0004) * (1 - 0.85 * s), cc = col(s, i), w = bind(c.x, c.y, c.z, i);
+        for (let j = 0; j < m; j++) { const an = j / m * TAU, e = u.clone().multiplyScalar(Math.cos(an)).addScaledVector(v, Math.sin(an)); pos.push(c.x + e.x * rr, c.y + e.y * rr, c.z + e.z * rr); nor.push(e.x, e.y, e.z); cols.push(...cc); W.push(w); }
+      }
+      for (let k = 0; k < n; k++) for (let j = 0; j < m; j++) { const a0 = base + k * m + j, a1 = base + k * m + (j + 1) % m, b0 = a0 + m, b1 = a1 + m; idx.push(a0, a1, b0, a1, b1, b0); }
+    });
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new T.Float32BufferAttribute(cols, 3)); g.setIndex(idx);
+    return { geo: g, bind: (x, y, z, i) => W[i], mat: mat || [0.55, 0.2, PAT.horn, 0] };
+  }
+
   /* ── motion helpers ── */
   /* a smooth wandering −1..1 (an idle's head turns, a tail's sway), different for each seed */
   const wave = (t, seed = 0, f = 1) => (Math.sin(t * f * (0.53 + 0.11 * h1(seed)) + seed * 3.1) + 0.6 * Math.sin(t * f * (0.91 + 0.2 * h1(seed + 1)) + seed * 5.3) + 0.35 * Math.sin(t * f * (1.37 + 0.3 * h1(seed + 2)) + seed * 7.7)) / 1.95;
@@ -577,5 +622,5 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK; uniform vec3 uTipK; unifor
     return g;
   }
 
-  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
+  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, eye, lid, chainTo, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
 })();
