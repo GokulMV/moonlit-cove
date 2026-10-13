@@ -130,9 +130,12 @@ void main(){
   vec3 p = position, n = normal;
   if (aW.x > 0.5 && aW.x < 1.5){
     /* each leg swings about its hip and lifts as it swings, the two sides out of step */
-    float k = aW.z, ph = iQ.x + k*1.5708 + (aW.y > 0.0 ? 3.1416 : 0.0), sw = sin(ph)*0.5*iQ.y, cs = cos(sw), sn = sin(sw);
+    /* (running sideways: each leg lifted and reaching out, then set down and drawn in under it, swinging a little fore
+       and aft as well) */
+    float k = aW.z, ph = iQ.x + k*1.5708 + (aW.y > 0.0 ? 3.1416 : 0.0), sw = sin(ph)*0.22*iQ.y, cs = cos(sw), sn = sin(sw);
     vec3 hip = vec3(${CRAB.hx} - k*${CRAB.hs}, ${CRAB.hy}, aW.y*${CRAB.hz}), q = p - hip;
-    p = hip + vec3(q.x*cs + q.z*sn, q.y + max(cos(ph), 0.0)*0.014*iQ.y*aW.w, -q.x*sn + q.z*cs);
+    q.xz *= 1.0 + 0.14*cos(ph)*iQ.y*aW.w;
+    p = hip + vec3(q.x*cs + q.z*sn, q.y + max(cos(ph), 0.0)*0.016*iQ.y*aW.w, -q.x*sn + q.z*cs);
   }
   /* the eyes fold down as it ducks into the burrow */
   if (aW.x > 2.5) p.y -= iQ.z*0.012;
@@ -886,7 +889,7 @@ void main(){
       const SIZE = [7, 5, 6], NF = 3, PER = 7, PG = piperGeo(), LEGH = PG.userData.hipY, H = herd(PG, NF * PER, mat(BIRD_VS, BIRD_FS, PIPER_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
       const F = SIZE.map(n => ({ n, mode: 'off', x: 0, dir: 1, tx: 0, x0: 0, ax: 0, av: 0, t0: 0, out: 3, alt: 1.2, r0: 0.6, rL: 0.6, far: false }));
       const B = Array.from({ length: NF * PER }, () => ({ x: 0, r: 0.4, y: 0, yaw: 0, run: 0, runA: 0, m: 0.3, ox: 0, ph: rnd() * TAU, amp: 0, fold: 1, legs: 1, pitch: 0, roll: 0, pk: 0, seed: rnd(),
-        lag: 0.1 + 0.5 * rnd(), vmax: 1.7 + 1.3 * rnd(), walk: 0.35 + 0.35 * rnd(), hold: 0, hz: 12 + 3 * rnd(), k: 4 + 2.5 * rnd(),
+        lag: 0.1 + 0.5 * rnd(), vmax: 1.2 + 0.9 * rnd(), walk: 0.35 + 0.35 * rnd(), hold: 0, hz: 12 + 3 * rnd(), k: 4 + 2.5 * rnd(),
         dl: 0, fa: 0, fr: 0, fy: 0, ga: 0, gr: 0, vx: 0, vr: 0, vy: 0, up: false, wx: 0, wz: 0 }));
       function spawn(fi, cx, near) {
         for (let k = 0; k < 12; k++) {
@@ -952,7 +955,7 @@ void main(){
                   const run = b.hold > 0 && need < 0.12 ? 0 : need;
                   const dx = cl(f.x + b.ox - b.x, -b.walk * dt, b.walk * dt), dr = cl(run, -b.vmax * dt, b.vmax * dt), v = Math.hypot(dx, dr) / Math.max(dt, 1e-4);
                   b.x += dx; b.r += dr;
-                  b.runA += (Math.min(1, v / 1.2) - b.runA) * Math.min(1, dt * 10); b.run += v * dt / 0.035;
+                  b.runA += (Math.min(1, v / 1.2) - b.runA) * Math.min(1, dt * 10); b.run = (b.run + Math.min(v / 0.05, 7 * Math.PI * 2) * dt) % (Math.PI * 2);
                   if (v > 0.25) b.yaw += cl(turn(b.yaw, Math.atan2(-(dr * sq + g * dx), dx)), -12 * dt, 12 * dt);
                   b.pk += v < 0.15 ? dt : 0; b.pitch = v < 0.15 ? -0.55 * Math.pow(Math.max(0, Math.sin(b.pk * (4.2 + 1.6 * b.seed) + b.seed * 9)), 3) : 0;
                   b.y = Math.max(0, b.y - dt * 2); b.fold = Math.min(1, b.fold + dt * 4); b.legs = Math.min(1, b.legs + dt * 4); b.amp = Math.max(0, b.amp - dt * 4); b.roll *= 0.9;
@@ -982,7 +985,7 @@ void main(){
                     if (sp > 0.4) { const yT = Math.atan2(-(b.vr * sq + g * b.vx), b.vx), d = turn(b.yaw, yT), mv = cl(d, -9 * dt, 9 * dt); b.yaw += mv;
                       b.roll += (cl(-(dt > 0 ? mv / dt : 0) * sp / 9.8, -0.85, 0.85) - b.roll) * Math.min(1, dt * 5); }
                     b.pitch += (cl(Math.atan2(b.vy, Math.max(sp, 1)) * 0.8 + (low ? 0.45 : 0), -0.4, 0.7) - b.pitch) * Math.min(1, dt * 6);
-                    b.runA = b.y < 0.02 && p > 0.9 ? Math.min(1, sp / 1.2) : 0; b.run += sp * dt / 0.035;
+                    b.runA = b.y < 0.02 && p > 0.9 ? Math.min(1, sp / 1.2) : 0; b.run = (b.run + Math.min(sp / 0.05, 7 * Math.PI * 2) * dt) % (Math.PI * 2);
                     if (p >= 1 && b.y < 0.01 && sp < 0.3) landed++;
                   }
                 }
@@ -1046,7 +1049,7 @@ void main(){
         const hx = c.bx - c.x, hz = c.bz - c.z, hd = Math.hypot(hx, hz), a = rnd() * TAU;
         let dx = Math.cos(a), dz = Math.sin(a) - 0.35;
         if (hd > 4) { dx += hx / hd * 1.5; dz += hz / hd * 1.5; }
-        const l = Math.hypot(dx, dz) || 1; c.mx = dx / l; c.mz = dz / l; c.sp = 0.9 + rnd() * 1.9; c.tm = 0.25 + rnd() * 0.8; c.st = 'run'; square(c);
+        const l = Math.hypot(dx, dz) || 1; c.mx = dx / l; c.mz = dz / l; c.sp = 0.35 + rnd() * 0.6; c.tm = 0.5 + rnd() * 1.4; c.st = 'run'; square(c);
       }
       return {
         n: 0,
@@ -1061,8 +1064,8 @@ void main(){
             /* left far behind: down its burrow, and a new burrow dug ahead */
             if (c.st !== 'off' && Math.abs(c.bx - cam.x) > 42) { c.st = 'off'; if (want) dig(c, cam.x, false); }
             if (c.st !== 'off') {
-              if ((c.st === 'still' || c.st === 'run') && (!want || rnd() < dt * 0.3 * (1 - out))) home(c, 2.2);
-              if ((c.st === 'still' || c.st === 'run' || c.st === 'up') && threat(c.x, c.z, 7, 4.5)) home(c, 3.4);
+              if ((c.st === 'still' || c.st === 'run') && (!want || rnd() < dt * 0.3 * (1 - out))) home(c, 0.9);
+              if ((c.st === 'still' || c.st === 'run' || c.st === 'up') && threat(c.x, c.z, 7, 4.5)) home(c, 1.4);
               if (c.st === 'hidden') { c.sink = 1; if ((c.tm -= dt) <= 0) { if (want && rnd() < out && !threat(c.bx, c.bz, 9, 6)) c.st = 'up'; else c.tm = 2 + rnd() * 6; } }
               else if (c.st === 'up') { c.sink -= dt / 0.4; if (c.sink <= 0) { c.sink = 0; c.st = 'still'; c.tm = 0.4 + rnd() * 2; } }
               else if (c.st === 'still') { if ((c.tm -= dt) <= 0) wander(c); }
@@ -1076,12 +1079,15 @@ void main(){
                 else { c.mx = hx / d; c.mz = hz / d; square(c); const s = Math.min(d, c.sp * dt); c.x += c.mx * s; c.z += c.mz * s; }
               } else if (c.st === 'duck') { c.sink += dt / 0.25; if (c.sink >= 1) { c.sink = 1; c.st = 'hidden'; c.tm = 4 + rnd() * 8; } }
               /* the swash coming up the sand: run up ahead of it */
-              if ((c.st === 'still' || c.st === 'run') && c.z - Layout.shoreZ(c.x) < swash(c.x, wt) + 0.3) { c.mx = 0; c.mz = 1; c.sp = 2.6; c.st = 'run'; c.tm = 0.45; square(c); }
+              if ((c.st === 'still' || c.st === 'run') && c.z - Layout.shoreZ(c.x) < swash(c.x, wt) + 0.3) { c.mx = 0; c.mz = 1; c.sp = 1.2; c.st = 'run'; c.tm = 0.7; square(c); }
               const moving = c.st === 'run' || c.st === 'home';
-              c.gaitA += ((moving ? 1 : 0) - c.gaitA) * Math.min(1, dt * 12); c.gait += (moving ? c.sp : 0) * dt * 55;
+              /* (its legs step about once each 14 cm it goes, and never faster than six times a second: quicker than that a
+                 frame can't follow them, and they only shiver) */
+              c.gaitA += ((moving ? 1 : 0) - c.gaitA) * Math.min(1, dt * 10); c.gait = (c.gait + (moving ? Math.min(c.sp * 45, 6 * Math.PI * 2) : 0) * dt) % (Math.PI * 2);
+              c.fs = c.fs === undefined ? c.face : c.fs + turn(c.fs, c.face) * Math.min(1, dt * 14);
             }
             const q = i * 4, on = c.st !== 'off' && c.sink < 1;
-            A.iP[q] = c.x; A.iP[q + 1] = 0; A.iP[q + 2] = c.z; A.iP[q + 3] = c.face;
+            A.iP[q] = c.x; A.iP[q + 1] = 0.0025 * c.gaitA * Math.abs(Math.sin(c.gait * 2)) * c.size; A.iP[q + 2] = c.z; A.iP[q + 3] = c.fs === undefined ? c.face : c.fs;
             A.iQ[q] = c.gait; A.iQ[q + 1] = c.gaitA; A.iQ[q + 2] = c.sink; A.iQ[q + 3] = on ? c.size : 0;
             Ho.A.iP[q] = c.bx; Ho.A.iP[q + 1] = c.bz; Ho.A.iP[q + 2] = 0.15 * c.size; Ho.A.iP[q + 3] = c.st !== 'off' && want ? 1 : 0;
             if (c.st !== 'off') top = i + 1;
