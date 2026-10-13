@@ -677,5 +677,8 @@ void main(){
     for (const k of ['uWeather', 'uDriftW', 'uWind', 'uAltoD', 'uLdM', 'uCumulus', 'uStratus', 'uStorm', 'uAlto']) u[k] = U[k];
     return new T.ShaderMaterial({ uniforms: u, vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
   }
-  return { grow, materials, card, paint, crownAtlas, crownMaterial, palmBark, palmBarkMat, SPECIES };
+  /* painted card pixels (colour and normal, top row first) as textures: rows turned bottom-up, colours grown out under
+     the transparent parts, coverage-kept mip levels (for the forest's own leaf cards, models/flora/) */
+  function texOf(col, nor, W, H, cut = CUT) { const c = flip(col, W, H), n = flip(nor, W, H); dilate(c, W, H); return { map: dataTex(mipChain(c, W, H, cut * 255), true), nmap: dataTex(mipChain(n, W, H, 0), false) }; }
+  return { grow, materials, card, paint, crownAtlas, crownMaterial, palmBark, palmBarkMat, SPECIES, texOf, mipChain, dilate, flip, dataTex };
 })();
