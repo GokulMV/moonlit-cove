@@ -151,9 +151,8 @@ void main(){
   p.y += sin(iQ.z - u*2.4)*u*u*FLEX;
   place(p, normal, iP.xyz, iP.w, iQ.x, iQ.y, iQ.w);
 }`;
-  /* a dolphin's and a whale's markings, worked out on the animal itself: the eye, the line of the mouth, and for the
-     dolphin its pale cape and belly; for the humpback the grooves of its throat, the knobs on its head, its white
-     flippers mottled grey, the black and white patterns under its flukes (each whale its own) */
+  /* a dolphin's markings, worked out on the animal itself: its pale cape and belly, the eye, the line of the mouth (the
+     whale's, OWNC, are its model's own colours) */
   const SEA_FS = `
 ${LIGHT}
 varying vec3 vN, vW, vC, vL; varying vec4 vP;
@@ -162,33 +161,8 @@ float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
 void main(){
   vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), alb = vC, L = vL;
   float side = abs(L.z);
-  #ifdef WHALE
-    if (vP.x < 0.5){
-      /* throat grooves: pale pleats under the chin and back along the belly */
-      float under = smoothstep(-0.03, -0.075, L.y)*smoothstep(-0.12, 0.02, L.x)*smoothstep(0.49, 0.4, L.x);
-      float pleat = smoothstep(0.3, 0.5, abs(fract(L.z*70.0 + 0.3*sin(L.x*9.0)) - 0.5));
-      alb = mix(alb, alb*0.45, under*(1.0 - pleat)*0.9);
-      /* the mouth: a line from the snout curving back down to below the eye */
-      float mx = clamp((0.5 - L.x)/0.22, 0.0, 1.0), my = -0.012 - 0.042*mx*mx;
-      alb *= 1.0 - 0.75*smoothstep(0.006, 0.0015, abs(L.y - my))*step(0.27, L.x)*step(0.025, side);
-      /* the eye, just above the mouth's corner */
-      float e = length(vec2(L.x - 0.272, (L.y + 0.032)*1.5));
-      alb = mix(alb, vec3(0.006), smoothstep(0.0085, 0.0055, e)*step(0.05, side));
-      alb = mix(alb, vec3(0.25), smoothstep(0.0115, 0.0095, e)*(1.0 - smoothstep(0.0085, 0.0055, e))*step(0.05, side));
-      /* knobs on the head */
-      vec2 kq = vec2(L.x*55.0, L.z*55.0), kc = floor(kq) + 0.5; float kn = smoothstep(0.32, 0.18, length(kq - kc - 0.2*(vec2(hsh(kc), hsh(kc + 7.1)) - 0.5)));
-      alb *= 1.0 - 0.45*kn*smoothstep(0.3, 0.42, L.x)*smoothstep(-0.01, 0.03, L.y)*step(0.5, hsh(kc + uSeed));
-    } else if (vP.x < 1.5){
-      /* the long flippers: white, mottled grey above */
-      alb = mix(vec3(0.62, 0.63, 0.64), vec3(0.2, 0.21, 0.23), gl_FrontFacing ? 0.0 : 0.55*step(0.55, hsh(floor(L.xz*80.0))));
-    } else {
-      /* the flukes: dark above; below, white with black blotches and a dark trailing edge */
-      if (!gl_FrontFacing){
-        vec2 q = floor(vec2(L.x*40.0, side*40.0) + uSeed*3.1); float b = hsh(q)*0.6 + hsh(floor(q*0.5) + 9.0)*0.4;
-        alb = mix(vec3(0.66, 0.67, 0.68), vec3(0.04), step(0.62, b));
-        alb = mix(alb, vec3(0.04), smoothstep(-0.555, -0.58, L.x - side*0.1));
-      }
-    }
+  #ifdef OWNC
+    /* (its colours are the model's own, painted on it: models/life/cetaceans.js) */
   #else
     /* a bottlenose: dark cape along the back, grey flanks, a pale belly; the eye, the mouth along the beak */
     float cape = smoothstep(0.04, 0.12, L.y - 0.06*sin(L.x*2.5 + 0.7));
@@ -538,19 +512,13 @@ void main(){
     return b.geo();
   }
 
-  /* a humpback: a long, deep body with a blunt, knobbly head, long pale flippers, a small hump of a dorsal fin, broad
-     notched flukes; dark above, pale below (length 1, nose toward +x; aW.z how far back along it, for the tail's flex) */
+  /* a humpback, far off: its model built light (models/life/cetaceans.js), at length 1, its nose toward +x; aW.x which
+     part a point is on (0 the body, 1 a flipper, 2 the flukes), aW.z how far back along it, for the tail's flex */
   function whaleGeo() {
-    const b = Build(), dark = [0.05, 0.055, 0.062], belly = [0.36, 0.37, 0.39], U = p => [0, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0], UF = p => [1, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0], UT = p => [2, 0, cl((0.5 - p[0]) / 1.1, 0, 1), 0];
-    b.lathe([[0.5, 0.01, 0.012, -0.006], [0.49, 0.036, 0.042, -0.012], [0.46, 0.066, 0.075, -0.014], [0.4, 0.092, 0.1, -0.012], [0.3, 0.11, 0.118, -0.008], [0.16, 0.118, 0.122, -0.004],
-      [0.02, 0.113, 0.115, 0], [-0.12, 0.097, 0.095, 0.004], [-0.24, 0.072, 0.067, 0.006], [-0.34, 0.049, 0.042, 0.006], [-0.42, 0.031, 0.024, 0.004], [-0.48, 0.02, 0.014, 0.002], [-0.52, 0.013, 0.009, 0]], 14,
-      (p, a) => mix3(dark, belly, sm(-0.2, -0.8, Math.cos(a)) * sm(-0.4, 0.15, p[0])), U);
-    b.panel([[-0.1, 0.092, 0], [-0.15, 0.124, 0], [-0.19, 0.13, 0], [-0.2, 0.085, 0]], dark, U, [0, 0, 1]);
-    for (const sd of [-1, 1]) {
-      b.panel([[0.22, -0.065, sd * 0.1], [0.14, -0.07, sd * 0.11], [-0.05, -0.11, sd * 0.39], [-0.01, -0.105, sd * 0.4]], [0.62, 0.63, 0.64], UF, [0, -1, 0]);
-      b.panel([[-0.5, 0, sd * 0.004], [-0.53, 0, sd * 0.1], [-0.565, 0, sd * 0.2], [-0.6, 0, sd * 0.19], [-0.575, 0, sd * 0.08], [-0.565, 0, sd * 0.012]], dark, UT, [0, 1, 0]);
-    }
-    return b.geo();
+    const g = Models.make('life/whale', { lite: true }); g.scale.setScalar(1 / 13); g.updateMatrixWorld(true);
+    const geo = Models.tagged(g, m => [m.userData.part || 0, 0, 0, 0]), P = geo.attributes.position, W = geo.attributes.aW;
+    for (let i = 0; i < P.count; i++) W.setZ(i, cl((0.5 - P.getX(i)) / 1.1, 0, 1));
+    return geo;
   }
 
   /* numbers for #defines are always written as floats */
@@ -1198,7 +1166,7 @@ void main(){
        arches, lifts its flukes clear of the water and slides down deep for a while; now and then it bursts right out
        of the sea instead, turns in the air and crashes back on its side ── */
     const whales = (() => {
-      const H = herd(whaleGeo(), 1, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.65, FLEX: 0.045, WHALE: 1 }, { uSeed: { value: rnd() * 50 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const H = herd(whaleGeo(), 1, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.6, FLEX: 0.045, OWNC: 1 }, { uSeed: { value: rnd() * 50 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
       const w = { on: false, x: 0, off: 200, dir: 1, v: 1.6, size: 13, st: 'under', t0: 0, dur: 0, left: 0, first: true, beat: 0, next: 35 + rnd() * 60, blown: false, hit: false, top: false, pitch: 0, roll: 0, y: -6 };
       const B = { breath: 7.5, dive: 7, breach: 5.5 };
       function start(t, cx, x) {
