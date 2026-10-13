@@ -9,6 +9,13 @@
    crumbs of leaf between. Each leaf drapes over those beneath it;
    the gaps and the edges are shaded as they lie.
    FloraLitter.tex(o) → { map, normalMap, tile (m) } — tileable.
+   FloraLitter.mud(o) → { map, normalMap, roughnessMap, tile, rough }:
+   a mangrove's mud at low tide — soft grey-brown silt, smooth and
+   wet, low swells and the hollows between them still holding the
+   tide's water, rills where it drains off, crab holes ringed with
+   the little balls of mud the crabs sift out, a scatter of fallen
+   leaves (a mangrove's turn yellow before they fall, and blacken in
+   the wet) and a propagule or two lying where the tide left it.
    ───────────────────────────────────────────────────────────── */
 const FloraLitter = (() => {
   const T = THREE, TAU = Math.PI * 2;
@@ -66,10 +73,10 @@ const FloraLitter = (() => {
 
   /* one leaf at (cx, cy) px, turned by an, L × W cm; shape < 0.55 elliptic with a drip tip, < 0.8 broad and round-
      ended, else long and narrow; crumb: a scrap without veins */
-  function leaf(H, C, WET, N, px, R, cx, cy, an, L, W, shape, crumb = false) {
+  function leaf(H, C, WET, N, px, R, cx, cy, an, L, W, shape, crumb = false, pal = PAL) {
     const Lp = L / px, Wp = W / px, ca = Math.cos(an), sa = Math.sin(an), ext = Math.ceil(Math.hypot(Lp / 2, Wp / 2)) + 2;
     /* its age: fresh-fallen (orange, tan, red-brown), browned, old and dark, or bleached; how wet; how curled */
-    const ag = crumb ? 0.7 + 0.25 * R() : R(), fam = ag < 0.15 ? PAL.fresh : ag < 0.68 ? PAL.brown : ag < 0.97 ? PAL.old : PAL.pale, base = fam[Math.floor(R() * fam.length)];
+    const ag = crumb ? 0.7 + 0.25 * R() : R(), fam = ag < 0.15 ? pal.fresh : ag < 0.68 ? pal.brown : ag < 0.97 ? pal.old : pal.pale, base = fam[Math.floor(R() * fam.length)];
     const shade = 0.78 + 0.44 * R(), wet = ag > 0.66 && ag < 0.9 ? 0.3 + 0.5 * R() : R() * 0.2, curl = (R() < 0.3 ? 0.8 + 1.4 * R() : 0.3 * R()) * Math.min(1, L / 8), cup = (R() - 0.4) * 1.2 * Math.min(1, L / 10);
     const lace = false, holes = !crumb && R() < 0.12, broken = !crumb && R() < 0.28;
     const cutA = R() * TAU, cutD = (R() - 0.2) * 0.35, ph = R() * 50, nv = 5 + Math.floor(L / 2.2), vA = 0.85 + 0.25 * R();
@@ -99,8 +106,8 @@ const FloraLitter = (() => {
     }
   }
   /* a twig: a line of bark, its radius r cm, length L cm, lying slightly bent */
-  function twig(H, C, N, px, R, cx, cy, an, L, r) {
-    const n = Math.max(4, Math.round(L / px / 2)), rp = r / px, bend = (R() - 0.5) * 0.4, col = R() < 0.5 ? [0.1, 0.068, 0.044] : [0.155, 0.12, 0.085], lich = R() < 0.25;
+  function twig(H, C, N, px, R, cx, cy, an, L, r, colour) {
+    const n = Math.max(4, Math.round(L / px / 2)), rp = r / px, bend = (R() - 0.5) * 0.4, col = colour || (R() < 0.5 ? [0.1, 0.068, 0.044] : [0.155, 0.12, 0.085]), lich = !colour && R() < 0.25;
     let x = cx, y = cy, a = an; const pts = []; for (let k = 0; k <= n; k++) { pts.push([x, y]); a += bend / n + (R() - 0.5) * 0.08; x += Math.cos(a) * L / px / n; y += Math.sin(a) * L / px / n; }
     for (let k = 0; k < n; k++) {
       const [ax, ay] = pts[k], [bx, by] = pts[k + 1], rr = rp * (1 - 0.35 * k / n), e = Math.ceil(rr) + 1;
@@ -136,6 +143,81 @@ const FloraLitter = (() => {
       C[i * 3] = col[0] * lt; C[i * 3 + 1] = col[1] * lt; C[i * 3 + 2] = col[2] * lt; H[i] += 0.3 + 0.4 * (Math.abs(v) / w) ** 2;
     }
   }
+  /* the fallen leaves of a mangrove: yellow and orange when just down, brown, then black in the wet mud */
+  const MPAL = {
+    fresh: [[0.46, 0.33, 0.035], [0.5, 0.3, 0.03], [0.4, 0.22, 0.03], [0.42, 0.36, 0.06]],
+    brown: [[0.24, 0.14, 0.05], [0.2, 0.12, 0.05], [0.28, 0.17, 0.06]],
+    old: [[0.05, 0.04, 0.03], [0.07, 0.055, 0.04], [0.04, 0.035, 0.028]],
+    pale: [[0.2, 0.17, 0.12]] };
+  function mud(o = {}) {
+    const N = o.N || 1024, tile = o.tile || 3, px = tile / N * 100;   /* (cm per pixel) */
+    const key = 'mud:' + N + ':' + tile + ':' + (o.seed || 3); if (cache.has(key)) return cache.get(key);
+    const R = Models.rng(o.seed || 3), NN = N * N, H = new Float32Array(NN), C = new Float32Array(NN * 3), WET = new Float32Array(NN), s1 = R() * 50, s2 = R() * 50, s3 = R() * 50;
+    /* the silt's relief (mm): broad low swells, finer ones on them, a skin of tiny pocks; rills winding across, where the
+       ebbing tide drains off; the hollows hold water. Its colour: grey-brown, darker and wetter in the low places, a
+       little paler and drier on the crests; patches of a golden-green film of algae */
+    const RL = new Float32Array(NN);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N, i = y * N + x, w = vnT(u, v, 3, s2) - 0.5;
+      const rn = Math.abs(vnT(u + 0.12 * w, v + 0.08 * w, 5, s3) - 0.5), rill = sm(0.03, 0, rn) * (0.6 + 0.4 * vnT(u, v, 9, s3 + 2));
+      RL[i] = rill;
+      H[i] = 12 * vnT(u, v, 3, s1) + 5 * vnT(u, v, 9, s1 + 3) + 1.6 * vnT(u, v, 30, s1 + 7) + 0.5 * vnT(u, v, 110, s1 + 11) + 0.2 * vnT(u, v, 300, s1 + 13) - 6 * rill * rill;
+    }
+    /* (the water stands in the lowest fifth of it) */
+    const sorted = Float32Array.from(H).sort(), level = sorted[Math.floor(NN * (o.water ?? 0.13))];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N, i = y * N + x, hi = sm(level, level + 9, H[i]), alg = sm(0.58, 0.75, vnT(u, v, 7, s2 + 5)) * (0.5 + 0.5 * vnT(u, v, 40, s2 + 6));
+      let c = mix3a([0.052, 0.042, 0.032], [0.13, 0.108, 0.082], hi);
+      c = mix3a(c, [0.1, 0.095, 0.05], alg * 0.45);
+      const k = 0.9 + 0.2 * vnT(u, v, 60, s1 + 17); C[i * 3] = c[0] * k; C[i * 3 + 1] = c[1] * k; C[i * 3 + 2] = c[2] * k;
+      WET[i] = 1 - hi * 0.6;
+    }
+    const area = tile * tile;
+    /* crab holes, each with its rim and the balls of mud round it */
+    for (let k = 0, n = Math.round(area * (o.crabs ?? 26)); k < n; k++) crabHole(H, C, WET, N, px, R, R() * N, R() * N);
+    /* fallen leaves, lying flat and wet */
+    for (let k = 0, n = Math.round(area * (o.leaves ?? 3.5)); k < n; k++) { const L = 7 + R() * 7; leaf(H, C, WET, N, px, R, R() * N, R() * N, R() * TAU, L, L * (0.38 + 0.12 * R()), 0.3 + 0.25 * R(), false, MPAL); }
+    /* a propagule or two, lying where the tide left it */
+    for (let k = 0, n = Math.round(area * (o.propagules ?? 0.5)); k < n; k++) twig(H, C, N, px, R, R() * N, R() * N, R() * TAU, 22 + R() * 14, 0.6 + 0.15 * R(), R() < 0.6 ? [0.07, 0.1, 0.025] : [0.08, 0.04, 0.035]);
+    /* the water: still and flat over the hollows, dark; wet sheen on the mud, the crests duller */
+    const B = blurT(H, N, Math.max(1, Math.round(1.5 / px))), col = new Uint8Array(NN * 4), nor = new Uint8Array(NN * 4), rgh = new Uint8Array(NN * 4), kk = 1 / (px * 10);
+    const enc = q => Math.round(255 * Math.pow(clamp(q), 1 / 2.2)), He = new Float32Array(NN);
+    for (let i = 0; i < NN; i++) He[i] = Math.max(H[i], level);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = y * N + x, water = sm(0, 1.2, level - H[i]), cav = Math.min(2, B[i] - H[i]), ao = clamp(1 - 0.12 * Math.max(0, cav), 0.6, 1);
+      const dk = 1 - 0.25 * WET[i], wc = [0.028, 0.03, 0.029];
+      for (let c = 0; c < 3; c++) col[i * 4 + c] = enc(mix(C[i * 3 + c] * ao * dk, wc[c], water * 0.85)); col[i * 4 + 3] = 255;
+      const xl = y * N + (x + N - 1) % N, xr = y * N + (x + 1) % N, yu = ((y + N - 1) % N) * N + x, yd = ((y + 1) % N) * N + x;
+      const dx = (He[xr] - He[xl]) * 0.5 * kk, dy = (He[yd] - He[yu]) * 0.5 * kk, l = Math.hypot(dx, dy, 1);
+      nor[i * 4] = Math.round((-dx / l * 0.5 + 0.5) * 255); nor[i * 4 + 1] = Math.round((-dy / l * 0.5 + 0.5) * 255); nor[i * 4 + 2] = Math.round((1 / l * 0.5 + 0.5) * 255); nor[i * 4 + 3] = 255;
+      /* (wet silt has a dull sheen, not a gloss; only the standing water shines) */
+      const hi = sm(level, level + 12, H[i]), r = mix(mix(0.72, 0.9, hi), 0.22, water);
+      rgh[i * 4] = rgh[i * 4 + 1] = rgh[i * 4 + 2] = Math.round(clamp(r) * 255); rgh[i * 4 + 3] = 255;
+    }
+    const mk = (d, srgb) => { const t = new T.DataTexture(d, N, N, T.RGBAFormat, T.UnsignedByteType); t.wrapS = t.wrapT = T.RepeatWrapping; t.generateMipmaps = true; t.minFilter = T.LinearMipmapLinearFilter; t.magFilter = T.LinearFilter; t.anisotropy = 8; if (srgb) t.colorSpace = T.SRGBColorSpace; t.needsUpdate = true; return t; };
+    const out = { map: mk(col, true), normalMap: mk(nor, false), roughnessMap: mk(rgh, false), tile, rough: 1 };
+    cache.set(key, out); return out;
+  }
+  const mix3a = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+  /* a crab's hole: a dark pit a centimetre or two across, a low rim, and round it the little balls of sifted mud */
+  function crabHole(H, C, WET, N, px, R, cx, cy) {
+    const r = (0.45 + 0.6 * R()) / px, ext = Math.ceil(r * 2.2) + 2;
+    for (let yy = -ext; yy <= ext; yy++) for (let xx = -ext; xx <= ext; xx++) {
+      const d = Math.hypot(xx + 0.5, yy + 0.5) / r; if (d > 2.2) continue;
+      const i = ((Math.floor(cy) + yy + N) % N) * N + (Math.floor(cx) + xx + N) % N;
+      if (d < 1) { const q = 1 - d * d; H[i] -= 10 * q; const k = mix(1, 0.15, sm(0, 0.8, q)); C[i * 3] *= k; C[i * 3 + 1] *= k; C[i * 3 + 2] *= k; WET[i] = 1; }
+      else { const q = Math.exp(-(((d - 1.25) / 0.3) ** 2)); H[i] += 0.7 * q; C[i * 3] *= 1 + 0.25 * q; C[i * 3 + 1] *= 1 + 0.22 * q; C[i * 3 + 2] *= 1 + 0.18 * q; }
+    }
+    /* (the pellets: a few to a few dozen, scattered out round it, paler, drier) */
+    for (let k = 0, n = Math.floor(R() * R() * 28); k < n; k++) {
+      const a = R() * TAU, dd = r * (1.6 + 4 * Math.sqrt(R())), pr = (0.18 + 0.15 * R()) / px, x0 = cx + Math.cos(a) * dd, y0 = cy + Math.sin(a) * dd, e = Math.ceil(pr) + 1;
+      for (let yy = -e; yy <= e; yy++) for (let xx = -e; xx <= e; xx++) {
+        const d = Math.hypot(Math.floor(x0) + xx + 0.5 - x0, Math.floor(y0) + yy + 0.5 - y0) / pr; if (d > 1) continue;
+        const i = ((Math.floor(y0) + yy + N) % N) * N + (Math.floor(x0) + xx + N) % N, z = Math.sqrt(1 - d * d);
+        H[i] = Math.max(H[i], H[i] + 1.2 * z); const lt = 0.75 + 0.35 * z; C[i * 3] = 0.12 * lt; C[i * 3 + 1] = 0.105 * lt; C[i * 3 + 2] = 0.087 * lt; WET[i] = 0.4;
+      }
+    }
+  }
   /* tileable value noise at frequency f over the unit square */
   function vnT(u, v, f, s) {
     const x = ((u % 1) + 1) % 1 * f, y = ((v % 1) + 1) % 1 * f, xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, F = Math.round(f);
@@ -152,5 +234,5 @@ const FloraLitter = (() => {
     }
     return a;
   }
-  return { tex, PAL };
+  return { tex, mud, PAL };
 })();

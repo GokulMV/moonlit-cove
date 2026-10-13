@@ -80,11 +80,11 @@ const Studio = (() => {
   groundMesh.rotation.x = -Math.PI / 2; groundMesh.receiveShadow = true; groundMesh.visible = false; scene.add(groundMesh);
   function setGround(kind, rad, cx = 0, cz = 0) {
     if (!kind || kind === 'none') { groundMesh.visible = false; return; }
-    /* (the forest floor is the real one, FloraLitter's: leaves two or three deep, with its relief) */
-    const lit = kind === 'forest' ? FloraLitter.tex({ N: 1024, tile: 2 }) : null;
+    /* (the forest floor is the real one, FloraLitter's: leaves two or three deep, with its relief; and the mangroves' mud) */
+    const lit = kind === 'forest' ? FloraLitter.tex({ N: 1024, tile: 2 }) : kind === 'mud' ? FloraLitter.mud({ N: 1024, tile: 3 }) : null;
     const t = lit ? lit.map : gTex[kind] || (gTex[kind] = groundTex(kind)), tile = lit ? lit.tile : kind === 'grid' ? 10 : 6;
-    for (const m of lit ? [lit.map, lit.normalMap] : [t]) { m.repeat.set(2 * rad / tile, 2 * rad / tile); m.offset.set(-rad / tile + cx / tile, -rad / tile - cz / tile); }
-    groundMesh.material.color.setScalar(lit ? 0.78 : 1); Object.assign(groundMesh.material, { map: t, normalMap: lit ? lit.normalMap : null, roughness: kind === 'water' ? 0.15 : lit ? lit.rough : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
+    for (const m of lit ? [lit.map, lit.normalMap, lit.roughnessMap].filter(Boolean) : [t]) { m.repeat.set(2 * rad / tile, 2 * rad / tile); m.offset.set(-rad / tile + cx / tile, -rad / tile - cz / tile); }
+    groundMesh.material.color.setScalar(kind === 'forest' ? 0.78 : 1); Object.assign(groundMesh.material, { map: t, normalMap: lit ? lit.normalMap : null, roughnessMap: lit && lit.roughnessMap || null, roughness: kind === 'water' ? 0.15 : lit ? lit.rough : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
     groundMesh.scale.setScalar(rad); groundMesh.position.set(cx, -0.002, cz); groundMesh.visible = true;
   }
 

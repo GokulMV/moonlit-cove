@@ -82,7 +82,21 @@ const FloraGrow = (() => {
     /* a cempedak, 12-20 m: grey bark, a dense crown; its fruit straight off the trunk and the big limbs */
     cempedak: { H: [12, 18], bole: [0.28, 0.38], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 0], h: [0.5, 0.9], reach: [0.4, 0.8], t0: [0.1, 0.16] },
       crown: { R: [0.36, 0.42], D: [0.48, 0.58], dome: 0.9, fR: [2.0, 2.6], clumps: [6, 8], cR: [0.8, 1.05], limbs: [3, 5], spread: 1.0 },
-      leaf: 'cempL', bark: 'fig', barkTint: [0.62, 0.57, 0.52], moss: 0.4, cards: 1.25 } };
+      leaf: 'cempL', bark: 'fig', barkTint: [0.62, 0.57, 0.52], moss: 0.4, cards: 1.25 },
+    /* ── the mangroves ── */
+    /* a Rhizophora (bakau minyak, R. apiculata), 11-18 m on the creek's edge: a straight dark trunk standing on a cage of
+       arching stilt roots that leave it as high as three metres up and come down to the mud a metre or two out, forking
+       as they go; more roots let down from the lower limbs, a skirt of them under the leaves; a dense dark crown */
+    rhizophora: { H: [11, 18], bole: [0.38, 0.5], dbh: H => 0.022 * H, taper: 0.62, flare: 0, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.3, 0.38], D: [0.42, 0.52], dome: 0.88, fR: [1.5, 2.1], clumps: [5, 7], cR: [0.65, 0.9], limbs: [4, 6], spread: 1.0 },
+      leaf: 'rhizoL', bark: 'rhizophora', moss: 0.04, cards: 1.45,
+      stilts: { n: [22, 32], hi: [2.0, 3.4], reach: [0.9, 2.6], r: [0.03, 0.058], depth: 3, tide: 1.1, drop: [2, 6] } },
+    /* an Avicennia (api-api), 6-11 m: a short, often crooked trunk of smooth pale bark parting low into a few spreading
+       limbs; a broad irregular crown, silvery where its leaves turn; its breathing roots (mangrove.js) stand round it in
+       the mud by the thousand */
+    avicennia: { H: [6, 11], bole: [0.14, 0.24], dbh: H => 0.042 * H, taper: 0.6, flare: 0.3, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.45, 0.56], D: [0.5, 0.62], dome: 0.8, fR: [1.2, 1.7], clumps: [5, 7], cR: [0.55, 0.8], limbs: [4, 6], spread: 1.0 },
+      leaf: 'avicL', bark: 'avicennia', barkTint: [0.86, 0.86, 0.8], moss: 0.04, cards: 1.35 } };
 
   /* a direction at angle `el` off the axis t, turned `az` round it */
   function aside(t, az, el) {
@@ -135,6 +149,47 @@ const FloraGrow = (() => {
       for (const gg of Kt.roots(x - Math.cos(a) * 0.25, z - Math.sin(a) * 0.25, [Math.cos(a), Math.sin(a)], r0 * rt.w * 0.32, 1.8 + 2.6 * R(), { seed: Math.floor(R() * 1e6), tile })) addPart(gg, () => [0, 0]); }
   }
 
+  /* the colour down a mangrove's root: grey-brown and pale above the tide's reach; below it, where the tide wets it twice
+     a day, darker and duller; mud-brown where it goes into the mud */
+  const stiltCol = tide => (t, a, p) => {
+    const y = p[1], tl = tide + 0.12 * (Models.vn(p[0] * 1.3, p[2] * 1.3, 2.2) - 0.5), wet = 1 - sm(tl - 0.12, tl + 0.04, y), mud = 1 - sm(-0.05, 0.4, y), k = 0.88 + 0.18 * Models.vn(p[0] * 7.1 + p[2] * 3.3, y * 9, 4.4);
+    /* (above the tide's line pale grey-brown; below it a duller, darker brown, the barnacles' band paler just under the
+       line; the foot mud-dark) */
+    let c = [1.0 * k, 0.96 * k, 0.9 * k]; c = K().mix3(c, [0.5, 0.43, 0.35], wet * 0.85);
+    c = K().mix3(c, [0.82, 0.8, 0.74], wet * (1 - sm(tl - 0.35, tl - 0.15, y)) * sm(tl - 0.6, tl - 0.4, y) * 0.5 * Models.vn(p[0] * 9, y * 14 + p[2] * 9, 6.1));
+    c = K().mix3(c, [0.26, 0.21, 0.16], mud * 0.9); return c;
+  };
+  /* ── a Rhizophora's stilt roots: all round the trunk's lower few metres, each root leaves it heading out and down (the
+     lower it leaves, the steeper), arches over and comes down to the mud nearly upright, farther out the higher it left;
+     partway down most send out another that arches on beyond, and that one another; at the mud a few short anchors splay
+     from each foot. Smooth, swelling a little where they leave the trunk and where they go in ── */
+  function stilts(St, tr, r0, R, addPart, tile, lod) {
+    const Kt = K(), n = Math.round(lerp(R, St.n) * (lod ? 0.6 : 1)), hi = lerp(R, St.hi), col = stiltCol(St.tide ?? 1), segs = lod ? 8 : 18, radial = lod ? 5 : 8, [bx, bz] = tr.spine(0);
+    const one = (p0, dir0, end, r, depth) => {
+      const D = Math.hypot(end.x - p0.x, end.z - p0.z), h = p0.y - end.y;
+      /* (out along its first heading for well over half its reach, then down, so it arches) */
+      const c1 = p0.clone().addScaledVector(dir0, Math.max(0.25, D * 0.62)), c2 = end.clone().add(V(0, Math.max(0.3, h * 0.72), 0));
+      c1.x += (R() - 0.5) * D * 0.12; c1.z += (R() - 0.5) * D * 0.12;
+      /* (not a clean arc: the root grew in spurts, a slight kink where each began, a wander between) */
+      const arc = new T.CubicBezierCurve3(p0, c1, c2, end), pts = [];
+      for (let i = 0; i <= 8; i++) { const q = arc.getPoint(i / 8); if (i > 0 && i < 8) { const w = D * 0.014; q.x += w * (R() - 0.5) * 2; q.z += w * (R() - 0.5) * 2; q.y += D * 0.01 * (R() - 0.5); } pts.push(q); }
+      const curve = new T.CatmullRomCurve3(pts);
+      addPart(Kt.tube(curve, t => r * (1 - 0.3 * t) * (1 + 0.15 * sm(0.88, 1, t)) * (1 + (depth ? 0.12 : 0.35) * (1 - sm(0, 0.12, t))), { segs, radial, tile, col }), () => [0, 0]);
+      if (depth < (St.depth ?? 2)) for (let k = 0, nk = R() < 0.7 ? 1 : R() < 0.6 ? 2 : 0; k < nk; k++) {
+        const tb = 0.3 + 0.4 * R(), pb = curve.getPointAt(tb); if (pb.y < 0.35) continue;
+        const az = Math.atan2(pb.z - bz, pb.x - bx) + (R() - 0.5) * 0.9, out = 0.35 + R() * (0.5 + pb.y * 0.4), dip = 0.2 + 0.35 * R();
+        one(pb, V(Math.cos(az) * Math.cos(dip), -Math.sin(dip), Math.sin(az) * Math.cos(dip)), V(pb.x + Math.cos(az) * out, -0.18, pb.z + Math.sin(az) * out), r * (0.6 + 0.15 * R()), depth + 1);
+      }
+      if (!lod) { const pa = curve.getPointAt(0.94); for (let k = 0, na = 1 + Math.floor(R() * 3); k < na; k++) { const az = R() * TAU, L = 0.1 + 0.14 * R(), ea = pa.clone().add(V(Math.cos(az) * L, -0.22, Math.sin(az) * L));
+        addPart(Kt.tube(new T.QuadraticBezierCurve3(pa, pa.clone().add(V(Math.cos(az) * L * 0.6, -0.02, Math.sin(az) * L * 0.6)), ea), t => r * 0.5 * (1 - 0.5 * t), { segs: 4, radial: 5, tile, col }), () => [0, 0]); } }
+    };
+    for (let k = 0; k < n; k++) {
+      const a = k / n * TAU + (R() - 0.5) * (TAU / n) * 0.9, u = Math.pow(R(), 0.85), h0 = 0.35 + u * (hi - 0.35), [sx, sz] = tr.spine(h0), rT = tr.rAt(h0, a) * 0.85;
+      const reach = r0 + lerp(R, St.reach) * (0.45 + 0.55 * u), a2 = a + (R() - 0.5) * 0.35, dip = 0.05 + 0.45 * (1 - u) + (R() - 0.5) * 0.2;
+      one(V(sx + Math.cos(a) * rT, h0, sz + Math.sin(a) * rT), V(Math.cos(a) * Math.cos(dip), -Math.sin(dip), Math.sin(a) * Math.cos(dip)), V(bx + Math.cos(a2) * reach, -0.18, bz + Math.sin(a2) * reach), lerp(R, St.r) * (0.75 + 0.45 * u), 0);
+    }
+  }
+
   function tree(kind, seed, o = {}) {
     const S = SPECIES[kind], R = Models.rng(seed * 7 + 13), lod = o.lod || 0, Kt = K(), tile = Kt.bark(S.bark).tile;
     const H = lerp(R, S.H), boleH = H * lerp(R, S.bole), r0 = S.dbh(H) / 2, rTop = r0 * S.taper;
@@ -146,9 +201,10 @@ const FloraGrow = (() => {
     const butts = [], nb = Math.round(lerp(R, S.butts.n));
     for (let i = 0; i < nb; i++) butts.push({ ang: i / nb * TAU + (R() - 0.5) * (TAU / nb) * 0.5, h: lerp(R, S.butts.h), reach: lerp(R, S.butts.reach), t0: lerp(R, S.butts.t0) });
     const lean = [(R() - 0.5) * H * 0.012, (R() - 0.5) * H * 0.012];
-    const tr = Kt.trunk({ H: boleH + rTop * 1.2, r0, rTop, lean, butts, seed: seed * 3 + 1, tile, moss: S.moss, flare: S.lattice ? 0.5 : 0.16, segV: lod ? 28 : 52, segA: lod ? 40 : 96 });
+    const tr = Kt.trunk({ H: boleH + rTop * 1.2, r0, rTop, lean, butts, seed: seed * 3 + 1, tile, moss: S.moss, flare: S.flare ?? (S.lattice ? 0.5 : 0.16), segV: lod ? 28 : 52, segA: lod ? 40 : 96 });
     if (S.lattice) lattice(S.lattice, tr, boleH, r0, rTop, R, addPart, tile, lod);
     else addPart(tr.geo, () => [0, 0]);
+    if (S.stilts) stilts(S.stilts, tr, r0, R, addPart, tile, lod);
     for (const b of butts) {
       const B = Kt.buttress(tr, Object.assign({ seed: Math.floor(R() * 1e6), tile, moss: S.moss, segL: lod ? 22 : 40 }, b)); addPart(B.geo, () => [0, 0]);
       if (!lod) for (const g of Kt.roots(B.tip[0] - B.dir[0] * 0.6, B.tip[1] - B.dir[1] * 0.6, B.dir, Math.max(0.1, B.t * 0.62), 1.6 + R() * 2.6, { seed: Math.floor(R() * 1e6), tile })) addPart(g, () => [0, 0]);
@@ -232,6 +288,23 @@ const FloraGrow = (() => {
       const L = limbs[Math.floor(R() * limbs.length)], t = 0.35 + 0.6 * R(), p = L.curve.getPointAt(t).add(V(0, -L.r(t) * 0.8, 0)), reach = R() < 0.6, y1 = reach ? -0.1 : p.y * (0.3 + 0.5 * R()), rr = reach ? 0.02 + 0.03 * R() : 0.008 + 0.01 * R();
       const pts = [p, p.clone().add(V((R() - 0.5) * 0.3, (y1 - p.y) * 0.35, (R() - 0.5) * 0.3)), p.clone().add(V((R() - 0.5) * 0.5, (y1 - p.y) * 0.7, (R() - 0.5) * 0.5)), V(p.x + (R() - 0.5) * 0.6, y1, p.z + (R() - 0.5) * 0.6)];
       addPart(Kt.tube(new T.CatmullRomCurve3(pts), t2 => rr * (reach ? 0.7 + 0.6 * t2 * t2 : 1 - 0.6 * t2), { segs: lod ? 6 : 12, radial: lod ? 4 : 6, tile, col: () => [0.9, 0.88, 0.82] }), (x, y, z) => [L.ph, 0.03 * clamp((p.y - y) / p.y)]);
+    }
+    /* (a Rhizophora's roots let down from its lower limbs: hanging nearly straight, most reaching the mud and curving out at
+       the foot like a stilt; a few still short, swinging) */
+    if (S.stilts && S.stilts.drop) for (let i = 0, n = Math.round(lerp(R, S.stilts.drop) * (lod ? 0.5 : 1)), col = stiltCol(S.stilts.tide ?? 1); i < n && limbs.length; i++) {
+      const L = limbs[Math.floor(R() * limbs.length)], t = 0.2 + 0.6 * R(), p = L.curve.getPointAt(t).add(V(0, -L.r(t) * 0.7, 0)); if (p.y < 2.2) continue;
+      const reach = R() < 0.75, out = V(p.x - tx, 0, p.z - tz); if (out.lengthSq() < 1e-4) out.set(1, 0, 0); out.normalize();
+      const D = 0.3 + 1.1 * R(), end = reach ? V(p.x + out.x * D, -0.18, p.z + out.z * D) : p.clone().add(V(out.x * 0.15, -p.y * (0.25 + 0.4 * R()), out.z * 0.15)), drop = p.y - end.y;
+      /* (never a plumb line: it wanders a little as it comes down, and where it reached the mud it has curved out and
+         forked like a stilt) */
+      const side = V(-out.z, 0, out.x), pts = [p];
+      for (let k = 1; k < 6; k++) { const f = k / 6, q = p.clone().lerp(end, f); q.addScaledVector(side, (R() - 0.5) * 0.25 * Math.sin(Math.PI * f)).addScaledVector(out, (reach ? -D * 0.55 * (1 - f) * f * 2.2 : 0) + (R() - 0.5) * 0.12); if (reach) q.y = p.y - drop * (1 - Math.pow(1 - f, 1.25)); pts.push(q); }
+      pts.push(end);
+      const rr = reach ? 0.014 + 0.012 * R() : 0.007 + 0.006 * R(), cv = new T.CatmullRomCurve3(pts);
+      addPart(Kt.tube(cv, t2 => rr * (reach ? 0.75 + 0.6 * t2 * t2 : 1 - 0.55 * t2), { segs: lod ? 8 : 18, radial: lod ? 4 : 6, tile, col }),
+        (x, y, z) => [L.ph, reach ? 0.03 * clamp(y / p.y) : 0.05]);
+      if (reach && !lod) { const pf = cv.getPointAt(0.82), az = Math.atan2(out.z, out.x) + (R() < 0.5 ? -1 : 1) * (0.5 + 0.5 * R()), e2 = V(pf.x + Math.cos(az) * (0.3 + 0.4 * R()), -0.18, pf.z + Math.sin(az) * (0.3 + 0.4 * R()));
+        addPart(Kt.tube(new T.CubicBezierCurve3(pf, pf.clone().add(V(Math.cos(az) * 0.25, -0.05, Math.sin(az) * 0.25)), e2.clone().add(V(0, pf.y * 0.6, 0)), e2), t2 => rr * 0.9 * (1 - 0.2 * t2), { segs: 10, radial: 6, tile, col }), () => [0, 0]); }
     }
     /* the leader: the trunk runs on a little into the crown's middle, so the bole's top is never an open end */
     { const c0 = new T.CatmullRomCurve3([top.clone().setY(boleH - rTop), top.clone().setY(boleH + rTop * 1.5), top.clone().setY(boleH + rTop * 3)]);
