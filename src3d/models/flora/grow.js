@@ -38,6 +38,16 @@ const FloraGrow = (() => {
     canopy: { H: [24, 34], bole: [0.45, 0.55], dbh: H => 0.024 * H, taper: 0.6, butts: { n: [3, 5], h: [0.8, 1.6], reach: [0.6, 1.4], t0: [0.14, 0.22] },
       crown: { R: [0.2, 0.26], D: [0.3, 0.38], dome: 0.8, fR: [2.6, 3.6], clumps: [6, 8], cR: [1.0, 1.4], limbs: [3, 4], spread: 1.0 },
       leaf: 'laurelL', bark: 'canopy', moss: 0.6, cards: 1.0 },
+    /* a strangler fig (Ficus): 30-42 m; no trunk of its own but a cage of its roots, braided down round the tree it
+       grew on and fused where they cross, flaring into flanges at the foot; aerial roots hanging from its limbs; a huge
+       dense crown of thick glossy leaves, figs on its twigs */
+    fig: { H: [30, 40], bole: [0.42, 0.5], dbh: H => 0.05 * H, taper: 0.72, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.32, 0.38], D: [0.3, 0.38], dome: 0.75, fR: [3.2, 4.4], clumps: [6, 8], cR: [1.1, 1.5], limbs: [5, 7], spread: 1.0 },
+      leaf: 'figL', bark: 'tualang', barkTint: [0.66, 0.65, 0.62], moss: 0.5, cards: 1.25, lattice: { roots: [11, 16], twist: [0.7, 1.3], aerial: [8, 16], host: 0.6 } },
+    /* an understory tree, 6-14 m: slender, its crown narrow and thin, its leaves big */
+    understory: { H: [6, 13], bole: [0.4, 0.55], dbh: H => 0.02 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
+      crown: { R: [0.24, 0.3], D: [0.38, 0.48], dome: 0.85, fR: [1.3, 1.8], clumps: [4, 6], cR: [0.55, 0.8], limbs: [3, 4], spread: 1.0 },
+      leaf: 'under', bark: 'canopy', moss: 0.7, cards: 0.75 },
     /* ── the fruit trees: short boles, low limbs, deep round crowns ── */
     /* a mango, 11-18 m: a stout short trunk, rough and dark; a dense, deep dome of dark leaves to near the ground */
     mango: { H: [11, 17], bole: [0.18, 0.26], dbh: H => 0.045 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
@@ -68,6 +78,45 @@ const FloraGrow = (() => {
     pts.push(b.clone()); return new T.CatmullRomCurve3(pts);
   }
 
+  /* ── a strangler fig's cage of roots, as one surface: round the host's trunk, n roots braid down from the crown's
+     foot, half spiralling one way and half the other, raised as bands over the host's bark and fused smoothly where
+     they cross; between them the host shows, dark and sunk; at the foot the bands swell into flanges that run out
+     over the ground as roots. The shell's radius at each point is the host's plus the bands' (a smooth maximum of
+     every root's), so there are no joints, no pipes ── */
+  function lattice(Lt, tr, boleH, r0, rTop, R, addPart, tile, lod) {
+    const Kt = K(), n = Math.round(lerp(R, Lt.roots)), tw = lerp(R, Lt.twist), top = boleH + rTop * 0.8;
+    const roots = []; for (let k = 0; k < n; k++) roots.push({ a0: k / n * TAU + R() * 0.35, dir: k % 2 ? 1 : -1, ph: R() * TAU, w: 0.32 + 0.22 * R(), h: 0.55 + 0.45 * R(), sw: 0.6 + 0.6 * R() });
+    const thetaOf = (rt, y) => { const t = 1 - y / top; return rt.a0 + rt.dir * tw * t * Math.PI + 0.1 * Math.sin(y * 0.55 + rt.ph); };
+    const host = y => tr.base(Math.max(0, y)) * 0.82;
+    /* (how much root stands over the host at height y, round at angle a: each band a rounded ridge, the ridges blended
+       with a smooth maximum so crossings fuse; wider and deeper toward the foot, where they flare) */
+    const band = (y, a) => {
+      let acc = 0; const foot = Math.exp(-Math.max(0, y) / 1.6), hr = host(y);
+      for (const rt of roots) {
+        const da = Math.atan2(Math.sin(a - thetaOf(rt, y)), Math.cos(a - thetaOf(rt, y))), d = Math.abs(da) * hr, w = r0 * rt.w * (0.55 + 0.45 * (1 - y / top)) * (1 + 0.8 * foot) * 0.5;
+        if (d < w) { const q = 1 - (d / w) ** 2; acc += Math.exp(8 * q * q) - 1; }
+      }
+      return acc > 0 ? Math.log(1 + acc) / 8 : 0;
+    };
+    const segV = lod ? 34 : 72, segA = lod ? 48 : 128, nU = Math.max(1, Math.round(TAU * r0 / tile[0]));
+    const rowY = i => -0.3 + (top + 0.3) * Math.pow(i / (segV - 1), 1.3);
+    let vAcc = 0, prev = rowY(0); const vOf = []; for (let i = 0; i < segV; i++) { const y = rowY(i); vAcc += Math.abs(y - prev); prev = y; vOf.push(vAcc / tile[1]); }
+    const g = Kt.gridGeo(segV, segA, true, (i, j) => {
+      const y = rowY(i), a = j / segA * TAU, b = Math.sqrt(Math.min(1, band(y, a))), foot = Math.exp(-Math.max(0, y) / 1.2), hr = host(y);
+      /* (the band's height over the host: a third of a root's width, and much more at the foot where it flares out) */
+      const rise = b * r0 * (0.2 + 0.45 * foot * foot) + b * foot * foot * r0 * 0.9, r = hr + rise - (1 - b) * r0 * 0.04;
+      const [sx, sz] = tr.spine(Math.max(0, y)), x = sx + Math.cos(a) * r, z = sz + Math.sin(a) * r;
+      /* (the host between the bands: darker, greener, sunk; the bands pale, their flanks a little shaded) */
+      const ao = (0.5 + 0.5 * b) * (0.65 + 0.35 * Math.min(1, y / 2 + 0.5)), moss = (1 - b) * 0.6;
+      return [x, y, z, j / segA * nU, vOf[i], ao * (1 - 0.35 * moss), ao * (1 - 0.15 * moss), ao * (1 - 0.4 * moss)];
+    });
+    Kt.faceOut(g, (x, y, z, nx, ny, nz) => { const [sx, sz] = tr.spine(Math.max(0, y)); return (x - sx) * nx + (z - sz) * nz; });
+    addPart(g, () => [0, 0]);
+    /* (each root, at the foot, runs on over the ground) */
+    if (!lod) for (const rt of roots) { const a = thetaOf(rt, 0), [sx, sz] = tr.spine(0), rr = host(0) + r0 * 0.9, x = sx + Math.cos(a) * rr, z = sz + Math.sin(a) * rr;
+      for (const gg of Kt.roots(x - Math.cos(a) * 0.25, z - Math.sin(a) * 0.25, [Math.cos(a), Math.sin(a)], r0 * rt.w * 0.32, 1.8 + 2.6 * R(), { seed: Math.floor(R() * 1e6), tile })) addPart(gg, () => [0, 0]); }
+  }
+
   function tree(kind, seed, o = {}) {
     const S = SPECIES[kind], R = Models.rng(seed * 7 + 13), lod = o.lod || 0, Kt = K(), tile = Kt.bark(S.bark).tile;
     const H = lerp(R, S.H), boleH = H * lerp(R, S.bole), r0 = S.dbh(H) / 2, rTop = r0 * S.taper;
@@ -79,8 +128,9 @@ const FloraGrow = (() => {
     const butts = [], nb = Math.round(lerp(R, S.butts.n));
     for (let i = 0; i < nb; i++) butts.push({ ang: i / nb * TAU + (R() - 0.5) * (TAU / nb) * 0.5, h: lerp(R, S.butts.h), reach: lerp(R, S.butts.reach), t0: lerp(R, S.butts.t0) });
     const lean = [(R() - 0.5) * H * 0.012, (R() - 0.5) * H * 0.012];
-    const tr = Kt.trunk({ H: boleH + rTop * 1.2, r0, rTop, lean, butts, seed: seed * 3 + 1, tile, moss: S.moss, flare: 0.16, segV: lod ? 28 : 52, segA: lod ? 40 : 96 });
-    addPart(tr.geo, () => [0, 0]);
+    const tr = Kt.trunk({ H: boleH + rTop * 1.2, r0, rTop, lean, butts, seed: seed * 3 + 1, tile, moss: S.moss, flare: S.lattice ? 0.5 : 0.16, segV: lod ? 28 : 52, segA: lod ? 40 : 96 });
+    if (S.lattice) lattice(S.lattice, tr, boleH, r0, rTop, R, addPart, tile, lod);
+    else addPart(tr.geo, () => [0, 0]);
     for (const b of butts) {
       const B = Kt.buttress(tr, Object.assign({ seed: Math.floor(R() * 1e6), tile, moss: S.moss, segL: lod ? 22 : 40 }, b)); addPart(B.geo, () => [0, 0]);
       if (!lod) for (const g of Kt.roots(B.tip[0] - B.dir[0] * 0.6, B.tip[1] - B.dir[1] * 0.6, B.dir, Math.max(0.1, B.t * 0.62), 1.6 + R() * 2.6, { seed: Math.floor(R() * 1e6), tile })) addPart(g, () => [0, 0]);
@@ -147,6 +197,12 @@ const FloraGrow = (() => {
         }
       }
     });
+    /* (a strangler's aerial roots: from the limbs, straight down on the air, some reaching the ground and thickening) */
+    if (S.lattice) for (let i = 0, n = Math.round(lerp(R, S.lattice.aerial)); i < n && limbs.length; i++) {
+      const L = limbs[Math.floor(R() * limbs.length)], t = 0.35 + 0.6 * R(), p = L.curve.getPointAt(t).add(V(0, -L.r(t) * 0.8, 0)), reach = R() < 0.6, y1 = reach ? -0.1 : p.y * (0.3 + 0.5 * R()), rr = reach ? 0.02 + 0.03 * R() : 0.008 + 0.01 * R();
+      const pts = [p, p.clone().add(V((R() - 0.5) * 0.3, (y1 - p.y) * 0.35, (R() - 0.5) * 0.3)), p.clone().add(V((R() - 0.5) * 0.5, (y1 - p.y) * 0.7, (R() - 0.5) * 0.5)), V(p.x + (R() - 0.5) * 0.6, y1, p.z + (R() - 0.5) * 0.6)];
+      addPart(Kt.tube(new T.CatmullRomCurve3(pts), t2 => rr * (reach ? 0.7 + 0.6 * t2 * t2 : 1 - 0.6 * t2), { segs: lod ? 6 : 12, radial: lod ? 4 : 6, tile, col: () => [0.9, 0.88, 0.82] }), (x, y, z) => [L.ph, 0.03 * clamp((p.y - y) / p.y)]);
+    }
     /* the leader: the trunk runs on a little into the crown's middle, so the bole's top is never an open end */
     { const c0 = new T.CatmullRomCurve3([top.clone().setY(boleH - rTop), top.clone().setY(boleH + rTop * 1.5), top.clone().setY(boleH + rTop * 3)]);
       addPart(Kt.tube(c0, t => rTop * (0.97 - 0.5 * t), { segs: 4, radial: radial(rTop), tile, col: barkCol(0) }), () => [0, 0]); }
@@ -203,3 +259,5 @@ Models.add('flora/emergent', (o = {}) => FloraGrow.model('emergent', o.seed || 1
 Models.add('flora/tualang', (o = {}) => FloraGrow.model('tualang', o.seed || 1, o));
 Models.add('flora/canopy', (o = {}) => FloraGrow.model('canopy', o.seed || 1, o));
 Models.add('flora/mango-tree', (o = {}) => FloraGrow.model('mango', o.seed || 1, o));
+Models.add('flora/fig', (o = {}) => FloraGrow.model('fig', o.seed || 1, o));
+Models.add('flora/understory', (o = {}) => FloraGrow.model('understory', o.seed || 1, o));

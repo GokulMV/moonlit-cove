@@ -176,6 +176,22 @@ const FloraBlade = (() => {
         a.globalCompositeOperation = 'destination-out'; a.beginPath(); a.ellipse(x, y, rr, rr * 1.4, r(), 0, TAU); a.fill(); a.globalCompositeOperation = 'source-over';
       }
     } },
+    /* a broad leaf of the dicot kind (a seedling's, a shrub's): elliptic, a drip tip, eight to twelve pairs of side veins
+       leaving the pale midrib at a slant and curving up along the margin; young ones flushed red-brown and limp (o.flush) */
+    dicot: { W: 256, H: 512, blur: 0.9, bump: 5, paint(a, b, r, o, h, W, H) {
+      const cx = W / 2, fl = o.flush || 0, hue = mix(o.hue ?? 100, 8, fl), sat = mix(o.sat ?? 0.42, 0.4, fl), lig = mix(o.light ?? 0.26, 0.3, fl), nv = o.veins ?? 10, asym = (r() - 0.5) * 0.1, ph = r() * 9, Wm = W / 2 - 3;
+      const wid = t => t <= 0 || t >= 1 ? 0 : Math.pow(Math.max(0, Math.sin(Math.PI * Math.pow(t, 0.9))), 0.8) * (t > 0.82 ? Math.pow((1 - t) / 0.18, 0.55) * 0.75 + 0.25 * (1 - t) / 0.18 : 1);
+      const midC = rgb(hue - 22, 0.4, lig * 1.6);
+      pix(a, h, W, H, (x, y) => {
+        const t = 1 - y / H, dx = x - cx, w = wid(t) * Wm * (dx < 0 ? 1 + asym : 1 - asym) + 0.3, cov = w - Math.abs(dx) + 0.5; if (cov <= 0 || w < 0.6) return null; const q = Math.abs(dx) / w;
+        const s = t * nv - q * 1.15 - q * q * 0.5 + (dx < 0 ? 0.31 : 0), vein = Math.pow(Math.abs(Math.cos(Math.PI * s)), 26) * (1 - sm(0.82, 1, q)), net = Math.pow(Math.abs(Math.cos(Math.PI * (t * nv * 3.7 + q * 2.3))), 18) * 0.35;
+        let c = rgb(hue + 3 * t - 4 * q, sat, lig * (0.95 + 0.1 * t) * (1 + 0.12 * vein + 0.04 * net));
+        const mw = 2.4 * (1 - 0.7 * t) + 0.6; if (Math.abs(dx) < mw) c = c.map((v, i) => mix(v, midC[i], sm(mw, mw - 1, Math.abs(dx)) * 0.85));
+        return [c[0], c[1], c[2], cov, 150 + 10 * (1 - q * q) - 14 * Math.exp(-((dx / (mw + 1)) ** 2)) - 7 * vein];
+      });
+      if (r() < (o.holes ?? 0.4)) for (let i = 0, k = 1 + Math.floor(r() * 3); i < k; i++) { const y = H * (0.25 + 0.5 * r()), t = 1 - y / H, x = cx + (r() < 0.5 ? -1 : 1) * wid(t) * Wm * (0.2 + 0.7 * r()), rr = 3 + r() * 8;
+        a.globalCompositeOperation = 'destination-out'; a.beginPath(); a.ellipse(x, y, rr, rr * 1.3, r(), 0, TAU); a.fill(); a.globalCompositeOperation = 'source-over'; }
+    } },
     /* an elephant ear's blade (Alocasia): an arrowhead, its two lobes swept back past where the stalk joins (at y =
        0.72 H, in the notch between them), deep glossy green, the midrib, the ribs into the lobes and six or seven pairs
        of side ribs pale and sunk into the blade, the blade between them puckered */
