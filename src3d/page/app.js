@@ -1101,7 +1101,8 @@
     GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
     for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; goAdd(o[0], o[1], o[2]); }
     const W = Engine.world;
-    if (W) { const L = W.obstaclesNear(x, z); for (let i = 0; i < L.length; i++) goAdd(L[i][0], L[i][1], L[i][2]); }
+    /* (not a groyne's foot, though: that keeps the van off it, but a person climbs up onto its blocks and walks out) */
+    if (W) { const L = W.obstaclesNear(x, z); for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef') goAdd(L[i][0], L[i][1], L[i][2]); }
     for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
     if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
   }
