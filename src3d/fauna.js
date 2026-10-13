@@ -56,30 +56,37 @@ void place(vec3 p, vec3 n, vec3 at, float yaw, float pitch, float roll, float sc
   /* a wing: the arm rises and falls about the shoulder, the hand follows a beat behind and sweeps back at the wrist
      on the upstroke. s is how far out from the shoulder, c how far behind the leading edge (swept back: LE0 + LE1·s²) */
   const WING = `
+#ifndef WINGY
+  #define WINGY 0.0
+#endif
 vec3 wing(float side, float s, float c, float a1, float a2, float sweep){
   float x = LE0 + LE1*s*s - c, xw = LE0 + LE1*WR*WR;
   if (s > WR){ float cs = cos(sweep), sn = sin(sweep), dx = x - xw, ds = s - WR; x = xw + dx*cs - ds*sn; s = WR + dx*sn + ds*cs; }
   vec2 q = vec2(cos(a1), sin(a1))*min(s, WR) + vec2(cos(a2), sin(a2))*max(s - WR, 0.0);
-  return vec3(x, q.y, side*(ROOT + q.x));
+  return vec3(x, WINGY + q.y, side*(ROOT + q.x));
 }`;
-  /* gulls and sandpipers: posed here, frame by frame */
+  /* gulls and sandpipers: posed here, frame by frame. Each is its own model (models/life/gull.js, sandpiper.js) as it
+     stands, its hips at the origin, with its wings folded; and a pair of open wings, for flight. As it opens its wings
+     the folded ones draw into its shoulders and the open ones spread out of them; its head comes down and forward on
+     its neck in flight, and its legs draw up */
   const BIRD_VS = `
 ${ORIENT}
 ${WING}
 attribute vec4 iP, iQ, iC, iR;   /* where (x, y, z, heading) · pitch, bank, wingbeat phase, wingbeat depth · folded, legs out, size · stride phase, stride */
 void main(){
   vec3 p = position, n = normal;
+  float fold = smoothstep(0.0, 1.0, iC.x);
   if (aW.x > 0.5 && aW.x < 1.5){
     float side = aW.y, s = aW.z, c = aW.w, A = iQ.w, ph = iQ.z;
     float a1 = DIH + ARM*A*sin(ph), a2 = a1 + HAND*A*sin(ph - 0.7) - DROOP*(1.0 - min(A*4.0, 1.0));
-    vec3 f = wing(side, s, c, a1, a2, SWEEP + SWEEPK*A*max(cos(ph), 0.0));
-    /* folded: the wing lies along the back, its tip past the tail */
-    vec3 fo = vec3(FOLDX - s*FOLDK, FOLDY - c*0.45, side*(FOLDZ + c*0.12));
-    p = mix(f, fo, iC.x);
+    vec3 f = wing(side, s, c, a1, a2, SWEEP + SWEEPK*A*max(cos(ph), 0.0)), sh = vec3(LE0, WINGY, side*ROOT);
+    p = sh + (f - sh)*(1.0 - fold);
     float a = s > WR ? a2 : a1;
-    n = normalize(mix(vec3(0.0, cos(a), -side*sin(a)), vec3(0.0, 0.25, side), iC.x));
+    n = vec3(0.0, cos(a), -side*sin(a));
   }
-  if (aW.x > 1.5){
+  if (aW.x > 2.5 && aW.x < 3.5){ vec3 sh = vec3(LE0, WINGY, aW.y*ROOT); p = sh + (p - sh)*fold; }
+  if (aW.x > 3.5) p += vec3(HEADX, HEADY, 0.0)*(1.0 - fold);
+  if (aW.x > 1.5 && aW.x < 2.5){
     /* legs: drawn up in flight, striding (left and right out of step) when it runs */
     vec2 q = vec2(p.x - LEGX, (p.y - LEGY)*iC.y);
     float sw = sin(iR.x + aW.y*1.5708)*iR.y*0.8, cs = cos(sw), sn = sin(sw);
@@ -457,30 +464,36 @@ void main(){
       b.strip(LE, TE, col, (p, i, e) => [1, sd, S[i], e ? ch[i] : 0], [0, 1, 0]);
     }
   }
+  /* the birds of the flocks: the model itself, built light (feet down at hipY below its origin), with a pair of open
+     wings added, strips from shoulder to tip that BIRD_VS beats (the folded ones are the model's own) */
+  function birdGeo(name, S, ch, root, le0, le1) {
+    const P = Models.make(name, { lite: true, parts: true }).userData.parts, b = Build();
+    wings(b, S, ch, root, le0, le1, [1, 1, 1]);
+    const geo = mergeGeo([P.geo, b.geo()]); geo.userData.hipY = P.hipY; return geo;
+  }
+  /* (indexed geometries with the same attributes, as one) */
+  function mergeGeo(list) {
+    const keys = ['position', 'normal', 'aCol', 'aW'], out = {}, idx = [];
+    for (const k of keys) out[k] = [];
+    let base = 0;
+    for (const g of list) {
+      if (!g.attributes.normal) g.computeVertexNormals();
+      for (const k of keys) { const a = g.attributes[k].array, o = out[k]; for (let i = 0; i < a.length; i++) o.push(a[i]); }
+      for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + base);
+      base += g.attributes.position.count;
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(out.position, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(out.normal, 3));
+    g.setAttribute('aCol', new T.Float32BufferAttribute(out.aCol, 3)); g.setAttribute('aW', new T.Float32BufferAttribute(out.aW, 4));
+    g.setIndex(idx); return g;
+  }
+  /* (the open wing's grey is the model's mantle; HEADX, HEADY where the head goes in flight, from where it is standing) */
   const GULL_D = { GULL: 1, ROOT: 0.04, LE0: 0.06, LE1: -0.25, WR: 0.3, SPAN: 0.66, DIH: 0.12, ARM: 0.8, HAND: 0.5, DROOP: 0.25, SWEEP: 0.15, SWEEPK: 0.55,
-    FOLDX: 0.06, FOLDK: 0.62, FOLDY: 0.045, FOLDZ: 0.055, LEGX: 0.015, LEGY: -0.03, WTOP: 'vec3(0.55, 0.59, 0.63)', WUND: 'vec3(0.85, 0.86, 0.86)' };
-  function gullGeo() {
-    const b = Build(), white = [0.9, 0.9, 0.88], mantle = [0.55, 0.59, 0.63];
-    b.lathe([[-0.21, 0.004, 0.006, 0.012], [-0.15, 0.034, 0.04, 0.004], [-0.05, 0.057, 0.06, 0], [0.04, 0.06, 0.058, 0.004], [0.1, 0.043, 0.04, 0.016], [0.15, 0.037, 0.034, 0.034], [0.19, 0.028, 0.025, 0.038], [0.214, 0.008, 0.008, 0.036]], 8,
-      (p, a) => mix3(white, mantle, sm(0.4, 0.75, Math.cos(a)) * (p[0] < 0.09 ? 1 : 0)), W0);
-    b.lathe([[0.21, 0.009, 0.007, 0.034], [0.27, 0.0015, 0.0015, 0.029]], 5, [0.95, 0.74, 0.18], W0);
-    b.panel([[-0.17, 0.014, -0.032], [-0.17, 0.014, 0.032], [-0.285, 0.008, 0.06], [-0.3, 0.008, 0], [-0.285, 0.008, -0.06]], white, W0, [0, 1, 0]);
-    wings(b, [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66], [0.17, 0.165, 0.158, 0.15, 0.13, 0.105, 0.075, 0.025], 0.04, 0.06, -0.25, mantle);
-    for (const sd of [-1, 1]) b.panel([[0.008, -0.03, sd * 0.024], [0.022, -0.03, sd * 0.024], [0.02, -0.19, sd * 0.024], [0.01, -0.19, sd * 0.024]], [0.85, 0.6, 0.5], () => [2, sd, 0, 0], [0, 0, sd]);
-    return b.geo();
-  }
+    WINGY: 0.035, HEADX: 0.03, HEADY: -0.065, LEGX: 0.0, LEGY: 0.0, WTOP: 'vec3(0.40, 0.45, 0.49)', WUND: 'vec3(0.85, 0.86, 0.86)' };
+  const gullGeo = () => birdGeo('life/gull', [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66], [0.17, 0.165, 0.158, 0.15, 0.13, 0.105, 0.075, 0.025], 0.04, 0.06, -0.25);
   const PIPER_D = { PIPER: 1, ROOT: 0.018, LE0: 0.03, LE1: -0.7, WR: 0.07, SPAN: 0.17, DIH: 0.1, ARM: 1.0, HAND: 0.45, DROOP: 0.1, SWEEP: 0.1, SWEEPK: 0.7,
-    FOLDX: 0.03, FOLDK: 0.62, FOLDY: 0.02, FOLDZ: 0.028, LEGX: 0.004, LEGY: -0.016, WTOP: 'vec3(0.42, 0.38, 0.33)', WUND: 'vec3(0.88, 0.88, 0.86)' };
-  function piperGeo() {
-    const b = Build(), back = [0.5, 0.45, 0.38], belly = [0.92, 0.91, 0.88];
-    b.lathe([[-0.085, 0.003, 0.004, 0.01], [-0.06, 0.021, 0.023, 0.005], [-0.012, 0.033, 0.034, 0], [0.032, 0.031, 0.029, 0.006], [0.058, 0.021, 0.019, 0.022], [0.078, 0.019, 0.017, 0.03], [0.094, 0.005, 0.005, 0.03]], 7,
-      (p, a) => mix3(belly, back, sm(-0.35, 0.1, Math.cos(a))), W0);
-    b.lathe([[0.092, 0.004, 0.003, 0.029], [0.124, 0.0008, 0.0008, 0.024]], 4, [0.05, 0.05, 0.05], W0);
-    b.panel([[-0.07, 0.012, -0.014], [-0.07, 0.012, 0.014], [-0.105, 0.01, 0.02], [-0.11, 0.01, 0], [-0.105, 0.01, -0.02]], [0.25, 0.23, 0.2], W0, [0, 1, 0]);
-    wings(b, [0, 0.04, 0.07, 0.1, 0.135, 0.17], [0.065, 0.062, 0.056, 0.046, 0.032, 0.012], 0.018, 0.03, -0.7, back);
-    for (const sd of [-1, 1]) b.panel([[0.0, -0.016, sd * 0.012], [0.008, -0.016, sd * 0.012], [0.007, -0.085, sd * 0.012], [0.002, -0.085, sd * 0.012]], [0.06, 0.06, 0.06], () => [2, sd, 0, 0], [0, 0, sd]);
-    return b.geo();
-  }
+    WINGY: 0.016, HEADX: 0.008, HEADY: -0.014, LEGX: 0.0, LEGY: 0.0, WTOP: 'vec3(0.38, 0.36, 0.32)', WUND: 'vec3(0.88, 0.88, 0.86)' };
+  const piperGeo = () => birdGeo('life/sandpiper', [0, 0.04, 0.07, 0.1, 0.135, 0.17], [0.065, 0.062, 0.056, 0.046, 0.032, 0.012], 0.018, 0.03, -0.7);
   const BAT_D = { ROOT: 0.01, LE0: 0.012, LE1: -0.9, WR: 0.055, DIH: 0.12, ARM: 0.95, HAND: 0.7, SWEEP: 0.1, SWEEPK: 0.9, GLOSS: 0 };
   function batGeo() {
     const b = Build(), fur = [0.13, 0.095, 0.075];
@@ -739,7 +752,7 @@ void main(){
     /* ── gulls: wheeling over the surf, cruising along the coast, standing on the sand in small groups facing into the breeze;
        a group lifts off when the van or a walker comes near, flies off, and lands somewhere further along ── */
     const gulls = (() => {
-      const MAX = 22, LEGH = 0.19, H = herd(gullGeo(), MAX, mat(BIRD_VS, BIRD_FS, GULL_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
+      const MAX = 22, GG = gullGeo(), LEGH = GG.userData.hipY, H = herd(GG, MAX, mat(BIRD_VS, BIRD_FS, GULL_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
       const ROLE = 'WSCSWSWCSSWCSWSCWSSWCS', grp = [0, 1, 2].map(() => ({ x: 0, z: 0, fresh: false }));
       const windYaw = Math.atan2(Layout.wind[1], -Layout.wind[0]);      /* facing into the breeze */
       let ns = 0;
@@ -870,7 +883,7 @@ void main(){
        flock that banks as one, glide in bursts, and come back in to land further along, flaring their wings and running
        a few steps as they touch down ── */
     const pipers = (() => {
-      const SIZE = [7, 5, 6], NF = 3, PER = 7, LEGH = 0.085, H = herd(piperGeo(), NF * PER, mat(BIRD_VS, BIRD_FS, PIPER_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
+      const SIZE = [7, 5, 6], NF = 3, PER = 7, PG = piperGeo(), LEGH = PG.userData.hipY, H = herd(PG, NF * PER, mat(BIRD_VS, BIRD_FS, PIPER_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
       const F = SIZE.map(n => ({ n, mode: 'off', x: 0, dir: 1, tx: 0, x0: 0, ax: 0, av: 0, t0: 0, out: 3, alt: 1.2, r0: 0.6, rL: 0.6, far: false }));
       const B = Array.from({ length: NF * PER }, () => ({ x: 0, r: 0.4, y: 0, yaw: 0, run: 0, runA: 0, m: 0.3, ox: 0, ph: rnd() * TAU, amp: 0, fold: 1, legs: 1, pitch: 0, roll: 0, pk: 0, seed: rnd(),
         lag: 0.1 + 0.5 * rnd(), vmax: 1.7 + 1.3 * rnd(), walk: 0.35 + 0.35 * rnd(), hold: 0, hz: 12 + 3 * rnd(), k: 4 + 2.5 * rnd(),

@@ -237,5 +237,24 @@ const Models = (() => {
              L(L(h3(xi, yi, zi + 1), h3(xi + 1, yi, zi + 1), fx), L(h3(xi, yi + 1, zi + 1), h3(xi + 1, yi + 1, zi + 1), fx), fy), fz);
   }
   const fbm = (x, y, z, o = 3) => { let s = 0, a = 0.5, f = 1, n = 0; for (let i = 0; i < o; i++) { s += a * vn(x * f + i * 17.3, y * f - i * 9.1, z * f + i * 5.7); n += a; a *= 0.5; f *= 2.03; } return s / n; };
-  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit, litP, tube, spline, loft, sheet, foil, texFrom, paint, mergeC, normalsOf, M4, limb, vn, fbm };
+  /* a model as one geometry, for drawing many of it at once (fauna.js): every mesh as it stands, lifted by dy, its
+     colours as aCol and, as aW, what tagOf(mesh) says it belongs to ([0, 0, 0, 0] if nothing). (A mirrored mesh is
+     turned to face the right way: the herds' shaders light the side the camera sees) */
+  function tagged(g, tagOf, dy = 0) {
+    g.updateMatrixWorld(true);
+    const parts = [];
+    g.traverse(m => {
+      if (!m.isMesh || !m.visible) return;
+      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld); if (dy) geo.translate(0, dy, 0);
+      if (m.matrixWorld.determinant() < 0 && geo.index) { const I = geo.index.array; for (let i = 0; i < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } }
+      const n = geo.attributes.position.count, W = new Float32Array(n * 4), w = tagOf(m) || [0, 0, 0, 0];
+      for (let i = 0; i < n; i++) W.set(w, i * 4);
+      parts.push({ geo, c: geo.attributes.color ? [1, 1, 1] : m.material.color.toArray(), W });
+    });
+    const merged = mergeC(parts.map(p => ({ geo: p.geo, c: p.c }))), Wall = new Float32Array(merged.attributes.position.count * 4);
+    let o = 0; for (const p of parts) { Wall.set(p.W, o); o += p.W.length; }
+    merged.setAttribute('aW', new T.BufferAttribute(Wall, 4)); merged.setAttribute('aCol', merged.attributes.color); merged.deleteAttribute('color');
+    return merged;
+  }
+  return { add, make, has, list, C, mesh, at, canvas, rng, wob, merge, rshape, extrude, lit, litP, tube, spline, loft, sheet, foil, texFrom, paint, mergeC, tagged, normalsOf, M4, limb, vn, fbm };
 })();
