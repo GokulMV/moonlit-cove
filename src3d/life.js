@@ -18,17 +18,28 @@ const Life = (() => {
     const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
     g.setIndex(idx); g.computeVertexNormals(); return g;
   }
-  /* starfish: five tapering arms, domed and knobbly, paler at the tips (radius 1) */
+  /* starfish: five arms from a small disc, each tapering to a blunt, slightly upturned tip, domed along its middle and
+     studded down it with blunt spines, a little twisted as it lies (radius 1; its colour is the instance's, this its
+     light and shade only: paler down the ridge and at the tips, the spines paler still) */
   function starGeo(seed) {
-    const r = rng(seed), tw = (r() - 0.5) * 0.25;
-    const rad = th => 0.28 + 0.72 * Math.pow(Math.abs(Math.cos(2.5 * (th + tw * Math.sin(th * 3)))), 1.5);
-    return sheet(40, 4, (u, v) => {
-      const th = u * TAU, R = rad(th) * (0.94 + 0.08 * Math.sin(th * 2 + seed)), q = v, rho = q * R;
-      const knob = 0.5 + 0.5 * Math.sin(th * 15) * Math.sin(q * 9);
-      const h = 0.15 * Math.pow(1 - q, 0.75) * (0.55 + 0.45 * R) + 0.012 * knob * (1 - q);
-      const tip = Math.pow(q, 3) * R, k = (0.85 + 0.2 * knob) * (1 + 0.35 * tip);
-      return [[Math.cos(th) * rho, h, Math.sin(th) * rho], [k, k, k]];
-    }, true);
+    const M = Models, r = rng(seed), tw = (r() - 0.5) * 0.2;
+    /* (arms broad where they leave the disc, the disc itself a fair size) */
+    const arm = th => { const a = (((th + tw * Math.sin(th * 3)) * 5 / TAU) % 1 + 1) % 1, d = Math.min(a, 1 - a) * 2; return Math.pow(Math.max(0, 1 - d), 1.15); };
+    const rad = th => 0.3 + 0.7 * arm(th) * (0.96 + 0.06 * Math.sin(th * 2 + seed));
+    const top = (q, th) => 0.17 * Math.pow(Math.max(0, 1 - q * q), 0.55) * (0.45 + 0.55 * rad(th)) + 0.012;
+    const up = M.sheet(10, 70, (q, c) => { const th = c * TAU, rho = q * rad(th); return [Math.cos(th) * rho, top(q, th) * Math.pow(1 - q, 0.12) + 0.05 * Math.pow(q, 3) * arm(th), Math.sin(th) * rho]; },
+      (q, c) => { const th = c * TAU, mid = Math.exp(-(((1 - arm(th)) / 0.25) ** 2)), k = (0.74 + 0.2 * mid - 0.12 * (1 - q)) * (1 + 0.45 * Math.pow(q, 4)) * (0.88 + 0.24 * M.vn(th * 9, q * 30, seed)); return [k, k, k]; });
+    /* (facing up: as made it may face down) */
+    { const N = up.attributes.normal; if (N.getY(Math.floor(N.count / 2)) < 0) { const I = up.index.array; for (let i = 0; i < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } for (let i = 0; i < N.array.length; i++) N.array[i] = -N.array[i]; } }
+    const parts = [{ geo: up }], knob = new T.SphereGeometry(1, 6, 4);
+    for (let k = 0; k < 5; k++) {
+      let th0 = k / 5 * TAU; for (let it = 0; it < 4; it++) th0 = k / 5 * TAU - tw * Math.sin(th0 * 3);     /* (the arm's middle, where its twist has put it) */
+      for (let i = 0; i < 6; i++) {
+        const q = 0.16 + (i + 0.5) / 6 * 0.72, rho = q * rad(th0), h = top(q, th0) * Math.pow(1 - q, 0.12) + 0.05 * Math.pow(q, 3), sc = 0.036 * (1.15 - 0.75 * q);
+        parts.push({ geo: knob, m: Models.M4(Math.cos(th0) * rho, h + sc * 0.2, Math.sin(th0) * rho, 0, 0, 0, sc, sc * 0.75, sc), c: [1.2, 1.2, 1.2] });
+      }
+    }
+    return M.mergeC(parts);
   }
   /* a scallop: a ribbed fan from the hinge, banded (length 1) */
   function scallopGeo(seed) {
