@@ -115,7 +115,8 @@ const World = (() => {
       /* (in slabs: the top steps up and down from one block of rock to the next, and dips low here and there, where the
          waves wash right over it) */
       const slab = vn(Math.floor(t * R.len / 2.3) * 1.37 + q, 5.5, 1.1), dip = Math.pow(vn(t * R.len / 9 + q, 2.7, 6.1), 3);
-      const h = (R.h0 * (1 - 0.45 * t) + 0.22 * (slab - 0.5) + 0.12 * (vn(t * 7 + q, 1.3, 2.1) - 0.5) - 0.5 * dip * R.h0) * sm(0, 0.15, t) - 0.12 * sm(0.82, 1, t);
+      /* (piled up out of blocks it stands higher than a ledge would: a metre and more at the beach end) */
+      const h0 = R.h0 + 0.5, h = (h0 * (1 - 0.4 * t) + 0.16 * (slab - 0.5) + 0.1 * (vn(t * 7 + q, 1.3, 2.1) - 0.5) - 0.3 * dip * h0) * sm(0, 0.15, t) - 0.12 * sm(0.82, 1, t);
       const w = R.w * (0.5 + 0.5 * sm(0, 0.14, t)) * (0.7 + 0.6 * vn(t * 6 + q, 4.2, 0.7)) * (0.9 + 0.2 * slab) * (1 - 0.15 * t);
       L.push({ x: R.x + ox * R.len * t + px * b, z: z0 + oz * R.len * t + pz * b, h, w, t });
     }
@@ -126,8 +127,129 @@ const World = (() => {
   }
   /* the rock's height across it, v the distance from its middle line in half-widths */
   const reefProf = (h, v) => { const a = Math.abs(v); return a <= 0.7 ? h : a <= 1 ? h - 0.32 * ((a - 0.7) / 0.3) ** 2 : h - 0.32 - (a - 1) * (h + 1.5) / 0.9; };
-  /* the reef under a point (coast coordinates): how high its rock stands there (−9 off it), and whether it is the walkable
-     top (in reefOn) */
+
+  /* ── the reefs are groynes: built of blocks of quarried rock tipped one on another along the line, the biggest along
+     its crest, their tops at about its height and each at its own tilt, more down its flanks leaning outward into the
+     sea, and a toe of smaller ones at their feet, mostly under water; a heap round its far end. Under them, filling
+     between, the ledge itself, lower and in shadow (CORE below the crest) ── */
+  const CORE = 0.6;
+  /* a block: a box a little out of square with its corners and edges broken off, as blasted granite is, every face flat.
+     Made as the space inside a set of planes (n·p ≤ d): the box's six and a dozen or so cuts; the faces are where those
+     planes bound it */
+  function blockProto(seed) {
+    const r = rng(seed), H = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].map(n => {
+      const a = [n[0] + (r() - 0.5) * 0.14, n[1] + (r() - 0.5) * 0.14, n[2] + (r() - 0.5) * 0.14], l = Math.hypot(...a); return [a[0] / l, a[1] / l, a[2] / l, 0.93 + r() * 0.14]; });
+    for (let i = 0, nc = 9 + Math.floor(r() * 7); i < nc; i++) {
+      let x = r() < 0.5 ? -1 : 1, y = r() < 0.5 ? -1 : 1, z = r() < 0.5 ? -1 : 1;
+      if (r() < 0.55) { const k = Math.floor(r() * 3); if (k === 0) x = 0; else if (k === 1) y = 0; else z = 0; }     /* (an edge, or else a corner) */
+      x += (r() - 0.5) * 0.8; y += (r() - 0.5) * 0.8; z += (r() - 0.5) * 0.8; const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+      H.push([x, y, z, (Math.abs(x) + Math.abs(y) + Math.abs(z)) * (0.6 + 0.32 * r())]);
+    }
+    /* its corners: where three planes meet inside all the others */
+    const V = [], inside = p => H.every(h => h[0] * p[0] + h[1] * p[1] + h[2] * p[2] <= h[3] + 1e-7);
+    for (let i = 0; i < H.length; i++) for (let j = i + 1; j < H.length; j++) for (let k = j + 1; k < H.length; k++) {
+      const a = H[i], b = H[j], c = H[k], det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+      if (Math.abs(det) < 1e-9) continue;
+      const p = [(a[3] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[3] * c[2] - b[2] * c[3]) + a[2] * (b[3] * c[1] - b[1] * c[3])) / det,
+        (a[0] * (b[3] * c[2] - b[2] * c[3]) - a[3] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[3] - b[3] * c[0])) / det,
+        (a[0] * (b[1] * c[3] - b[3] * c[1]) - a[1] * (b[0] * c[3] - b[3] * c[0]) + a[3] * (b[0] * c[1] - b[1] * c[0])) / det];
+      if (inside(p) && !V.some(q => Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) < 1e-6)) V.push(p);
+    }
+    /* each plane's face: the corners on it, in order round their middle; flat, each a shade of its own */
+    const P = [], N = [], C = [], used = [];
+    for (const h of H) {
+      const F = V.filter(p => Math.abs(h[0] * p[0] + h[1] * p[1] + h[2] * p[2] - h[3]) < 1e-6); if (F.length < 3) continue;
+      used.push(h);
+      const c = F.reduce((s, p) => [s[0] + p[0] / F.length, s[1] + p[1] / F.length, s[2] + p[2] / F.length], [0, 0, 0]);
+      const ax = Math.abs(h[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0], u = [h[1] * ax[2] - h[2] * ax[1], h[2] * ax[0] - h[0] * ax[2], h[0] * ax[1] - h[1] * ax[0]], lu = Math.hypot(...u);
+      u[0] /= lu; u[1] /= lu; u[2] /= lu; const w = [h[1] * u[2] - h[2] * u[1], h[2] * u[0] - h[0] * u[2], h[0] * u[1] - h[1] * u[0]];
+      F.sort((p, q) => Math.atan2((p[0] - c[0]) * w[0] + (p[1] - c[1]) * w[1] + (p[2] - c[2]) * w[2], (p[0] - c[0]) * u[0] + (p[1] - c[1]) * u[1] + (p[2] - c[2]) * u[2])
+        - Math.atan2((q[0] - c[0]) * w[0] + (q[1] - c[1]) * w[1] + (q[2] - c[2]) * w[2], (q[0] - c[0]) * u[0] + (q[1] - c[1]) * u[1] + (q[2] - c[2]) * u[2]));
+      const tone = 0.86 + 0.26 * r();
+      for (let i = 1; i < F.length - 1; i++) for (const p of [F[0], F[i], F[i + 1]]) { P.push(...p); N.push(h[0], h[1], h[2]); C.push(tone, tone, tone); }
+    }
+    /* (wound to face outward: each triangle's turn agrees with its plane's normal) */
+    for (let i = 0; i < P.length; i += 9) {
+      const ux = P[i + 3] - P[i], uy = P[i + 4] - P[i + 1], uz = P[i + 5] - P[i + 2], vx = P[i + 6] - P[i], vy = P[i + 7] - P[i + 1], vz = P[i + 8] - P[i + 2];
+      if ((uy * vz - uz * vy) * N[i] + (uz * vx - ux * vz) * N[i + 1] + (ux * vy - uy * vx) * N[i + 2] < 0) for (let k = 0; k < 3; k++) { const t = P[i + 3 + k]; P[i + 3 + k] = P[i + 6 + k]; P[i + 6 + k] = t; }
+    }
+    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(P, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(N, 3)); geo.setAttribute('color', new T.Float32BufferAttribute(C, 3));
+    geo.computeBoundingSphere();
+    return { geo, planes: used, shape: [1, 1, 1], block: true };
+  }
+  let BPs = null; const blockProtos = () => BPs || (BPs = Array.from({ length: 8 }, (_, i) => blockProto(911 + i * 37)));
+  /* the stones' own colours: granite grey, a browner grey, a dark one and now and then a pale, sandy one */
+  const BLOCKC = [[0.155, 0.148, 0.14], [0.17, 0.15, 0.128], [0.118, 0.114, 0.11], [0.2, 0.178, 0.148], [0.142, 0.135, 0.126]];
+  /* the blocks of a reef: where each lies (coast coordinates), turned and sized, its planes in the world (for how high
+     its top is under a point), and a grid of 2 m cells saying which blocks reach over each */
+  const _q = new T.Quaternion(), _e = new T.Euler(), _v = new T.Vector3(), _ax = new T.Vector3();
+  function reefBlocks(L) {
+    if (L.blocks) return L;
+    const R = L.R, rr = rng(R.seed + 77), BP = blockProtos(), out = [];
+    const seg = []; let total = 0; for (let i = 0; i < L.length - 1; i++) { const l = Math.hypot(L[i + 1].x - L[i].x, L[i + 1].z - L[i].z) || 1e-6; seg.push(l); total += l; }
+    const at = s0 => { let s = Math.max(0, Math.min(total, s0)), i = 0; while (i < seg.length - 1 && s > seg[i]) { s -= seg[i]; i++; }
+      const A = L[i], B = L[i + 1], u = Math.min(1, s / seg[i]), tx = (B.x - A.x) / seg[i], tz = (B.z - A.z) / seg[i];
+      return { x: A.x + (B.x - A.x) * u, z: A.z + (B.z - A.z) * u, h: A.h + (B.h - A.h) * u, w: A.w + (B.w - A.w) * u, t: A.t + (B.t - A.t) * u, tx, tz }; };
+    /* one block: centre (x, z), its top's height there, half-sizes, how far it leans out (about the line, toward the
+       side sd) and a little every way */
+    const put = (x, z, top, hx, hy, hz, lean, sd, tx, tz, wet) => {
+      const proto = BP[Math.floor(rr() * BP.length)];
+      _e.set((rr() - 0.5) * 0.24, rr() * TAU, (rr() - 0.5) * 0.24, 'YXZ'); const q = new T.Quaternion().setFromEuler(_e);
+      if (lean) q.premultiply(_q.setFromAxisAngle(_ax.set(tx, 0, tz), sd * lean));     /* (turned about the line: its top faces out to the side sd) */
+      const sv = new T.Vector3(hx, hy, hz), Wp = [];
+      for (const h of proto.planes) { _v.set(h[0] / hx, h[1] / hy, h[2] / hz).applyQuaternion(q); Wp.push([_v.x, _v.y, _v.z, h[3] + _v.x * x + _v.z * z]); }
+      const b = { x, y: 0, z, q, sv, proto, W: Wp, rad: Math.hypot(hx, hz), top, wet, col: BLOCKC[Math.floor(rr() * BLOCKC.length)].map(c => c * (0.9 + 0.2 * rr())) };
+      /* (set down so its top is where it should be: as placed, at y 0, the top over its middle is t; move it by top − t) */
+      const t0 = blockTop(b, x, z); if (t0 === null) return; b.y = top - t0; for (const w of Wp) w[3] += w[1] * b.y;
+      out.push(b);
+    };
+    for (let s = 0.4; s < total + 0.3; s += 0.95 + 0.55 * rr()) {
+      const P = at(s), px = -P.tz, pz = P.tx, beach = Co.shoreZ(P.x) + 0.2;
+      const lay = (v, top, k, lean, sd, wet) => {
+        const x = P.x + px * v * P.w + P.tx * (rr() - 0.5) * 0.7, z = P.z + pz * v * P.w + P.tz * (rr() - 0.5) * 0.7;
+        if (top < -1.3 || (z > beach && top < -0.25)) return;     /* (lost in the sea floor, or buried in the sand) */
+        put(x, z, top, k * (0.62 + 0.3 * rr()), k * (0.44 + 0.2 * rr()), k * (0.56 + 0.26 * rr()), lean, sd, P.tx, P.tz, wet);
+      };
+      /* the crest: two or three across, big, their tops about level */
+      const nA = P.w > 1.45 ? 3 : 2;
+      for (let j = 0; j < nA; j++) lay((nA === 3 ? (j - 1) * 0.62 : (j - 0.5) * 0.9) + (rr() - 0.5) * 0.18, P.h + (rr() - 0.55) * 0.24, 1, (rr() - 0.5) * 0.16, 1, false);
+      /* the flanks: leaning out, lower; and the toe at their feet */
+      for (const sd of [-1, 1]) {
+        lay(sd * (1.18 + 0.2 * rr()), P.h - 0.38 - 0.28 * rr(), 0.95, 0.3 + 0.28 * rr(), sd, false);
+        if (rr() < 0.85) lay(sd * (1.8 + 0.25 * rr()), P.h - 1.0 - 0.35 * rr(), 0.82, 0.45 + 0.35 * rr(), sd, true);
+      }
+    }
+    /* the heap round its far end, where the sea breaks over it */
+    const E = at(total);
+    for (let k = 0; k < 9; k++) { const a = rr() * TAU, d = 0.6 + rr() * 2.4, x = E.x + E.tx * (0.8 + d * 0.8) + Math.cos(a) * d * 0.6, z = E.z + E.tz * (0.8 + d * 0.8) + Math.sin(a) * d * 0.6;
+      put(x, z, E.h - 0.3 - 0.25 * d - 0.3 * rr(), 0.9 * (0.6 + 0.3 * rr()), 0.9 * (0.44 + 0.2 * rr()), 0.9 * (0.56 + 0.26 * rr()), 0.25 + 0.4 * rr(), 1, Math.sin(a), -Math.cos(a), true); }
+    /* (the grid: every block in each cell its reach touches) */
+    const grid = new Map();
+    out.forEach((b, i) => { for (let cx = Math.floor((b.x - b.rad) / 2); cx <= Math.floor((b.x + b.rad) / 2); cx++) for (let cz = Math.floor((b.z - b.rad) / 2); cz <= Math.floor((b.z + b.rad) / 2); cz++) { const k = cx * 73856093 ^ cz * 19349663; let c = grid.get(k); if (!c) grid.set(k, c = []); c.push(i); } });
+    L.blocks = out; L.grid = grid; return L;
+  }
+  /* how high a block's top is over (x, z) (null if it isn't over it): the lowest of its upward faces' planes there, if
+     that is above the highest of its downward ones */
+  function blockTop(b, x, z) {
+    let hi = 1e9, lo = -1e9;
+    for (const w of b.W) {
+      const r = w[3] - w[0] * x - w[2] * z;
+      if (w[1] > 1e-6) hi = Math.min(hi, r / w[1]); else if (w[1] < -1e-6) lo = Math.max(lo, r / w[1]); else if (r < 0) return null;
+    }
+    return hi >= lo ? hi : null;
+  }
+  /* the highest block top under a foot at (x, z): sampled over its sole, so a crack between two blocks is stepped over */
+  const SOLE = [[0, 0], [0.2, 0], [-0.2, 0], [0, 0.2], [0, -0.2]];
+  function blocksH(L, x, z) {
+    let best = -9;
+    for (const [dx, dz] of SOLE) {
+      const c = L.grid.get(Math.floor((x + dx) / 2) * 73856093 ^ Math.floor((z + dz) / 2) * 19349663); if (!c) continue;
+      for (const i of c) { const t = blockTop(L.blocks[i], x + dx, z + dz); if (t !== null && t > best) best = t; }
+    }
+    return best;
+  }
+  /* the reef under a point (coast coordinates): how high its rock stands there (−9 off it), the blocks or the ledge
+     between them; and whether it is the walkable top (in reefOn) */
   let reefOn = false;
   function reefH(x, z) {
     reefOn = false; let best = -9;
@@ -137,9 +259,11 @@ const World = (() => {
       for (let i = 0; i < L.length - 1; i++) {
         const A = L[i], C = L[i + 1], ex = C.x - A.x, ez = C.z - A.z, ll = ex * ex + ez * ez, u = Math.max(0, Math.min(1, ((x - A.x) * ex + (z - A.z) * ez) / ll));
         const qx = A.x + ex * u, qz = A.z + ez * u, d2 = (x - qx) ** 2 + (z - qz) ** 2, w = A.w + (C.w - A.w) * u; if (d2 > 4 * w * w) continue;
-        const v = Math.sqrt(d2) / w, hh = reefProf(A.h + (C.h - A.h) * u, v) + 0.05 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5);
-        if (hh > best) { best = hh; reefOn = v < 0.92 && (i > 0 || u > 0.3); }
+        const v = Math.sqrt(d2) / w, hh = reefProf(A.h + (C.h - A.h) * u, v) - CORE + 0.05 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5);
+        if (hh > best) best = hh;
+        if (v < 0.92 && (i > 0 || u > 0.3)) reefOn = true;
       }
+      best = Math.max(best, blocksH(reefBlocks(L), x, z));
     }
     return best;
   }
@@ -215,7 +339,7 @@ const World = (() => {
   }
   const SMALL = [[1, 0.8, 1], [1.2, 0.62, 1.05], [0.9, 1.15, 0.85], [1.35, 0.52, 0.95], [1.05, 0.86, 1.15], [1.15, 0.66, 0.9]];
   const BIG = [[1.1, 0.95, 1], [1.3, 0.78, 1.1], [0.95, 1.4, 0.9], [1.4, 0.82, 1.2]];
-  const protoOf = (R, p) => p.kind === 'stack' ? R.stack : p.kind === 'big' ? R.big[p.p % R.big.length] : R.small[p.p % R.small.length];
+  const protoOf = (R, p) => p.block ? p.block.proto : p.kind === 'stack' ? R.stack : p.kind === 'big' ? R.big[p.p % R.big.length] : R.small[p.p % R.small.length];
 
   /* where a headland's rocks go: big blocks on its face and boulders round its foot, none on the strip of sand the van
      drives round on; boulders in the surf off the point, and its sea stacks. Seeded by the headland, so they are the
@@ -632,17 +756,18 @@ void main(){
     }
   }
 
-  /* a reef's rock as a mesh: rows along its line, out to sea; across each, from one flank over the top to the other */
+  /* a reef's core as a mesh: the ledge under its blocks, filling between them (low, dark, mostly in their shadow): rows
+     along its line, out to sea; across each, from one flank over the top to the other */
   function reefGeo(L, o) {
     const NC = 17, nr = L.length, P = new Float32Array(nr * NC * 3), Cc = new Float32Array(nr * NC * 3), RK = new Float32Array(nr * NC).fill(1), idx = [];
     for (let i = 0; i < nr; i++) {
       const p = L[i];
       for (let j = 0; j < NC; j++) {
-        const v = (j / (NC - 1) * 2 - 1) * 1.95, x = p.x + L.px * v * p.w, z = p.z + L.pz * v * p.w;
-        let y = reefProf(p.h, v) + 0.09 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5) + 0.04 * (vn(x * 5.1, 1.9, z * 5.1) - 0.5) - 0.12 * Math.pow(1 - Math.abs(2 * vn(x * 0.9, 3.3, z * 0.9) - 1), 6);
+        const v = (j / (NC - 1) * 2 - 1) * 1.7, x = p.x + L.px * v * p.w, z = p.z + L.pz * v * p.w;
+        let y = reefProf(p.h, v) - CORE + 0.09 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5) + 0.04 * (vn(x * 5.1, 1.9, z * 5.1) - 0.5);
         if (i === 0) y = Math.min(y, -0.35);                  /* (its end buried in the sand) */
         const k = (i * NC + j) * 3; P[k] = x - o.x; P[k + 1] = Math.max(y, -1.7); P[k + 2] = z - o.z;
-        const tone = (0.82 + 0.4 * fbm(x * 0.6, 3.3, z * 0.6, 2)) * (1 + 0.15 * Math.max(0, 0.7 - Math.abs(v)));
+        const tone = 0.55 * (0.82 + 0.4 * fbm(x * 0.6, 3.3, z * 0.6, 2));
         Cc[k] = 0.15 * tone; Cc[k + 1] = 0.136 * tone; Cc[k + 2] = 0.118 * tone;
       }
     }
@@ -680,7 +805,7 @@ void main(){
     const farParts = { palm: [['bark', barkP], ['fA', frondT[0]]], tall: [['bark', barkP], ['fA', frondT[0]]], tree: leafParts };
 
     const worldG = new T.Group(); worldG.name = 'world'; worldG.matrixAutoUpdate = false; root.add(worldG);
-    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3();
+    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), tint = new T.Color();
     /* where the world sits on the coast (Layout.O), as it was when these chunks were built */
     const o = { x: Layout.O.x, z: Layout.O.z }; let ver = Layout.coastVer;
     const chunks = new Map(), live = [], hooks = { place: [], tiny: [], near: [], far: [] };
@@ -740,23 +865,18 @@ void main(){
       ch.reefs = [];
       for (const R of Co.reefs(X0c, X1c)) {
         if (R.x < X0c || R.x >= X1c) continue;
-        const L = reefLine(R), rr = rng(R.seed);
-        for (let i = 2; i < L.length; i++) {
-          const P = L[i]; if (rr() > 0.8) continue;
-          for (const sd of [-1, 1]) { if (rr() < 0.3) continue;
-            const off = (1.2 + 0.5 * rr()) * P.w, sz = (0.45 + 0.7 * rr()) * (0.8 + 0.5 * P.t);
-            add(P.x + L.px * sd * off + (rr() - 0.5) * 0.5, -0.22 * sz - 0.12, P.z + L.pz * sd * off + (rr() - 0.5) * 0.5, sz, sz > 1.1 ? 'big' : 'small', { reef: 1 }, rr); }
-        }
-        const E = L[L.length - 1];
-        for (let k = 0; k < 7; k++) { const sz = 0.8 + rr() * 1.1, a = rr() * TAU, d = rr() * 2.4; add(E.x + L.ox * (0.6 + d) + Math.cos(a) * d * 0.7, -0.3 * sz, E.z + L.oz * (0.6 + d) + Math.sin(a) * d * 0.7, sz, sz > 1.2 ? 'big' : 'small', { reef: 1 }, rr); }
+        const L = reefBlocks(reefLine(R));
+        /* its blocks, drawn as the rocks are, each its own shape turned and sized as it lies, and its own colour */
+        for (const b of L.blocks) rocks.push({ x: b.x, y: b.y, z: b.z, block: b, proto: b.proto, reef: 1, kind: 'block' });
         /* (the van can't drive over its end on the sand) */
         for (let i = 0; i < L.length; i++) { const P = L[i]; if (P.z < Co.shoreZ(P.x) - 2) break; ch.obstacle(P.x - o.x, P.z - o.z, P.w * 1.3, 'reef'); }
         ch.reefs.push(L);
       }
-      if (ch.claims.length) for (let i = rocks.length - 1; i >= 0; i--) if (claimed(ch, rocks[i].x, rocks[i].z)) rocks.splice(i, 1);
+      if (ch.claims.length) for (let i = rocks.length - 1; i >= 0; i--) if (!rocks[i].block && claimed(ch, rocks[i].x, rocks[i].z)) rocks.splice(i, 1);   /* (a groyne's blocks stay: they are what is walked on) */
       for (const p of rocks) {
         p.proto = protoOf(R, p);
         const xw = p.x - o.x, zw = p.z - o.z, sh = p.proto.shape;
+        if (p.block) { if (p.block.wet && p.z < Co.shoreZ(p.x) + 0.5) ch.wet.push({ x: xw, z: zw, top: Math.max(0.3, p.block.top), rad: p.block.rad * 0.85, id: ch.c * 1000 + ch.wet.length }); continue; }
         if ((p.s > 0.5 || p.kind !== 'small') && !p.reef) ch.obstacle(xw, zw, p.s * 0.82 * (sh[0] + sh[2]) / 2, 'rock');
         if (p.z < Co.shoreZ(p.x) + 0.5 && p.s > 0.4) ch.wet.push({ x: xw, z: zw, top: Math.max(0.3, p.y + p.s * sh[1] * p.sy * 0.9), rad: p.s * 0.9 * (sh[0] + sh[2]) / 2, id: ch.c * 1000 + ch.wet.length });
       }
@@ -765,9 +885,12 @@ void main(){
       for (const p of ch.rocks) { if (!by.has(p.proto)) by.set(p.proto, []); by.get(p.proto).push(p); }
       for (const [proto, list] of by) {
         const inst = new T.InstancedMesh(proto.geo, rockMat, list.length);
-        list.forEach((p, i) => { e.set(p.tx, p.ry, p.tz); q.setFromEuler(e); sc.set(p.s, p.s * p.sy, p.s); pos.set(p.x - o.x, p.y, p.z - o.z); m4.compose(pos, q, sc); inst.setMatrixAt(i, m4); });
+        list.forEach((p, i) => {
+          if (p.block) { q.copy(p.block.q); sc.copy(p.block.sv); inst.setColorAt(i, tint.setRGB(...p.block.col)); } else { e.set(p.tx, p.ry, p.tz); q.setFromEuler(e); sc.set(p.s, p.s * p.sy, p.s); }
+          pos.set(p.x - o.x, p.y, p.z - o.z); m4.compose(pos, q, sc); inst.setMatrixAt(i, m4);
+        });
         inst.castShadow = inst.receiveShadow = true; inst.computeBoundingSphere(); g.rk.add(inst);
-        const fi = new T.InstancedMesh(far.get(proto).geo, rockMat, 0); fi.instanceMatrix = inst.instanceMatrix; fi.count = list.length; fi.computeBoundingSphere(); g.rkFar.add(fi);
+        const fi = new T.InstancedMesh((far.get(proto) || proto).geo, rockMat, 0); fi.instanceMatrix = inst.instanceMatrix; fi.instanceColor = inst.instanceColor; fi.count = list.length; fi.computeBoundingSphere(); g.rkFar.add(fi);
         if (late()) yield;
       }
       /* the reefs' own rock: a ledge along each line, drawn as the headlands' bare rock is (and wet, and weedy at the water) */

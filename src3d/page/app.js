@@ -1290,7 +1290,11 @@
   function walkCamera() {
     const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
     const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
-    const sway = 0.6 * bob * Math.sin(ph), g = Math.max(0, W ? W.land(wk.x, wk.z) : 0), p = wk.cam.pos, l = wk.cam.look;
+    const sway = 0.6 * bob * Math.sin(ph), g0 = Math.max(0, W ? W.land(wk.x, wk.z) : 0), p = wk.cam.pos, l = wk.cam.look;
+    /* (the ground underfoot, eased: stepping from one block of a groyne up or down onto the next lifts the eye or lowers it
+       over a moment, as a step does, rather than all at once) */
+    const now = performance.now(), gdt = Math.min(0.1, (now - (wk.gT || now)) / 1000); wk.gT = now;
+    const g = wk.gs = wk.gs == null || Math.abs(g0 - wk.gs) > 1.2 ? g0 : wk.gs + (g0 - wk.gs) * Math.min(1, gdt * 10);
     p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)); p[2] = wk.z - Math.sin(wk.h) * sway;
     l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
     wk.cam.fov = 60 + 4 * sstep(1.6, 2.8, v);
