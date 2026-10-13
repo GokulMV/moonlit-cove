@@ -328,7 +328,7 @@ void crColour(inout vec3 c){
   if (pat < 0.5) return;
   float nk = crNear(4.0, 0.3);
   if (pat < 1.5){ vec4 f = crFur(); c *= (0.82 + 0.36*f.g)*(0.9 + 0.2*f.b)*mix(1.0, 0.8 + 0.3*f.r, nk); }
-  else if (pat < 2.5) c *= mix(1.0, 0.9 + 0.15*vnz(vRest*260.0), nk);
+  else if (pat < 2.5){ vec3 ce = crCell(vRest*180.0); c *= mix(1.0, (0.9 + 0.14*ce.z)*mix(0.8, 1.0, smoothstep(0.0, 0.12, ce.y))*(0.95 + 0.08*vnz(vRest*900.0)), nk); }
   else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); c *= mix(1.0, (0.82 + 0.3*ce.z)*mix(0.45, 1.0, smoothstep(0.02, 0.16, ce.y)), crNear(3.0, 0.2)); }
   else if (pat < 4.5){ c *= mix(1.0, 0.86 + 0.24*vnz(vRest*140.0) + 0.08*vnz(vRest*600.0), nk); c = mix(c, c*vec3(1.12, 0.92, 0.9), 0.5*smoothstep(0.55, 0.8, vnz(vRest*55.0 + 3.0))*nk); }
   else if (pat < 5.5) c *= 0.92 + 0.14*vnz(vRest*vec3(60.0, 500.0, 60.0));
@@ -344,7 +344,7 @@ vec3 crNormal(vec3 n, float fd){
   if (pat < 0.5 || pat > 5.5 && pat < 6.5 || nk < 0.01) return n;
   float h = 0.0;
   if (pat < 1.5) h = 0.0004*crFur().r;
-  else if (pat < 2.5) h = 0.0003*vnz(vRest*260.0);
+  else if (pat < 2.5){ vec3 ce = crCell(vRest*180.0); h = 0.00035*smoothstep(0.0, 0.2, ce.y) - 0.0002*ce.x; }
   else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); h = vFur.y*vFur.z*(smoothstep(0.0, 0.25, ce.y) - 0.3*ce.x); }
   else if (pat < 4.5){ float n = vnz(vRest*420.0 + 5.0), cr = smoothstep(0.42, 0.5, n)*smoothstep(0.58, 0.5, n); h = 0.00016*vnz(vRest*380.0) + 0.0003*vnz(vRest*vec3(80.0, 240.0, 80.0)) - 0.00004*cr*crNear(0.8, 0.15); }
   else if (pat < 5.5) h = 0.0002*vnz(vRest*vec3(60.0, 500.0, 60.0));
@@ -440,6 +440,7 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
         ws.forEach((q, k) => { si[v * 4 + k] = q[0]; sw[v * 4 + k] = q[1] / s; });
         am.set(val(p.mat, x, y, z, i, [0.6, 0, 0, 0]), v * 4);
         if (p.eye) af.set(p.eye, v * 4);
+        else if (p.raw) af.set(val(p.raw, x, y, z, i, [0, 0, 0, 0]), v * 4);
         else {
           const L = val(p.fur, x, y, z, i, 0), cb = val(p.comb, x, y, z, i, [0, 0, 0]), dn = cb[0] * nx + cb[1] * ny + cb[2] * nz, len = Math.hypot(cb[0], cb[1], cb[2]);
           let tx = cb[0] - dn * nx, ty = cb[1] - dn * ny, tz = cb[2] - dn * nz; const tl = Math.hypot(tx, ty, tz);
@@ -448,7 +449,7 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
         }
       }
       const I = g.index ? g.index.array : Array.from({ length: cnt }, (_, i) => i);
-      for (let t = 0; t < I.length; t += 3) { const a = I[t] + base, b = I[t + 1] + base, c = I[t + 2] + base; idx.push(a, b, c); if (!p.eye && (af[a * 4] > 0 || af[b * 4] > 0 || af[c * 4] > 0)) fidx.push(a, b, c); }
+      for (let t = 0; t < I.length; t += 3) { const a = I[t] + base, b = I[t + 1] + base, c = I[t + 2] + base; idx.push(a, b, c); if (!p.eye && !p.raw && (af[a * 4] > 0 || af[b * 4] > 0 || af[c * 4] > 0)) fidx.push(a, b, c); }
       base += cnt;
     }
     const geo = new T.BufferGeometry();

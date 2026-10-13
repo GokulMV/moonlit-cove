@@ -1,0 +1,80 @@
+/* wild/hornbill — a rhinoceros hornbill (Buceros rhinoceros), the great black bird of the island's canopy: an adult
+   male, about 1 m from bill to tail and 1.5 m across the wings, built as it flies (wings spread, at the origin facing
+   +x) and folded up to perch. Glossy black, the lower belly, thighs and undertail white; the tail white with a broad
+   black band; the huge ivory bill under its casque — orange-red above, yellow below, its front swept up like a horn;
+   the eye red in a black ring. o.clip: perch (also idle), hop, eat (a fig tossed back), call, preen, fly, glide,
+   flapglide (a few heavy wingbeats and a long glide), soar, takeoff, land. */
+(() => {
+  const T = THREE, M = Models;
+  M.add('wild/hornbill', (o = {}) => {
+    const R = Rig, { lin, mix, sst, PAT } = R;
+    const C = { black: lin('#121212'), gloss: lin('#1a1f1c'), white: lin('#e6e2d9'), ivory: lin('#e3d4a2'), bill0: lin('#c9692c'), casqR: lin('#c63a1a'), casqY: lin('#e09a2c'), leg: lin('#5c645a'), iris: lin('#a3231a'), ring: lin('#1a1514') };
+    /* the bill's middle line, from its base to its tip, bowed down a little */
+    const BB = [0.3, 0.303], BT = [0.552, 0.232], bill = s => [BB[0] + (BT[0] - BB[0]) * s, BB[1] + (BT[1] - BB[1]) * s - 0.016 * Math.sin(Math.PI * s), 0];
+    const chainE = (pts, rad, bone, tag, k = 0.006) => pts.slice(0, -1).map((p, i) => { const q = pts[i + 1], mid = p.map((v, j) => (v + q[j]) / 2), L = Math.hypot(q[0] - p[0], q[1] - p[1]) / 2 + 0.004, a = Math.atan2(q[1] - p[1], q[0] - p[0]), [rh, rw] = rad(i / (pts.length - 2));
+      return { ell: mid, r: [L * 1.3, rh, rw], rot: [0, 0, a], bone, tag, k }; });
+    const upperPts = Array.from({ length: 10 }, (_, i) => bill(i / 9)), lowerPts = Array.from({ length: 9 }, (_, i) => { const s = i / 8, p = bill(0.02 + 0.95 * s); return [p[0], p[1] - 0.018 * (1 - s) - 0.002, 0]; });
+    /* (the casque: along the top of the bill from its base, deepening forward, its front end turned up like a horn) */
+    const depth = s => 0.028 * Math.pow(1 - s, 0.75) + 0.003, ch = s => 0.016 + 0.03 * sst(0.0, 0.62, s);
+    const casquePts = [...Array.from({ length: 8 }, (_, i) => { const s = 0.03 + 0.6 * i / 7, p = bill(s); return [p[0], p[1] + depth(s) + ch(s) * 0.45, 0]; })];
+    { const last = casquePts[casquePts.length - 1]; casquePts.push([last[0] + 0.012, last[1] + 0.022, 0], [last[0] + 0.014, last[1] + 0.042, 0], [last[0] + 0.006, last[1] + 0.058, 0]); }
+    return Bird.build(o, {
+      name: 'hornbill', size: 1, dihedral: 0.06, gape: 0.35,
+      body: { c: [0.0, 0.25], r: [0.16, 0.095, 0.092] },
+      neck: { pts: [[0.12, 0.27], [0.18, 0.287], [0.235, 0.298]], r: [0.055, 0.042] },
+      head: { c: [0.268, 0.306], r: [0.052, 0.046, 0.038], fwd: [0.97, -0.24, 0], cell: 0.0012 },
+      bill: { tip: [BT[0], BT[1], 0], gape: [0.298, 0.288], cell: 0.0012,
+        shapes: () => [
+          ...chainE(upperPts, f => [0.028 * Math.pow(1 - f, 0.75) + 0.003, 0.019 * Math.pow(1 - f, 0.7) + 0.002], 'head', 'upper'),
+          ...chainE(lowerPts, f => [0.011 * Math.pow(1 - f, 0.7) + 0.0015, 0.016 * Math.pow(1 - f, 0.7) + 0.002], 'jaw', 'lower'),
+          ...chainE(casquePts, f => [f < 0.7 ? ch(0.03 + 0.6 * f / 0.7) * 0.55 : 0.017 - 0.03 * (f - 0.7), 0.0145 - 0.006 * f], 'head', 'casque', 0.008)] },
+      eye: { at: [0.284, 0.316, 0.034], r: 0.0082, ax: [0.25, 0.1, 0.95], col: C.iris, iris: 0.62, pupil: 0.32, white: 0.08, lid: C.ring },
+      wing: { sh: [0.07, 0.29, 0.075], arm: 0.12, fore: 0.15, hand: 0.085, lead: [0.02, 0.015, 0.011], panel: [0.045, 0.04, 0.028], panelT: 0.007,
+        prim: { n: 10, len: 0.34, w: 0.07, emarg: 0.5 }, sec: { n: 12, len: 0.24, w: 0.072 }, tert: 3, cov: 0.42 },
+      tail: { at: [-0.15, 0.255], n: 10, len: 0.34, w: 0.17, fan: 0.3, shape: f => 1 - 0.12 * f * f },
+      leg: { hip: [-0.01, 0.2, 0.046], knee: [0.006, 0.16], ankle: [-0.002, 0.088], foot: [0.016, 0.013], toe: [0.04, 0.05, 0.042], hallux: 0.032, r: 0.0088, claw: 0.011, spread: 0.42, scale: 0.0042, feathered: true },
+      perch: { pitch: 0.45, dy: -0.03, footX: 0.03, curl: 0.6, tail: 0.6 },
+      flap: { hz: 2.4, amp: 0.85 },
+      paint: {
+        body: (x, y, z, nx, ny, nz, tg, FEATH) => {
+          /* (black, glossed green; the lower belly, vent and thighs white) */
+          const vent = sst(-0.02, -0.09, x) * sst(-0.1, -0.5, ny) + (tg.thigh || 0), w = Math.min(1, vent);
+          return { col: mix(mix(C.black, C.gloss, 0.5 + 0.5 * M.vn(x * 40, y * 40, z * 40)), C.white, w), mat: [w > 0.5 ? 0.7 : 0.52, w > 0.5 ? 0.03 : 0.18, PAT.feather, 0], fur: 0 };
+        },
+        head: (x, y, z, nx, ny, nz, tg) => ({ col: (tg.socket || 0) > 0.4 ? C.ring : C.black, mat: [0.52, 0.18, PAT.feather, 0], fur: 0 }),
+        bill: (x, y, z, nx, ny, nz, tg) => {
+          if ((tg.casque || 0) > 0.5) { const sb = R.clamp((x - BB[0]) / (BT[0] - BB[0]), 0, 1), bt = bill(sb)[1] + depth(sb), top = sst(bt + 0.012, bt + 0.032, y) + sst(0.47, 0.5, x) * 0.7; return { col: mix(C.casqY, C.casqR, Math.min(1, top)), mat: [0.32, 0.45, PAT.horn, 0], fur: 0 }; }
+          const base = sst(0.34, 0.305, x);
+          return { col: mix(C.ivory, C.bill0, base * 0.8), mat: [0.3, 0.45, PAT.horn, 0], fur: 0 };
+        },
+        feather: (kind, i, s, c, top, f) => {
+          if (kind === 'tail') { const band = sst(0.36, 0.4, s) * (1 - sst(0.66, 0.7, s)); return mix(C.white, C.black, band).map(v => v * (top ? 1 : 0.92)); }
+          return mix(C.black, C.gloss, top ? 0.4 : 0.1).map(v => v * (0.9 + 0.2 * c));
+        },
+        leg: C.leg, claw: lin('#3a3632')
+      },
+      more: (clips, K) => {
+        const { R, V, wing, tailPose, legTo, look, face, perchBody, FWD, flapHz, amp, TAU } = K, { sst } = R;
+        /* the hop along a branch: both feet together, the wings flicked half open */
+        clips.hop = (P, t) => {
+          const c = (t % 0.9) / 0.9, up = Math.sin(Math.PI * sst(0.1, 0.6, c)), fl = Math.sin(Math.PI * sst(0.05, 0.55, c));
+          perchBody(P, t, 0.6, 0.6 * (1 - up)); P.off.y += 0.07 * up; P.off.x += 0.12 * sst(0.1, 0.6, c);
+          for (const s of [-1, 1]) wing(P, s, { f: 1 - 0.55 * fl, lift: 0.4 * fl, fan: 0.3 * fl });
+          look(P, FWD.clone().add(V(0, -0.1, 0)), 1); face(P, t);
+        };
+        /* a fig: the head flicked up and the fruit tossed back down the throat */
+        clips.eat = (P, t) => {
+          perchBody(P, t);
+          const c = (t % 2.6) / 2.6, flick = sst(0.3, 0.42, c) * (1 - sst(0.5, 0.7, c));
+          look(P, FWD.clone().add(V(0, -0.35 * (1 - flick) + 0.9 * flick, 0)), 1); face(P, t, 0.25 * flick + 0.05 * sst(0.0, 0.1, c) * (1 - sst(0.2, 0.3, c)));
+        };
+        /* the hornbill's way of flying: five heavy beats (their whoosh carries), then a long glide */
+        clips.flapglide = (P, t, k) => {
+          const per = 5 / flapHz + 2.2, c = t % per, beating = c < 5 / flapHz;
+          if (beating) clips.fly(P, t, k); else clips.glide(P, t, k);
+          if (!beating && c - 5 / flapHz < 0.3) { const e = 1 - (c - 5 / flapHz) / 0.3; for (const s of [-1, 1]) wing(P, s, { f: 0.04 + 0.2 * e, lift: 0.08 + 0.2 * e, fan: 0.5 }); }
+        };
+      }
+    });
+  });
+})();
