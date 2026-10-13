@@ -279,9 +279,10 @@ const Rig = (() => {
   /* ── the look: one material for the whole body; what each point is comes with it as aM = [roughness, clearcoat,
      pattern, thinness] — pattern 1 fur (the coat under its shells, and all of it seen from far off), 2 feathers, 3
      scales, 4 bare skin, 5 horn, nail, claw or tooth, 6 an eye (its uv: how far from the middle of it, and round), 7
-     chitin, 8 a membrane; aFur = [the fur's length, the way it lies (its length how far it leans)], or for an eye
-     [0, the iris's radius, the pupil's, the white's brightness] ── */
-  const PAT = { none: 0, fur: 1, feather: 2, scale: 3, skin: 4, horn: 5, eye: 6, chitin: 7, membrane: 8 };
+     chitin, 8 a membrane, 9 a flight feather's vane; aFur = [the fur's length, the way it lies (its length how far it
+     leans)], or for an eye [0, the iris's radius, the pupil's, the white's brightness], for feathers [their spacing (m)],
+     for a vane [where its shaft is across it (uv.x), its length, its width (m), which feather] ── */
+  const PAT = { none: 0, fur: 1, feather: 2, scale: 3, skin: 4, horn: 5, eye: 6, chitin: 7, membrane: 8, vane: 9 };
   let FURT = null;
   /* the fur's strands: each texel one, its length (red), its shade (green), the clump it is in (blue); tiling */
   function furTex() {
@@ -320,6 +321,39 @@ vec3 crPerturb(vec3 sp, vec3 n, vec2 dh, float fd){
   return normalize(abs(det)*n - sign(det)*clamp(dh.x*r1 + dh.y*r2, vec3(-2.0), vec3(2.0)));
 }
 float crNear(float a, float b){ return smoothstep(a, b, distance(vWPos, cameraPosition)); }
+/* feathers lying over a body, in rows: each rounded tip over the bases of the two behind it. q in feathers (x the way
+   they lie, toward the tail; y across). → (how far in from the tip's edge of the feather that shows, the shade under
+   the tip of the one over it, which feather, how far across it from its middle) */
+vec4 crScal(vec2 q){
+  float r = floor(q.x), rp = r - 1.0;
+  float vp = q.y + 0.5*mod(rp, 2.0) + 0.3*crH(vec3(rp, 0.7, 2.1)), jp = floor(vp), hp = crH(vec3(rp, jp, 1.3)), dp = fract(vp) - 0.5, tp = rp + 1.3 + 0.16*hp - 1.3*dp*dp;
+  if (q.x < tp) return vec4(tp - q.x, 0.0, hp, dp);
+  float v = q.y + 0.5*mod(r, 2.0) + 0.3*crH(vec3(r, 0.7, 2.1)), j = floor(v), h = crH(vec3(r, j, 1.3)), d = fract(v) - 0.5, t = r + 1.3 + 0.16*h - 1.3*d*d;
+  return vec4(t - q.x, 1.0 - smoothstep(0.0, 0.22, q.x - tp), h, d);
+}
+/* (the three ways the feathers are seen, blended by which way the surface faces at rest: from the side and from above
+   they lie back toward the tail, from the front down) */
+vec3 crFeath(float fs){
+  vec3 w = pow(abs(normalize(vRestN)), vec3(4.0)); w /= (w.x + w.y + w.z);
+  vec3 o = vec3(0.0); vec4 a;
+  for (int k = 0; k < 3; k++) {
+    float wk = k == 0 ? w.z : k == 1 ? w.y : w.x; if (wk < 0.02) continue;
+    vec2 q = k == 0 ? vec2(-vRest.x, vRest.y) : k == 1 ? vec2(-vRest.x, vRest.z) : vec2(-vRest.y, vRest.z);
+    a = crScal(q/vec2(fs*0.8, fs) + float(k)*0.37);
+    float tone = (0.95 + 0.07*a.z)*(1.0 - 0.13*a.y)*(1.0 - 0.035*(1.0 - smoothstep(0.0, 0.04, abs(a.w)))*smoothstep(0.15, 0.6, a.x));
+    float h = fs*(0.04*(1.0 - smoothstep(0.15, 0.55, a.x))*smoothstep(0.0, 0.06, a.x) - 0.03*a.w*a.w);
+    o += wk*vec3(tone, h, 0.0);
+  }
+  return o;
+}
+/* a flight feather's vane: the shaft along it, the barbs leaning off it toward the tip, here and there parted */
+vec3 crVane(){
+  float W = vFur.z, dx = (vUv2.x - vFur.x)*W, al = vUv2.y*vFur.y, fw = fwidth(dx) + 1e-6;
+  float rw = W*(0.016 - 0.011*vUv2.y), sh = 1.0 - smoothstep(rw - fw, rw + fw, abs(dx));
+  float bl = al - abs(dx)*1.7, bs = 0.0011, ab = 1.0 - smoothstep(0.35, 0.9, fwidth(bl)/bs), barb = 0.5 + 0.5*sin(bl/bs*6.2832);
+  float pt = vnz(vec3(bl*180.0, sign(dx)*5.0 + vFur.w*13.0, 0.5)), split = smoothstep(0.74, 0.8, pt)*(1.0 - smoothstep(0.3, 0.8, fwidth(bl*180.0)));
+  return vec3(sh, mix(0.5, barb, ab), split);
+}
 uniform sampler2D uFurT; uniform float uFurD;
 vec4 crFur(){ vec3 w = pow(abs(normalize(vRestN)), vec3(6.0)); w /= (w.x + w.y + w.z);
   return texture2D(uFurT, vRest.yz*uFurD)*w.x + texture2D(uFurT, vRest.xz*uFurD + 0.37)*w.y + texture2D(uFurT, vRest.xy*uFurD + 0.71)*w.z; }
@@ -328,8 +362,8 @@ void crColour(inout vec3 c){
   if (pat < 0.5) return;
   float nk = crNear(4.0, 0.3);
   if (pat < 1.5){ vec4 f = crFur(); c *= (0.82 + 0.36*f.g)*(0.9 + 0.2*f.b)*mix(1.0, 0.8 + 0.3*f.r, nk); }
-  else if (pat < 2.5){ vec3 ce = crCell(vRest*180.0); c *= mix(1.0, (0.9 + 0.14*ce.z)*mix(0.8, 1.0, smoothstep(0.0, 0.12, ce.y))*(0.95 + 0.08*vnz(vRest*900.0)), nk); }
-  else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); c *= mix(1.0, (0.82 + 0.3*ce.z)*mix(0.45, 1.0, smoothstep(0.02, 0.16, ce.y)), crNear(3.0, 0.2)); }
+  else if (pat < 2.5){ float fs = vFur.x > 0.0 ? vFur.x : 0.0056; c *= mix(1.0, crFeath(fs).x, crNear(fs*400.0, fs*60.0)); }
+  else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); c *= mix(1.0, (0.88 + 0.2*ce.z)*mix(0.62, 1.0, smoothstep(0.02, 0.16, ce.y)), crNear(vFur.y*500.0, vFur.y*60.0)); }
   else if (pat < 4.5){ c *= mix(1.0, 0.86 + 0.24*vnz(vRest*140.0) + 0.08*vnz(vRest*600.0), nk); c = mix(c, c*vec3(1.12, 0.92, 0.9), 0.5*smoothstep(0.55, 0.8, vnz(vRest*55.0 + 3.0))*nk); }
   else if (pat < 5.5) c *= 0.92 + 0.14*vnz(vRest*vec3(60.0, 500.0, 60.0));
   else if (pat < 6.5){
@@ -338,16 +372,18 @@ void crColour(inout vec3 c){
     c = r < pr ? vec3(0.006) : r < ir ? iris : vec3(vFur.w)*mix(0.55, 1.0, smoothstep(ir, ir + 0.25, r));
   }
   else if (pat < 7.5) c *= mix(1.0, 0.9 + 0.16*vnz(vRest*300.0), nk);
+  else if (pat > 8.5){ vec3 v = crVane(); c *= mix(1.0, (0.97 + 0.05*v.y)*(1.0 - 0.16*v.z), nk); c = mix(c, c*0.84 + vec3(0.006), v.x); }
 }
 vec3 crNormal(vec3 n, float fd){
   float pat = vM.z, nk = crNear(3.0, 0.25);
   if (pat < 0.5 || pat > 5.5 && pat < 6.5 || nk < 0.01) return n;
   float h = 0.0;
   if (pat < 1.5) h = 0.0004*crFur().r;
-  else if (pat < 2.5){ vec3 ce = crCell(vRest*180.0); h = 0.00035*smoothstep(0.0, 0.2, ce.y) - 0.0002*ce.x; }
+  else if (pat < 2.5){ float fs = vFur.x > 0.0 ? vFur.x : 0.0056; h = crFeath(fs).y*crNear(fs*300.0, fs*50.0); }
   else if (pat < 3.5){ vec3 ce = crCell(vRest/max(vFur.y, 1e-4)); h = vFur.y*vFur.z*(smoothstep(0.0, 0.25, ce.y) - 0.3*ce.x); }
   else if (pat < 4.5){ float n = vnz(vRest*420.0 + 5.0), cr = smoothstep(0.42, 0.5, n)*smoothstep(0.58, 0.5, n); h = 0.00016*vnz(vRest*380.0) + 0.0003*vnz(vRest*vec3(80.0, 240.0, 80.0)) - 0.00004*cr*crNear(0.8, 0.15); }
   else if (pat < 5.5) h = 0.0002*vnz(vRest*vec3(60.0, 500.0, 60.0));
+  else if (pat > 8.5){ vec3 v = crVane(); h = vFur.z*0.004*v.x + 0.00003*v.y - 0.00004*v.z; }
   else h = 0.0002*vnz(vRest*300.0);
   h *= nk;
   return crPerturb(-vViewPosition, n, vec2(dFdx(h), dFdy(h)), fd);

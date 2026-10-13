@@ -19,7 +19,7 @@ const Bird = (() => {
   function build(o, sp) {
     const R = Rig, { lin, mix, sst, clamp, PAT, wave, qE } = R, V = (x, y, z) => new T.Vector3(x, y, z), side = s => s < 0 ? 'L' : 'R';
     const bd = sp.body, nk = sp.neck, hd = sp.head, wg = sp.wing, tl = sp.tail, lg = sp.leg;
-    const FEATH = [0.62, 0.12, PAT.feather, 0];
+    const FEATH = [0.72, 0.03, PAT.feather, 0];
     /* ── the wing's joints, spread: the humerus out and a little back, the forearm out and a little forward, the
        hand swept back ── */
     const W = s => {
@@ -53,10 +53,12 @@ const Bird = (() => {
       for (let i = 0; i < Sd.n; i++) { const f = i / (Sd.n - 1), root = J.Wr.clone().lerp(J.E, 0.04 + 0.92 * f).add(V(-0.006, 0, 0)), psi = 1.32 + 0.22 * f;
         FD.push({ name: 's' + X + i, par: 'el' + X, root, dir: fdir(psi, s), L: Sd.len * (1 - 0.06 * f), w: Sd.w, kind: 'sec', i, s, f }); }
       for (let i = 0; i < NT; i++) { const f = i / Math.max(1, NT - 1), root = J.E.clone().lerp(J.S0, 0.15 + 0.5 * f).add(V(-0.012, 0.004, 0)), psi = 1.62 + 0.18 * f;
-        FD.push({ name: 'te' + X + i, par: 'sh' + X, root, dir: fdir(psi, s), L: Sd.len * (0.85 - 0.25 * f), w: Sd.w * 1.05, kind: 'tert', i, s, f }); }
+        FD.push({ name: 'te' + X + i, par: 'sh' + X, root, dir: fdir(psi, s), L: Sd.len * (0.85 - 0.25 * f), w: Sd.w * 0.85, kind: 'tert', i, s, f }); }
       const cv = wg.cov ?? 0.42;
-      for (let i = 0; i < Sd.n; i++) { const d = FD.find(q => q.name === 's' + X + i); FD.push({ name: 'c' + X + i, par: 'el' + X, root: d.root.clone().add(V(0.012, 0.006, 0)), dir: d.dir.clone(), L: d.L * cv, w: d.w * 0.95, kind: 'cov', i, s, f: d.f }); }
-      for (let i = 0; i < P.n; i += 2) { const d = FD.find(q => q.name === 'p' + X + i); FD.push({ name: 'q' + X + i, par: 'wr' + X, root: d.root.clone().add(V(0.01, 0.006, 0)), dir: d.dir.clone(), L: d.L * cv * 0.8, w: d.w * 0.95, kind: 'pcov', i, s, f: d.f }); }
+      /* (the greater coverts over the secondaries' bases, a row of median coverts before them, the primary coverts) */
+      for (let i = 0; i < Sd.n; i++) { const d = FD.find(q => q.name === 's' + X + i); FD.push({ name: 'c' + X + i, par: 'el' + X, root: d.root.clone().add(V(0.002, 0.006, 0)), dir: d.dir.clone(), L: d.L * cv, w: d.w * 0.62, kind: 'cov', i, s, f: d.f }); }
+      for (let i = 0; i < Sd.n; i += 2) { const d = FD.find(q => q.name === 's' + X + i); FD.push({ name: 'm' + X + i, par: 'el' + X, root: d.root.clone().add(V(0.004, 0.009, 0)), dir: d.dir.clone(), L: d.L * cv * 0.5, w: d.w * 0.42, kind: 'mcov', i, s, f: d.f }); }
+      for (let i = 0; i < P.n; i += 2) { const d = FD.find(q => q.name === 'p' + X + i); FD.push({ name: 'q' + X + i, par: 'wr' + X, root: d.root.clone().add(V(0.002, 0.006, 0)), dir: d.dir.clone(), L: d.L * cv * 0.8, w: d.w * 0.6, kind: 'pcov', i, s, f: d.f }); }
     }
     for (const d of FD) defs.push([d.name, d.par, d.root.toArray(), { tail: d.root.clone().addScaledVector(d.dir, d.L).toArray() }]);
     const S = R.skeleton(defs);
@@ -84,18 +86,53 @@ const Bird = (() => {
     ];
     const body = R.sculpt(bodyShapes, { name: 'body', S, cell: sp.cell || 0.003, tau: sp.tau || 0.006,
       paint: (x, y, z, nx, ny, nz, tg) => sp.paint.body(x, y, z, nx, ny, nz, tg, FEATH) });
+    /* (the contour feathers' spacing, for the way they are drawn over the body: smaller on the head) */
+    const FSZ = sp.feather || ry * 0.1;
+    body.raw = () => [FSZ, 0, 0, 0];
 
     /* ── the head and bill ── */
     const HB = { S, V };
     const head = R.sculpt([{ ell: [hd.c[0], hd.c[1], 0], r: hd.r, bone: 'head', tag: 'head', k: 0 }, ...(hd.shapes ? hd.shapes(HB) : []),
       ...[-1, 1].map(s => ({ ell: [sp.eye.at[0] + 0.15 * sp.eye.r * sp.eye.ax[0], sp.eye.at[1], s * (sp.eye.at[2] + 0.3 * sp.eye.r)], r: [sp.eye.r * 1.05, sp.eye.r * 0.8, sp.eye.r * 0.95], rot: [0, s * Math.atan2(sp.eye.ax[0], sp.eye.ax[2]) * 0.3, 0], sub: true, tag: 'socket', k: sp.eye.r * 0.2 }))],
       { name: 'head', S, cell: hd.cell || 0.0012, tau: 0.003, paint: (x, y, z, nx, ny, nz, tg) => sp.paint.head(x, y, z, nx, ny, nz, tg, FEATH) });
-    const BG = sp.bill.gape, billBind = (x, y, z, ws, tw) => {
-      const lower = (tw.lower || 0) > 0.5;
-      return [[S.ix[lower ? 'jaw' : 'head'], 1]];
-    };
-    const bill = R.sculpt(sp.bill.shapes(HB), { name: 'bill', S, cell: sp.bill.cell || 0.0009, tau: 0.002, bind: billBind,
+    head.raw = () => [FSZ * 0.55, 0, 0, 0];
+    const billBind = (x, y, z, ws, tw) => [[S.ix[(tw.lower || 0) > 0.5 ? 'jaw' : 'head'], 1]];
+    const bill = sp.beak ? null : R.sculpt(sp.bill.shapes(HB), { name: 'bill', S, cell: sp.bill.cell || 0.0009, tau: 0.002, bind: billBind,
       paint: (x, y, z, nx, ny, nz, tg) => sp.paint.bill(x, y, z, nx, ny, nz, tg) });
+    /* ── or the bill lofted, smooth horn: each mandible between two lines (the upper's ridge and its cutting edge; the
+       lower's cutting edge and the line under its chin), its sections round or keeled over the top (round: 2 an
+       ellipse … 1 a keel), the cutting edges sharp, closed inside (the palate; the floor of the mouth). beak { upper:
+       { top, bot: [[x, y], …] from the base to the tip, w: s → half-width, round, palate, shape(p, s, u, outer) },
+       lower: { top, bot, w, round, floor, shape }, more: [{ top, bot, w, …, tag }] }, painted by paint.beak(x, y, z, s, u,
+       outer, lower, tag) → { col, mat } ── */
+    const loftBill = (L, lower) => {
+      const cv = q => new T.CatmullRomCurve3(q.map(p => V(p[0], p[1], 0)), false, 'centripetal'), cT = cv(L.top), cB = cv(L.bot);
+      const ns = L.ns || 60, nr = L.nr || 40, m = L.round ?? 2, pos = [], idx = [], cols = [], mats = [];
+      for (let i = 0; i <= ns; i++) {
+        const s = i / ns, A = cT.getPointAt(s), B = cB.getPointAt(s), w = Math.max(1e-5, L.w(s));
+        for (let j = 0; j < nr; j++) {
+          const a = j / nr * TAU, outer = j <= nr / 2, u = Math.cos(a), cu = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(u), m)), 1 / m);
+          const f = outer ? (lower ? cu : 1 - cu) : (lower ? (L.floor ?? 0.3) * (1 - u * u) : 1 - (L.palate ?? 0.35) * (1 - u * u));
+          const p = A.clone().lerp(B, f); p.z = w * u * (outer ? 1 : 0.9);
+          if (L.shape) L.shape(p, s, u, outer);
+          pos.push(p.x, p.y, p.z); const r = sp.paint.beak(p.x, p.y, p.z, s, u, outer, lower, L.tag || (lower ? 'lower' : 'upper')); cols.push(r.col); mats.push(r.mat);
+        }
+      }
+      const ring = i => i * nr;
+      for (let i = 0; i < ns; i++) for (let j = 0; j < nr; j++) { const a = ring(i) + j, b = ring(i) + (j + 1) % nr, c = ring(i + 1) + j, d = ring(i + 1) + (j + 1) % nr; idx.push(a, c, b, b, c, d); }
+      for (const [i, fl] of [[0, true], [ns, false]]) {
+        const c = pos.length / 3; let x = 0, y = 0, z = 0; for (let j = 0; j < nr; j++) { x += pos[(ring(i) + j) * 3]; y += pos[(ring(i) + j) * 3 + 1]; z += pos[(ring(i) + j) * 3 + 2]; }
+        pos.push(x / nr, y / nr, z / nr); cols.push(cols[ring(i)]); mats.push(mats[ring(i)]);
+        for (let j = 0; j < nr; j++) { const a = ring(i) + j, b = ring(i) + (j + 1) % nr; fl ? idx.push(c, b, a) : idx.push(c, a, b); }
+      }
+      let N = M.normalsOf(pos, idx);
+      /* (faces outward: the top of the upper's middle faces up, the underside of the lower's down) */
+      { const k = ring(ns >> 1) + (nr >> 2); if (N[k * 3 + 1] * (lower ? -1 : 1) < 0) { for (let t = 0; t < idx.length; t += 3) { const q = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = q; } N = M.normalsOf(pos, idx); } }
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(N, 3)); g.setIndex(idx); g.computeBoundingSphere();
+      return { geo: g, bind: R.rigid(S, L.bone || (lower ? 'jaw' : 'head')), col: (x, y, z, i) => cols[i], mat: (x, y, z, i) => mats[i], fur: 0 };
+    };
+    /* (and any more pieces lofted the same way over the upper one: a hornbill's casque) */
+    const beak = sp.beak ? [loftBill(sp.beak.upper, false), loftBill(sp.beak.lower, true), ...(sp.beak.more || []).map(L => loftBill(L, false))] : [];
 
     /* ── the legs and feet: scaled, the toes long, the hind toe opposite ── */
     const toeShapes = [];
@@ -114,56 +151,93 @@ const Bird = (() => {
     /* (the leg's scales: their size, and how domed, for the scale pattern) */
     feet.raw = () => [0, lg.scale || lg.r * 0.55, 0.5, 0];
 
+    /* (the body's surface, without its wings: how far from it, the way out of it, a point brought onto it m out) */
+    const trunk = R.field(bodyShapes.filter(q => ['body', 'breast', 'rump', 'neck'].includes(q.tag))), F = p => trunk(p.x, p.y, p.z), e = ry * 0.03;
+    const grad = p => V(F(V(p.x + e, p.y, p.z)) - F(V(p.x - e, p.y, p.z)), F(V(p.x, p.y + e, p.z)) - F(V(p.x, p.y - e, p.z)), F(V(p.x, p.y, p.z + e)) - F(V(p.x, p.y, p.z - e))).normalize();
+    const onto = (p, m) => { for (let i = 0; i < 6; i++) p.addScaledVector(grad(p), m - F(p)); return p; };
+    const STACK = P.n + Sd.n + 2 + NT, gapM = ((wg.fold && wg.fold.gap) ?? 0.007) * Sd.w, m0F = wg.lead[2] * 0.3;
+
     /* ── the flight feathers, each a thin cambered blade on its own bone ── */
     const blades = [];
     const shapeW = (s, emarg) => { const w = sst(0.0, 0.16, s) * Math.pow(Math.max(0, 1 - Math.pow(Math.max(0, (s - 0.5) / 0.5), 2.4)), 0.55); return w; };
     for (const d of FD) {
       /* (across: in the wing's plane, square to the feather, toward its outer vane — the wing's leading edge or tip) */
       const up = V(0, 1, 0), across = V(d.s * d.dir.z, 0, -d.s * d.dir.x).normalize(), root = d.root.clone(), L = d.L;
-      const kind = d.kind, inner = kind === 'prim' ? 0.72 : 0.62, th = kind === 'cov' || kind === 'pcov' ? 0.1 : 0.07;
+      const kind = d.kind, inner = kind === 'prim' ? 0.72 : kind === 'mcov' ? 0.55 : 0.62, th = kind === 'cov' || kind === 'pcov' || kind === 'mcov' ? 0.024 : 0.016;
       const g = M.foil(14, 8, s => {
         let w = d.w * shapeW(s), wo = w * (1 - inner), wi = w * inner;
         if (d.emarg && s > 0.55) { const e = sst(0.55, 0.62, s); wi *= 1 - d.emarg * e; wo *= 1 - 0.4 * d.emarg * e; }
         const p = root.clone().addScaledVector(d.dir, L * s).addScaledVector(up, -0.06 * L * s * s * (kind === 'prim' ? 1 : 0.5));
-        return { le: p.clone().addScaledVector(across, wo + 0.0004).toArray(), ch: across.clone().multiplyScalar(-(wo + wi + 0.0008)).toArray(), up: up.toArray(), th, camber: 0.035 };
-      }, (x, y, z, s, c, top) => sp.paint.feather(kind, d.i, s, c, top, d.f));
-      blades.push({ geo: g, bind: R.rigid(S, d.name), mat: [0.55, 0.15, PAT.feather, 0.18], fur: 0 });
+        return { le: p.clone().addScaledVector(across, wo + 0.0004).toArray(), ch: across.clone().multiplyScalar(-(wo + wi + 0.0008)).toArray(), up: up.toArray(), th, camber: kind === 'prim' || kind === 'sec' ? 0.035 : 0.06 };
+      }, (x, y, z, s, c, top) => sp.paint.feather(kind === 'mcov' ? 'cov' : kind, d.i, s, c, top, d.f));
+      blades.push({ geo: g, bind: R.rigid(S, d.name), mat: [0.6, 0.06, PAT.vane, 0.18], raw: [1 - inner, L, d.w, (d.i * 7 + (d.s > 0 ? 3 : 0)) % 10 / 10] });
+    }
+    /* the scapulars: long feathers from the shoulders lying back over the back's sides and the wing's base, covering
+       where the folded wing meets the back (on the body, so they stay as they lie) */
+    const NSC = wg.scap ?? 8;
+    for (const s of [-1, 1]) for (let i = 0; i < NSC; i++) {
+      const f = i / Math.max(1, NSC - 1), L = Sd.len * (0.62 - 0.2 * f), w = Sd.w * 0.4, mS = m0F + gapM * (STACK + 1 + f * 3);
+      const root = onto(V(wg.sh[0] + 0.02 - 0.09 * f, cy + ry, s * rz * (0.18 + 0.6 * f)), m0F + gapM * STACK * 0.5), dir = V(-1, -0.04 - 0.1 * f, s * (0.04 + 0.3 * f)).normalize();
+      for (let k = 0; k < 4; k++) dir.copy(onto(root.clone().addScaledVector(dir, L * 0.5), mS).sub(root).normalize());
+      const nrm = grad(root.clone().addScaledVector(dir, L * 0.5)).add(V(0, 0.3, 0)); nrm.addScaledVector(dir, -nrm.dot(dir)).normalize();
+      const across = new T.Vector3().crossVectors(dir, nrm).multiplyScalar(s).normalize();
+      const g = M.foil(12, 8, t => { const ww = w * shapeW(t), p = root.clone().addScaledVector(dir, L * t).addScaledVector(nrm, -0.1 * L * t * t);
+        return { le: p.clone().addScaledVector(across, ww * 0.35 + 0.0004).toArray(), ch: across.clone().multiplyScalar(-(ww + 0.0008)).toArray(), up: nrm.toArray(), th: 0.02, camber: 0.07 }; },
+        (x, y, z, t, c, top) => sp.paint.feather('cov', i, t, c, top, 0.5));
+      blades.push({ geo: g, bind: R.rigid(S, 'body'), mat: [0.64, 0.04, PAT.vane, 0.12], raw: [0.35, L, w, (i * 3 + (s > 0 ? 5 : 0)) % 10 / 10] });
     }
     /* the tail's feathers */
     for (let i = 0; i < NR; i++) {
       const n = 'rx' + i, A = S.head[n], Bt = S.tail[n], dir = Bt.clone().sub(A), L = dir.length(); dir.normalize();
       const across = V(-dir.z, 0, dir.x).normalize(), f = NR > 1 ? i / (NR - 1) * 2 - 1 : 0;
       const g = M.foil(14, 8, s => { const w = tl.w / NR * 1.9 * shapeW(s * 0.92 + 0.08), p = A.clone().addScaledVector(dir, L * s).add(V(0, 0.001 * Math.abs(f) * (i % 2), 0));
-        return { le: p.clone().addScaledVector(across, w * 0.45).toArray(), ch: across.clone().multiplyScalar(-w).toArray(), up: [0, 1, 0], th: 0.07, camber: 0.02 }; },
+        return { le: p.clone().addScaledVector(across, w * 0.45).toArray(), ch: across.clone().multiplyScalar(-w).toArray(), up: [0, 1, 0], th: 0.016, camber: 0.02 }; },
         (x, y, z, s, c, top) => sp.paint.feather('tail', i, s, c, top, Math.abs(f)));
-      blades.push({ geo: g, bind: R.rigid(S, n), mat: [0.55, 0.15, PAT.feather, 0.15], fur: 0 });
+      blades.push({ geo: g, bind: R.rigid(S, n), mat: [0.6, 0.06, PAT.vane, 0.15], raw: [0.45, L, tl.w / NR * 1.9, i * 0.37 % 1] });
     }
 
     /* ── the eyes ── */
     const E = sp.eye, eyes = [-1, 1].map(s => R.eye(S, [E.at[0], E.at[1], s * E.at[2]], E.r, [E.ax[0], E.ax[1], s * E.ax[2]], { col: E.col, iris: E.iris ?? 0.62, pupil: E.pupil ?? 0.3, white: E.white ?? 0.1, rough: 0.05, coat: 0.9 }));
     const lids = [-1, 1].map(s => R.lid(S, [E.at[0], E.at[1], s * E.at[2]], E.r * 1.07, [E.ax[0], E.ax[1], s * E.ax[2]], 'lid' + side(s), E.lid || lin('#2a2420'), 0.5));
 
-    const B = R.body(S, [body, head, bill, feet, ...blades, ...eyes, ...lids, ...(sp.parts ? sp.parts(S, HB) : [])], { fur: sp.fur });
+    const B = R.body(S, [body, head, ...(bill ? [bill] : []), ...beak, feet, ...blades, ...eyes, ...lids, ...(sp.parts ? sp.parts(S, HB) : [])], { fur: sp.fur });
     const g = B.g; g.name = sp.name;
 
-    /* ── how the wing folds: the arm's bones and every feather's, turned from the spread pose to the folded one ── */
+    /* ── how the wing folds. The arm's three bones laid against the body's side — the humerus back along the upper
+       flank, the forearm forward to the wrist at the breast, the hand back along it — each joint found on the body's
+       surface, a little out from it. Then the feathers closed over the flank like a fan: the tertials on top over the
+       back, the secondaries under them each a little lower and further in, the primaries innermost, run back along
+       the body and over the tail; each laid on the body at its own depth in the stack, its face turned outward ── */
     const fold = {};
     {
-      const Pf = new R.Pose(S);
+      /* (the way from A, L long, that ends on the surface m out from the body, nearest the way d0) */
+      const hug = (A, L, d0, m) => { const d = d0.clone().normalize(); for (let i = 0; i < 12; i++) d.copy(onto(A.clone().addScaledVector(d, L), m).sub(A).normalize()); return d; };
+      const Pf = new R.Pose(S), up = V(0, 1, 0), FS = wg.fold || {};
       for (const s of [-1, 1]) {
-        const X = side(s), J = W(s);
-        /* (the humerus down and back along the flank, the forearm forward, the hand back along it: each bone's
-           folded way, its feathers' faces turned outward) */
-        const outN = V(0, 0.15, s).normalize(), hdir = V(-0.62, -0.55, s * 0.55).normalize(), fdirv = V(0.97, 0.02, s * 0.22).normalize(), mdir = V(-0.99, -0.06, s * 0.08).normalize();
-        const restH = J.E.clone().sub(J.S0).normalize(), restF = J.Wr.clone().sub(J.E).normalize(), restM = J.Tp.clone().sub(J.Wr).normalize(), up = V(0, 1, 0);
-        const Qh = R.frameTo(restH, up, hdir, outN), Qf = R.frameTo(restF, up, fdirv, outN), Qm = R.frameTo(restM, up, mdir, outN);
-        Pf.aim('sh' + X, Qh); Pf.aim('el' + X, Qf); Pf.aim('wr' + X, Qm);
-        fold['sh' + X] = Pf.get('sh' + X); fold['el' + X] = Pf.get('el' + X); fold['wr' + X] = Pf.get('wr' + X);
-        /* (the feathers back along the body, stacked: primaries on top, fanned only a little, the coverts over them) */
+        const X = side(s), J = W(s), Z = v => V(v[0], v[1], s * v[2]);
+        const restH = J.E.clone().sub(J.S0).normalize(), restF = J.Wr.clone().sub(J.E).normalize(), restM = J.Tp.clone().sub(J.Wr).normalize();
+        const hd = hug(J.S0, wg.arm, Z(FS.arm || [-0.95, -0.05, 0.3]), wg.lead[1] * 0.45), E = J.S0.clone().addScaledVector(hd, wg.arm);
+        const fd = hug(E, wg.fore, Z(FS.fore || [0.97, 0.1, 0]), wg.lead[2] * 0.6), Wr = E.clone().addScaledVector(fd, wg.fore);
+        const md = hug(Wr, wg.hand, Z(FS.hand || [-1, -0.12, 0]), wg.lead[2] * 0.9);
+        Pf.aim('sh' + X, R.frameTo(restH, up, hd, grad(J.S0.clone().lerp(E, 0.6))));
+        Pf.aim('el' + X, R.frameTo(restF, up, fd, grad(E.clone().lerp(Wr, 0.5))));
+        Pf.aim('wr' + X, R.frameTo(restM, up, md, grad(Wr.clone().addScaledVector(md, wg.hand * 0.5))));
+        for (const b of ['sh', 'el', 'wr']) fold[b + X] = Pf.get(b + X);
+        /* (each feather's place in the closed fan, from the innermost — the outer primary, lowest — to the outermost,
+           the innermost tertial on top; the primaries run back to over the tail) */
+        const rank = d => d.kind === 'prim' ? P.n - 1 - d.i : d.kind === 'pcov' ? P.n - 0.5 : d.kind === 'sec' ? P.n + 1 + d.i : d.kind === 'cov' ? P.n + 5 + d.i : d.kind === 'mcov' ? P.n + 9 + d.i : P.n + Sd.n + 2 + d.i;
+        const dm = gapM, m0 = m0F, [a0, a1] = FS.droop || [0.4, 0.1];
+        const TT = V(tl.at[0] - tl.len * (FS.reach ?? 0.7), tl.at[1] + ry * 0.25, 0);
         for (const d of FD.filter(q => q.s === s)) {
-          const k = d.kind, lay = k === 'prim' ? 0.02 + 0.012 * (1 - d.f) : k === 'pcov' ? 0.03 : k === 'sec' ? 0.06 + 0.07 * d.f : k === 'cov' ? 0.08 + 0.06 * d.f : 0.15 + 0.1 * d.f;
-          const want = V(-Math.cos(lay), -0.08 - 0.05 * (k === 'sec' ? d.f : 0), s * Math.sin(lay) * 0.5).normalize();
-          Pf.aim(d.name, R.frameTo(d.dir, up, want, outN)); fold[d.name] = Pf.get(d.name);
+          const root = Pf.at(d.par, d.root), k = d.kind, a = k === 'tert' ? (FS.tert ?? 0.04) : a0 + (a1 - a0) * d.f + (k === 'cov' ? 0.2 : k === 'mcov' ? 0.32 : 0);
+          const dir = k === 'prim' || k === 'pcov' ? V(TT.x, TT.y + ry * 0.15 * (1 - d.f), s * rz * (0.18 + 0.2 * (1 - d.f))).sub(root).normalize() : V(-Math.cos(a), -Math.sin(a), 0);
+          const m = m0 + dm * rank(d);
+          for (let i = 0; i < 4; i++) dir.copy(onto(root.clone().addScaledVector(dir, d.L * 0.5), m).sub(root).normalize());
+          /* (each feather's face turned up a little from the body's, so its inner vane, toward the wing's leading edge,
+             tucks in under the feathers above it) */
+          const tilt = { prim: 0.2, pcov: 0.4, sec: 0.35, cov: 0.55, mcov: 0.6, tert: 0.8 }[k] ?? 0.4;
+          Pf.aim(d.name, R.frameTo(d.dir, up, dir, grad(root.clone().addScaledVector(dir, d.L * 0.5)).add(V(0, tilt, 0))));
+          fold[d.name] = Pf.get(d.name);
         }
       }
     }
@@ -199,7 +273,7 @@ const Bird = (() => {
       for (const s of [-1, 1]) {
         const X = side(s); Pz.set('th' + X, 0, 0, -0.3 * k);
         const kn = Pz.world('tb' + X), back = sp.tuck === 'back';
-        const an = kn.clone().addScaledVector(D(back ? -0.8 : 0.35, back ? -0.6 : -0.94), LT), ft = an.clone().addScaledVector(D(back ? -1 : -0.96, back ? 0.04 : 0.28), LM), tt = ft.clone().addScaledVector(D(back ? -1 : -0.5, back ? 0 : 0.86), LO);
+        const an = kn.clone().addScaledVector(D(back ? -0.88 : 0.35, back ? -0.42 : -0.94), LT), ft = an.clone().addScaledVector(D(back ? -1 : -0.96, back ? 0.12 : 0.28), LM), tt = ft.clone().addScaledVector(D(back ? -0.8 : -0.5, back ? 0.6 : 0.86), LO);
         const rest = [kn, S.head['tm' + X].clone(), S.head['to' + X].clone(), S.tail['to' + X].clone()].map(v => v.clone());
         R.chainTo(Pz, ['tb' + X, 'tm' + X, 'to' + X], [kn, an, ft, tt].map((v, i) => i ? rest[i].clone().lerp(v, k).toArray() : v.toArray()));
         Pz.set('ha' + X, 0, 0, 1.2 * k);
@@ -207,10 +281,12 @@ const Bird = (() => {
     };
     const FWD = V(...(sp.head.fwd || [1, 0, 0])).normalize(), NECK = ['n1', ...np.slice(1, -1).map((p, i) => 'n' + (i + 2))];
     /* the head turned to look along dir, the neck sharing the turn; or the bill brought to a point */
-    const look = (Pz, dir, k = 1) => {
+    /* (the neck's own lift: its base raised and its top bent back down, in an S, the head kept as it looks) */
+    const LIFT = nk.lift || 0;
+    const look = (Pz, dir, k = 1, lift = LIFT) => {
       const d = dir.clone().normalize(), sd = new T.Vector3().crossVectors(d, V(0, 1, 0)); if (sd.lengthSq() < 1e-6) sd.set(0, 0, 1); sd.normalize();
       const Wq = R.frameTo(FWD, V(0, 0, 1), d, sd), Qb = new T.Quaternion(); Pz.world('body', V(), Qb);
-      NECK.forEach((n, i) => { const Qp = new T.Quaternion(); Pz.world(Pz.S.par[n], V(), Qp); Pz.aim(n, Qp.slerp(Wq, (i + 1) / (NECK.length + 1) * k)); });
+      NECK.forEach((n, i) => { const Qp = new T.Quaternion(), fr = (i + 1) / (NECK.length + 1); Pz.world(Pz.S.par[n], V(), Qp); Qp.slerp(Wq, fr * k); if (lift) Qp.multiply(qE(0, 0, lift * (i === 0 ? 1 : -1.1 * fr))); Pz.aim(n, Qp); });
       const Qh = new T.Quaternion(); Pz.world('head', V(), Qh); Pz.aim('head', Qh.slerp(Wq, k).normalize());
     };
     const lookAt = (Pz, pt, k = 1) => look(Pz, pt.clone().sub(Pz.world('head')), k);
@@ -231,7 +307,7 @@ const Bird = (() => {
     const clips = {
       perch: (Pz, t) => {
         perchBody(Pz, t);
-        look(Pz, FWD.clone().add(V(0, 0.15 * wave(t, 5, 0.4), 0.9 * wave(t, 7, 0.35))), 1);
+        look(Pz, FWD.clone().add(V(0, ((sp.perch && sp.perch.gaze) || 0) + 0.15 * wave(t, 5, 0.4), 0.9 * wave(t, 7, 0.35))), 1);
         face(Pz, t);
         const sh = R.every(t, 7, 0.6, 4); if (sh > 0) { const k = Math.sin(Math.PI * sh); for (const s of [-1, 1]) wing(Pz, s, { f: 1 - 0.12 * k, lift: 0.1 * k }); }
       },
