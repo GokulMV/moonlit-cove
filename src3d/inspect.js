@@ -64,6 +64,11 @@ const Inspect = (() => {
     fish: { model: 'life/fish', name: 'Grey mullet', latin: 'Mugil cephalus', home: 'sea', reach: 40, view: [-1.75, 0.2],
       note: 'Mullet leap clear of the water all the time, and still nobody is quite sure why.' }
   };
+  /* the fruit, off the trees round the camp or up off the ground under them (models/flora/fruit.js): each a fruit of its
+     own age, which goes on ripening (and going over) in the hand; thrown, it comes down on the ground ahead and lies
+     there rotting as those under the trees do, the tree taking it back; put down, it drops where it was. What it is like
+     just now (its name and a line about it) the fruit says itself (a candidate's info()) */
+  for (const k of ['mango', 'rambutan', 'durian', 'cempedak', 'papaya', 'banana', 'coconut']) KINDS[k] = { model: 'fruit/one', name: k, latin: '', home: 'ground', reach: 26, fruit: true, view: [-2.3, k === 'banana' ? 1.0 : 0.55], note: '' };
   const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
@@ -94,10 +99,11 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
       const mats = new Set(); model.traverse(m => { if (m.isMesh) { m.frustumCulled = false; (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => mats.add(x)); } });
       return { pivot, model, R: sph.radius || 0.05, mats: [...mats], anim: model.userData.anim || null };
     }
+    /* (what is shared with the world, a fruit's shape and its material, say, is left for the world) */
     function dispose(sp) {
       sp.pivot.parent && sp.pivot.parent.remove(sp.pivot);
-      sp.pivot.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
-      for (const m of sp.mats) { if (m.map && !m.map.userData.keep) m.map.dispose(); m.dispose(); }
+      sp.pivot.traverse(m => { if (m.isMesh && !m.geometry.userData.shared) m.geometry.dispose(); });
+      for (const m of sp.mats) { if (m.userData && m.userData.shared) continue; if (m.map && !m.map.userData.keep) m.map.dispose(); m.dispose(); }
     }
 
     /* ── picking: what lies within reach near where the screen was touched ── */
@@ -126,12 +132,13 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
       c.take && c.take();
       /* it comes up from where it was, as big as it was, turned as it lay */
       const real = (c.size || 1), from = new T.Vector3(c.x, c.y, c.z);
-      _e.set(0, c.yaw || 0, 0); const q0 = new T.Quaternion().setFromEuler(_e);
+      _e.set(0, c.yaw || 0, 0); const q0 = c.q ? c.q.clone() : new T.Quaternion().setFromEuler(_e);
       const view = K.view || [-2.2, 0.5], qU = new T.Quaternion().setFromAxisAngle(RIGHT, view[1]).multiply(_q.setFromAxisAngle(UP, view[0]));
       oS.add(sp.pivot); sp.pivot.position.copy(from); sp.pivot.quaternion.copy(q0); sp.pivot.scale.setScalar(real);
       held = { c, K, sp, t0: t, from, q0, real, qU, spin: new T.Vector2(), touched: -1e9, zoom: 1, phase: 'in', back: null, flick: null };
-      const nm = K.names && c.opts && K.names[c.opts.kind | 0];
-      return { kind: c.kind, name: nm ? nm[0] : K.name, latin: nm ? nm[1] : K.latin, note: K.note, home: K.home, flower: K.flower || null, big: !!K.big };
+      const nm = K.names && c.opts && K.names[c.opts.kind | 0], ov = c.info ? c.info() : null;
+      return { kind: c.kind, name: ov ? ov.name : nm ? nm[0] : K.name, latin: ov ? ov.latin : nm ? nm[1] : K.latin, note: ov ? ov.note : K.note, home: K.home, flower: K.flower || null, big: !!K.big,
+        fruit: !!K.fruit, edible: ov ? !!ov.edible : false, word: ov ? ov.word : '' };
     }
     /* where it is held: in front of the eye, a little below the middle */
     function holdPose(out, q) {
@@ -175,6 +182,11 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
         for (let d = 6; d <= 26; d += 1.5) { const x = cx + f2.x * d, z = cz + f2.y * d; if (z < Layout.shoreZ(x) - 3 && gr(x, z) <= 0.02) return new T.Vector3(x, 0, z); }
         const x = cx + f2.x * 5; return new T.Vector3(x, 0, Layout.shoreZ(x) - 6);
       }
+      if (home === 'ground') {
+        /* (a fruit: down on the ground a few steps ahead, never out in the sea) */
+        for (let d = 6.5; d >= 2; d -= 0.5) { const x = cx + f2.x * d, z = cz + f2.y * d; if (z > Layout.shoreZ(x) + 0.6) return new T.Vector3(x, Math.max(0, gr(x, z)), z); }
+        const x = cx + f2.x * 1.2, z = cz + f2.y * 1.2; return new T.Vector3(x, Math.max(0, gr(x, z)), z);
+      }
       if (home === 'land') {
         for (let d = 3; d <= 16; d += 1) { const x = cx + f2.x * d, z = cz + f2.y * d, vz = Layout.vegZ(x); if (z > vz - 1.6 && z < vz + 4) return new T.Vector3(x, Math.max(0, gr(x, z)), z); }
         const x = cx + f2.x * 5, z = Layout.vegZ(x) - 0.6 + Math.random() * 1.6; return new T.Vector3(x, Math.max(0, gr(x, z)), z);
@@ -186,10 +198,16 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
       held.phase = 'back'; held.back = { t0: t, p: held.sp.pivot.position.clone(), q: held.sp.pivot.quaternion.clone(), s: held.sp.pivot.scale.x };
       return true;
     }
-    /* gone into the bouquet (flowers): it shrinks away toward the bottom of the view */
+    /* gone into the bouquet (flowers): it shrinks away toward the bottom of the view; eaten (fruit): toward the middle of
+       it, and the fruit is gone */
     function keep(t) {
       if (!held || held.phase !== 'hold') return false;
       held.phase = 'keep'; held.back = { t0: t, p: held.sp.pivot.position.clone(), s: held.sp.pivot.scale.x };
+      return true;
+    }
+    function eat(t) {
+      if (!held || held.phase !== 'hold' || !held.K.fruit) return false;
+      held.phase = 'keep'; held.eaten = true; held.back = { t0: t, p: held.sp.pivot.position.clone(), s: held.sp.pivot.scale.x };
       return true;
     }
 
@@ -216,8 +234,8 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
         } else if (h.phase === 'back' || h.phase === 'keep') {
           const b = h.back, u = ease(Math.min(1, (t - b.t0) / 0.5));
           if (h.phase === 'back') { P.position.lerpVectors(b.p, h.from, u); P.quaternion.slerpQuaternions(b.q, h.q0, u); P.scale.setScalar(b.s + (h.real - b.s) * u); }
-          else { _v.set(-0.25, -0.32, -0.6).applyQuaternion(camera.quaternion).add(camera.position); P.position.lerpVectors(b.p, _v, u); P.scale.setScalar(b.s * (1 - u)); }
-          if (u >= 1) { if (h.phase === 'back' && h.c.give) h.c.give('back', h.from); if (h.splashAt && opt.splash) opt.splash(h.splashAt.x, h.splashAt.z, 1.4); dispose(sp); held = null; }
+          else { _v.set(h.eaten ? 0 : -0.25, h.eaten ? -0.22 : -0.32, -0.6).applyQuaternion(camera.quaternion).add(camera.position); P.position.lerpVectors(b.p, _v, u); P.scale.setScalar(b.s * (1 - u)); }
+          if (u >= 1) { if (h.phase === 'back' && h.c.give) h.c.give('back', h.from); if (h.eaten && h.c.give) h.c.give('eat'); if (h.splashAt && opt.splash) opt.splash(h.splashAt.x, h.splashAt.z, 1.4); dispose(sp); held = null; }
         }
         if (held && sp.anim) sp.anim(t);
       }
@@ -241,6 +259,7 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
           if (e >= f.Tf) {
             f.landed = t;
             if (K.home === 'sea') { opt.splash && opt.splash(f.target.x, f.target.z, Math.min(1.2, 0.5 + f.h.sp.R * 4)); }
+            else if (K.fruit) { /* a fruit: on its side, its long axis level */ f.rest = new T.Quaternion().setFromEuler(new T.Euler(Math.PI / 2 * (0.94 + 0.06 * Math.random()), Math.random() * TAU, 0, 'YXZ')); }
             else { /* a flower: down on the grass, lying on its side */ f.rest = new T.Quaternion().setFromEuler(new T.Euler(Math.PI / 2 * (0.75 + 0.2 * Math.random()), Math.random() * TAU, 0, 'YXZ')); }
           }
         } else {
@@ -250,8 +269,10 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
             P.position.y -= dt * (0.6 + 2 * Math.max(0, 0.3 - el)); P.quaternion.premultiply(_q.setFromAxisAngle(f.axis, f.w * 0.3 * dt));
             if (el > 1.2) { f.done = true; if (f.h.c.give) f.h.c.give('sea', f.target); }
           } else {
-            P.quaternion.slerp(f.rest, Math.min(1, dt * 9)); P.position.y = f.target.y + 0.012 + 0.05 * Math.max(0, Math.sin(Math.min(1, el / 0.3) * Math.PI)) * (el < 0.3 ? 1 : 0);
-            if (el > 0.8) { f.done = true; if (f.h.c.give) f.h.c.give('land', f.target); lying.push({ sp: f.sp, at: t }); if (lying.length > 24) dispose(lying.shift().sp); }
+            P.quaternion.slerp(f.rest, Math.min(1, dt * 9)); P.position.y = f.target.y + (K.fruit ? f.h.c.restR || 0.03 : 0.012) + 0.05 * Math.max(0, Math.sin(Math.min(1, el / 0.3) * Math.PI)) * (el < 0.3 ? 1 : 0);
+            /* (a fruit is the tree's again once it lies still: it lies there as one of those under the trees) */
+            if (K.fruit && el > 0.8) { P.quaternion.copy(f.rest); f.sp.model.updateWorldMatrix(true, false); f.done = true; if (f.h.c.give) f.h.c.give('land', f.target, f.sp.model.matrixWorld.clone()); }
+            else if (el > 0.8) { f.done = true; if (f.h.c.give) f.h.c.give('land', f.target); lying.push({ sp: f.sp, at: t }); if (lying.length > 24) dispose(lying.shift().sp); }
           }
         }
         if (f.sp.anim && !f.landed) f.sp.anim(t * 1.6, true);
@@ -287,13 +308,13 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
     /* everything let go at once (the coast rebuilt under the camp) */
     function clear() {
       if (held) { if (held.c.give) held.c.give('back', held.from); dispose(held.sp); held = null; }
-      for (const f of flying) dispose(f.sp); flying.length = 0; for (const l of lying) dispose(l.sp); lying.length = 0; k = 0;
+      for (const f of flying) { if (f.h.K.fruit && !f.done && f.h.c.give) f.h.c.give('back', f.h.from); dispose(f.sp); } flying.length = 0; for (const l of lying) dispose(l.sp); lying.length = 0; k = 0;
     }
     /* the whole scene moved: what lies on the grass and what is in the air go with it */
     function shift(dx, dz) { for (const f of flying) { f.p.x += dx; f.p.z += dz; f.target.x += dx; f.target.z += dz; if (f.inWorld) { f.sp.pivot.position.x += dx; f.sp.pivot.position.z += dz; } } for (const l of lying) { l.sp.pivot.position.x += dx; l.sp.pivot.position.z += dz; } }
     return {
-      pick, hold, turn, zoom, throwIt, putBack, keep, update, draw, shift, clear,
-      get held() { return held ? { kind: held.c.kind, phase: held.phase, name: held.K.name } : null; },
+      pick, hold, turn, zoom, throwIt, putBack, keep, eat, update, draw, shift, clear,
+      get held() { return held ? { kind: held.c.kind, phase: held.phase, name: held.K.name, info: held.c.info ? held.c.info() : null } : null; },
       get busy() { return !!held; },
       get flying() { return flying.length; },
       get k() { return k; },

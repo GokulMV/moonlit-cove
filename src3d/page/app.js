@@ -918,6 +918,7 @@
     for (const [x, z] of Layout.palms.map(p => [p[0], p[1]])) campObs.push([x, z, 0.4]);
     for (const t of Layout.trees) campObs.push([t[0], t[1], 0.5]);
     for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
+    for (const f of Layout.fruit || []) campObs.push([f.x, f.z, f.r || 0.4]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
     /* (the castle's radius goes to 0 when the sea has washed it flat: Layout.castle.ob) */
@@ -1390,17 +1391,25 @@
   /* ── holding one of the cove's small lives up close (inspect.js): a click on a crab, a shell, a starfish, a flower
      picks it up; drag to turn it over, scroll to look closer; flick it away (or the button) and it is thrown back where
      it belongs, the sea's to the sea and the land's to the land; or put it down where it was ── */
-  const throwWords = h => h === 'sea' ? 'Throw it back in the sea' : h === 'land' ? 'Toss it back in the grass' : 'Let it fly';
+  const throwWords = h => h === 'sea' ? 'Throw it back in the sea' : h === 'land' ? 'Toss it back in the grass' : h === 'ground' ? 'Toss it' : 'Let it fly';
+  /* (a fruit's card: what it is like now, which changes as it goes on ripening in the hand; it can be eaten while it is
+     good to eat) */
+  function fruitCard(info) {
+    $('iName').textContent = info.name; $('iLatin').textContent = info.latin; $('iNote').textContent = info.note;
+    $('iKeep').hidden = !info.edible; $('iKeep').textContent = 'Eat it';
+  }
   function openInspect(c) {
     if (insp.on || !c) return false;
     const info = Engine.inspect.hold(c); if (!info) return false;
-    insp.on = true; insp.info = info; insp.c = c; keys.clear(); touch.x = touch.y = 0;
+    insp.on = true; insp.info = info; insp.c = c; insp.fruitT = 0; keys.clear(); touch.x = touch.y = 0;
     if (wk.on && wk.auto) setAuto(false);
     $('iName').textContent = info.name; $('iLatin').textContent = info.latin; $('iNote').textContent = info.note;
-    $('iThrow').textContent = info.big ? 'Let it go' : throwWords(info.home); $('iKeep').hidden = !info.flower; $('iPut').hidden = !!info.big;
+    $('iThrow').textContent = info.big ? 'Let it go' : throwWords(info.home); $('iKeep').hidden = !info.flower; $('iKeep').textContent = 'Add it to the bouquet'; $('iPut').hidden = !!info.big;
+    $('iPut').firstChild.textContent = info.fruit ? 'Drop it ' : 'Put it down ';
+    if (info.fruit) fruitCard(info);
     $('insp').hidden = false; document.body.classList.add('inspecting');
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
-    insp.seen.add(info.kind); store.set('seenLife', [...insp.seen]); if (insp.seen.size >= 5) unlock('naturalist');
+    if (!info.fruit) { insp.seen.add(info.kind); store.set('seenLife', [...insp.seen]); if (insp.seen.size >= 5) unlock('naturalist'); }
     return true;
   }
   function closeInspect() { insp.on = false; insp.drag = null; $('insp').hidden = true; document.body.classList.remove('inspecting', 'insp-grab'); }
@@ -1411,8 +1420,19 @@
     if (home === 'sea' && kind === 'crab') unlock('crab_home');
   }
   function inspPut() { if (insp.on && Engine.inspect.putBack()) closeInspect(); }
+  /* eating a fruit: how it tastes, by what it is and how ripe */
+  const TASTE = { mango: 'Sweet and juicy, and all down your chin.', rambutan: 'Sweet and juicy; you spit out the seed.', durian: 'Rich and creamy, and the smell stays with you for hours.',
+    cempedak: 'Sweet and sticky, the pods coming away from their seeds.', papaya: 'Soft and sweet, the seeds left behind.', banana: 'Sweet and soft.', coconut: 'You crack it on a rock: sweet water first, then the white meat.' };
   function inspKeep() {
-    if (!insp.on || !insp.info.flower) return; const f = insp.c.flower;
+    if (!insp.on) return;
+    if (insp.info.fruit) {
+      const h = Engine.inspect.held, info = (h && h.info) || insp.info; if (!info.edible || !Engine.inspect.eat()) return;
+      closeInspect();
+      toast(info.word === 'ripening' ? 'A little sharp still, but good.' : info.word === 'overripe' ? 'Very sweet, a little winey. The flies wanted it too.' : TASTE[insp.info.kind] || 'Sweet.', false, 2600);
+      if (info.word === 'ripe') unlock('orchard');
+      return;
+    }
+    if (!insp.info.flower) return; const f = insp.c.flower;
     if (!Engine.inspect.keep()) return;
     closeInspect(); f.held = false; pickFlower(f, true);
   }
@@ -1440,7 +1460,7 @@
     const k = e.key.toLowerCase();
     if (k === 'escape' || k === 'e' || k === 'backspace') inspPut();
     else if (k === ' ' || k === 'enter' || k === 't') { if (e.target && e.target.closest && e.target.closest('button')) return; inspThrow(0); }
-    else if (k === 'b' && insp.info && insp.info.flower) inspKeep();
+    else if (k === 'b' && insp.info && (insp.info.flower || insp.info.fruit)) inspKeep();
     else if (k === 'arrowleft' || k === 'a') Engine.inspect.turn(-24, 0);
     else if (k === 'arrowright' || k === 'd') Engine.inspect.turn(24, 0);
     else if (k === 'arrowup' || k === 'w') Engine.inspect.turn(0, -24);
@@ -1464,7 +1484,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1624,7 +1644,7 @@
     const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
-      lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain,
+      lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
     st.S = S;
     if (!st.shown && ++drawn >= 3) introReady();
@@ -1640,6 +1660,8 @@
 
     extras(dtR);
     syncWalkBar();
+    /* (a fruit in the hand goes on ripening: its card keeps up) */
+    if (insp.on && insp.info && insp.info.fruit && (insp.fruitT += dtR) > 0.25) { insp.fruitT = 0; const h = Engine.inspect.held; if (h && h.info && h.info.name !== $('iName').textContent) fruitCard(h.info); else if (h && h.info) $('iKeep').hidden = !h.info.edible; }
     /* the sea's verdict */
     const si = Engine.surgeInfo();
     if (si.fireOut && !st.wrecked) { st.wrecked = true; setTimeout(() => toast('The tide took the camp.', true, 0), 2600); unlock('tide'); }

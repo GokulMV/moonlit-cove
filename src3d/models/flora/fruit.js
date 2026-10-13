@@ -30,40 +30,42 @@ const FloraFruit = (() => {
     /* a mango: smooth, waxy, speckled with pale lenticels; dark green, then yellowing from the shoulder, gold with a red
        flush where the sun reached it; black spots of anthracnose; sunk and brown-black, white with mould */
     mango: { u0: '#2d5a1e', u1: '#5f8a2c', ripe: '#e6ac30', blush: '#c64a2a', spot: '#1c120a', rot: '#38220f', mould: '#9fa696', tip0: '#5f8a2c', tip1: '#e0a52e',
-      n: [9, 22, 70], blush_: 0.75, k: [0.8, 1, 0.8, 0], r: [0.42, 0.32, 0.85], g: [0.07, 0.07, 90, 0.004] },
+      n: [9, 22, 70], blush_: 0.75, k: [0.8, 1, 0.8, 0], r: [0.42, 0.32, 0.85], g: [0.07, 0.07, 90, 0.004], sw: [1.0, 0.26] },
     /* a rambutan: its soft hairs green, then yellow, then red with yellow-green tips; darkening to maroon, the hairs
        blackening and drying */
     rambutan: { u0: '#3f6a1c', u1: '#86a433', ripe: '#b8231d', blush: '#d0362a', spot: '#3c140e', rot: '#2a120c', mould: '#8a8478', tip0: '#a9c45a', tip1: '#c5c04a',
-      n: [40, 60, 120], blush_: 0.3, k: [0, 0.6, 0.4, 0.9], r: [0.55, 0.5, 0.9], g: [0.1, 0.06, 140, 0.0], base: 0.25 },
+      n: [40, 60, 120], blush_: 0.3, k: [0, 0.6, 0.4, 0.9], r: [0.55, 0.5, 0.9], g: [0.1, 0.06, 140, 0.0], base: 0.25, sw: [0.45, 0.07] },
     /* a durian: olive green spines, browning yellow as it ripens; splitting on the ground */
     durian: { u0: '#3d5a1c', u1: '#6a7a2a', ripe: '#8a7a2e', blush: '#97803a', spot: '#2c2410', rot: '#3a2c16', mould: '#9a9a88', tip0: '#2e3a14', tip1: '#4a3a1a',
-      n: [8, 16, 40], blush_: 0.2, k: [0, 0.5, 0.6, 0.7], r: [0.62, 0.6, 0.9], g: [0.12, 0.04, 50, 0.0], base: 0.45 },
+      n: [8, 16, 40], blush_: 0.2, k: [0, 0.5, 0.6, 0.7], r: [0.62, 0.6, 0.9], g: [0.12, 0.04, 50, 0.0], base: 0.45, sw: [0.12, 0.12] },
     /* a cempedak: warty, green to orange-brown */
     cempedak: { u0: '#4c6a22', u1: '#7d8a32', ripe: '#b07a2a', blush: '#a0602a', spot: '#2a1a0c', rot: '#3a2410', mould: '#a4a494', tip0: '#7d8a32', tip1: '#b07a2a',
-      n: [6, 14, 40], blush_: 0.3, k: [0, 1, 0.7, 0], r: [0.6, 0.55, 0.9], g: [0.08, 0.05, 60, 0.01], w: [140, 0.002] },
+      n: [6, 14, 40], blush_: 0.3, k: [0, 1, 0.7, 0], r: [0.6, 0.55, 0.9], g: [0.08, 0.05, 60, 0.01], w: [140, 0.002], sw: [0.06, 0.035] },
     /* a papaya: smooth, faintly ribbed, green to yellow-orange from the tip up; sunk, dark-ringed rot */
     papaya: { u0: '#2f5c20', u1: '#5a8a2e', ripe: '#e8962a', blush: '#f0a030', spot: '#3a2410', rot: '#4a2c14', mould: '#a9aea0', tip0: '#5a8a2e', tip1: '#e8962a',
-      n: [5, 12, 30], blush_: 0.4, k: [0, 1, 0.55, 0], r: [0.4, 0.33, 0.85], g: [0.06, 0.08, 60, 0.008] },
+      n: [5, 12, 30], blush_: 0.4, k: [0, 1, 0.55, 0], r: [0.4, 0.33, 0.85], g: [0.06, 0.08, 60, 0.008], sw: [0, 0.03] },
     /* a banana finger: green, yellow, freckled with sugar spots, brown, black */
     banana: { u0: '#3a6a22', u1: '#6a9a34', ripe: '#deb52a', blush: '#e0c03a', spot: '#2a1a0a', rot: '#1c140c', mould: '#a8a898', tip0: '#2a2a1a', tip1: '#2a2a1a',
-      n: [20, 30, 160], blush_: 0.0, k: [0, 1.4, 0.6, 0], r: [0.45, 0.4, 0.8], g: [0.15, 0.06, 80, 0.0] },
+      n: [20, 30, 160], blush_: 0.0, k: [0, 1.4, 0.6, 0], r: [0.45, 0.4, 0.8], g: [0.15, 0.06, 80, 0.0], sw: [0, 0.1] },
     /* a coconut: green (or orange-gold), drying brown, cracking grey */
     coconut: { u0: '#4a6a20', u1: '#7a9a30', ripe: '#7a5a2a', blush: '#8a6a30', spot: '#3a2a16', rot: '#4a3c2c', mould: '#8a8478', tip0: '#7a9a30', tip1: '#7a5a2a',
-      n: [5, 10, 30], blush_: 0.2, k: [0, 0.3, 0.2, 0], r: [0.45, 0.7, 0.9], g: [0.1, 0.02, 30, 0.0] } };
+      n: [5, 10, 30], blush_: 0.2, k: [0, 0.3, 0.2, 0], r: [0.45, 0.7, 0.9], g: [0.1, 0.02, 30, 0.0], sw: [0.05, 0.12] } };
 
   /* ── the shader: vertex — the fruit grows from a small one to its full size, and shrivels and wrinkles as it rots (a
      rambutan's hairs shrink back); fragment — its skin's colour for its age, its blotches, its blush, spots, rot,
      mould, lenticels, and the wrinkles' relief ── */
+  /* (aAge below 0: not there yet, everything drawn in to the point it will hang from; from -0.06 to 0 it comes out of
+     the twig, stalk and all. aFW: the wind on the twig it hangs from, see windV) */
   const VDECL = `
 attribute float aAge; attribute float aSeed; attribute vec4 aFr;   /* (aFr: sun side, along a hair or spine, keeps its own colour, part of the fruit's body) */
-uniform vec4 uFrG; uniform vec3 uFrP;
+uniform vec4 uFrG; uniform vec3 uFrP; uniform vec2 uFrS;
 varying float vAge; varying float vSeed; varying vec4 vFr; varying vec3 vObj;
 float frH(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
 float frN(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
   return mix(mix(mix(frH(i), frH(i + vec3(1,0,0)), f.x), mix(frH(i + vec3(0,1,0)), frH(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(frH(i + vec3(0,0,1)), frH(i + vec3(1,0,1)), f.x), mix(frH(i + vec3(0,1,1)), frH(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
   const VBODY = `
-  { float ag = aAge, sk = aFr.w;
+  { float ag0 = aAge, ag = clamp(aAge, 0.0, 1.0), sk = aFr.w;
     float gr = mix(uFrG.x, 1.0, 1.0 - pow(1.0 - smoothstep(0.0, 0.45, ag), 2.2));
     float rt = smoothstep(0.72, 1.0, ag), wr = frN(position*uFrG.z + aSeed*13.0);
     vec3 nn = normalize(objectNormal);
@@ -72,8 +74,37 @@ float frN(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
     p = mix(p, p*(1.0 - 0.35*aFr.y*rt), step(0.001, aFr.y));
     p -= nn*rt*uFrG.y*(0.45 + 0.9*wr)*length(position - uFrP)*sk;
     p.y -= uFrG.w*smoothstep(0.65, 0.9, ag)*sk*(1.0 - nn.y)*0.5;
-    transformed = uFrP + mix(p, p*gr, sk);
+    transformed = (uFrP + mix(p, p*gr, sk))*smoothstep(-0.06, 0.0, ag0);
     vAge = ag; vSeed = aSeed; vFr = aFr; vObj = position; }`;
+  /* the wind on what hangs in a tree: the twig it hangs from moves as the tree's own twigs and leaves do (FloraLeaf.WIND,
+     from aFW: that twig's phase, how far it sways, how far up the tree it is, the tree's height; nothing for a fruit on
+     the ground or in the hand); and a fruit on a long stalk swings on it, pushed downwind and back, a pendulum of its
+     stalk's length, a little from side to side (uFrS: how freely, the stalk's length) */
+  const windV = () => `
+attribute vec4 aFW; uniform float uTime;
+${FloraLeaf.WIND}
+vec3 frRot(vec3 v, vec3 k, float a){ float c = cos(a), s = sin(a); return v*c + cross(k, v)*s + k*dot(k, v)*(1.0 - c); }`;
+  const WIND_PROJ = `#include <project_vertex>
+  if (aFW.y > 0.0){
+    vec3 oW = (modelMatrix*vec4(0.0, 0.0, 0.0, 1.0)).xyz, aW = oW;
+    #ifdef USE_INSTANCING
+      aW = (modelMatrix*instanceMatrix*vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    #endif
+    mvPosition.xyz += (viewMatrix*vec4(floraWind(aW, oW, 1.0, aFW, 0.0, 0.0, vec3(0.0, 1.0, 0.0), uTime), 0.0)).xyz;
+    gl_Position = projectionMatrix*mvPosition;
+  }`;
+  const SWING = `
+  #ifdef USE_INSTANCING
+  if (aFW.y > 0.0 && uFrS.x > 0.0){
+    mat3 iT = transpose(mat3(instanceMatrix));
+    vec2 wd = normalize(uWindV.xy + vec2(1e-4)); float ws = uWindV.z, ph = aSeed*1.7 + aFW.x*6.2832, w0 = 3.13/sqrt(max(uFrS.y, 0.02));
+    float gust = 1.0 + uWindV.w*(0.55*sin(uTime*0.23 + ph*0.3)*sin(uTime*0.071 + ph) + 0.25*sin(uTime*0.53 + ph*1.3));
+    float ang = uFrS.x*(0.03 + 0.28*ws*gust)*(0.55 + 0.45*sin(uTime*w0 + ph)), side = uFrS.x*(0.02 + 0.09*ws*gust)*sin(uTime*w0*0.73 + ph*2.3);
+    vec3 wL = normalize(iT*vec3(wd.x, 0.0, wd.y)), uL = normalize(iT*vec3(0.0, 1.0, 0.0)), k1 = cross(wL, uL);
+    k1 = length(k1) > 1e-4 ? normalize(k1) : vec3(1.0, 0.0, 0.0);
+    transformed = frRot(frRot(transformed, k1, ang), wL, side);
+  }
+  #endif`;
   const FDECL = `
 uniform vec3 uCU0, uCU1, uCR, uCB, uCS, uCRot, uCM, uCT0, uCT1; uniform vec4 uFrN, uFrK, uFrG; uniform vec3 uFrR;
 varying float vAge; varying float vSeed; varying vec4 vFr; varying vec3 vObj;`;
@@ -127,26 +158,30 @@ float frNf(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
 
   const uni = (K, piv = [0, 0, 0]) => ({ uFrP: { value: V(...piv) }, uCU0: { value: V(...lin(K.u0)) }, uCU1: { value: V(...lin(K.u1)) }, uCR: { value: V(...lin(K.ripe)) }, uCB: { value: V(...lin(K.blush)) }, uCS: { value: V(...lin(K.spot)) },
     uCRot: { value: V(...lin(K.rot)) }, uCM: { value: V(...lin(K.mould)) }, uCT0: { value: V(...lin(K.tip0)) }, uCT1: { value: V(...lin(K.tip1)) },
-    uFrW: { value: new T.Vector4(...(K.w || [0, 0]), K.base ?? 0, 0) }, uFrN: { value: new T.Vector4(K.n[0], K.n[1], K.n[2], K.blush_) }, uFrK: { value: new T.Vector4(...K.k) }, uFrG: { value: new T.Vector4(...K.g) }, uFrR: { value: V(...K.r) } });
+    uFrW: { value: new T.Vector4(...(K.w || [0, 0]), K.base ?? 0, 0) }, uFrN: { value: new T.Vector4(K.n[0], K.n[1], K.n[2], K.blush_) }, uFrK: { value: new T.Vector4(...K.k) }, uFrG: { value: new T.Vector4(...K.g) }, uFrR: { value: V(...K.r) },
+    uFrS: { value: new T.Vector2(...(K.sw || [0, 0.1])) } });
+  /* (the wind's own uniforms, shared with the leaves) */
+  const windU = U => Object.assign(U, { uWindV: FloraLeaf.U.uWindV, uTime: Mats.U.uTime });
   const mats = new Map();
-  /* a kind's fruit material: the engine's lit material with the fruit's life added */
+  /* a kind's fruit material: the engine's lit material with the fruit's life added (it is shared: the trees' fruit and the
+     one held in the hand all draw with it, so nothing that uses it may dispose of it) */
   function material(kind, piv = [0, 0, 0]) {
     const mk = kind + ':' + piv.join(','); if (mats.has(mk)) return mats.get(mk);
     const K = KINDS[kind], m = Mats.lit({ color: 0xffffff, vertexColors: true, roughness: 0.6 }, 'fruit'), base = m.onBeforeCompile, U = uni(K, piv);
     m.onBeforeCompile = sh => {
-      base(sh); Object.assign(sh.uniforms, U);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VDECL).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VBODY);
+      base(sh); Object.assign(sh.uniforms, windU(U));
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VDECL + windV()).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + VBODY + SWING).replace('#include <project_vertex>', WIND_PROJ);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FDECL + FNOISE).replace('#include <color_fragment>', '#include <color_fragment>\n' + FCOL)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + FROUGH).replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FBUMP);
     };
-    m.customProgramCacheKey = () => 'fruit-' + kind; mats.set(mk, m); return m;
+    m.customProgramCacheKey = () => 'fruit-' + kind; m.userData.shared = true; mats.set(mk, m); return m;
   }
-  /* its shadow, from the fruit as big as it is now */
+  /* its shadow, from the fruit as big as it is now, where the wind has it */
   function depth(kind, piv = [0, 0, 0]) {
     const key = 'd-' + kind + ':' + piv.join(','); if (mats.has(key)) return mats.get(key);
-    const K = KINDS[kind], m = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking }), U = { uFrG: { value: new T.Vector4(...K.g) }, uFrP: { value: V(...piv) } };
-    m.onBeforeCompile = sh => { Object.assign(sh.uniforms, U); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VDECL).replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec3 objectNormal = normal;\n' + VBODY); };
-    m.customProgramCacheKey = () => 'fruitd-' + kind; mats.set(key, m); return m;
+    const K = KINDS[kind], m = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking }), U = { uFrG: { value: new T.Vector4(...K.g) }, uFrP: { value: V(...piv) }, uFrS: { value: new T.Vector2(...(K.sw || [0, 0.1])) } };
+    m.onBeforeCompile = sh => { Object.assign(sh.uniforms, windU(U)); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + VDECL + windV()).replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec3 objectNormal = normal;\n' + VBODY + SWING).replace('#include <project_vertex>', WIND_PROJ); };
+    m.customProgramCacheKey = () => 'fruitd-' + kind; m.userData.shared = true; mats.set(key, m); return m;
   }
 
   /* ── geometry. A surface of revolution about y with its two poles: f(t, a) → [x, y, z] for t 0 (top) … 1 (bottom)
@@ -283,7 +318,8 @@ float frNf(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
      top the cap of six brown scales where it joins its stalk ── */
   function coconut(o = {}) {
     const L = o.L ?? 0.27, Rb = L * 0.37, lod = o.lod || 0;
-    const body = lathe(lod ? 16 : 36, lod ? 12 : 28, (t, a) => {
+    /* (lod 2: for nuts high in a palm, seen from below, a dozen metres off) */
+    const body = lathe(lod > 1 ? 11 : lod ? 16 : 36, lod > 1 ? 8 : lod ? 12 : 28, (t, a) => {
       const r = Rb * Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(1, t * 0.97 + 0.03))), 0.55) * (1 - 0.22 * sm(0.55, 1, t)) * (1 + (0.03 + 0.06 * t) * Math.cos(3 * a));
       return [Math.cos(a) * r, -L * t, Math.sin(a) * r];
     }, (t, a) => [clamp(0.5 + 0.5 * Math.cos(a)), 0, 0, 1]);
@@ -294,25 +330,29 @@ float frNf(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
       I.push(o0, o0 + 2, o0 + 1, o0 + 1, o0 + 2, o0 + 3, o0 + 2, o0 + 4, o0 + 3);
     }
     const cg = new T.BufferGeometry(); cg.setAttribute('position', new T.Float32BufferAttribute(P, 3)); cg.setAttribute('aFr', new T.Float32BufferAttribute(F, 4)); cg.setAttribute('color', new T.Float32BufferAttribute(C, 3)); cg.setIndex(I); cg.computeVertexNormals(); parts.push(cg);
-    const H = o.hang || 0; parts.push(stalk(H ? [V(0, 0, 0), V(0.01, H * 0.5, 0), V(0.03, H, 0)] : [V(0, 0, 0), V(0, 0.02, 0), V(0.004, 0.04, 0)], 0.012, 0.01, () => [0.14, 0.11, 0.06], 7));
+    const H = o.hang || 0; parts.push(stalk(H ? [V(0, 0, 0), V(0.01, H * 0.5, 0), V(0.03, H, 0)] : [V(0, 0, 0), V(0, 0.02, 0), V(0.004, 0.04, 0)], 0.012, 0.01, () => [0.14, 0.11, 0.06], lod > 1 ? 5 : 7));
     const g = join(parts); if (H) g.translate(-0.03, -H, 0); g.userData.pivot = [-0.03, -H, 0]; return g;
   }
 
   /* ── fruit geometry by kind, cached ── */
   const geos = new Map(), BUILD = { mango, rambutan, durian, cempedak, papaya, banana, coconut };
-  function geo(kind, o = {}) { const key = kind + JSON.stringify(o); if (!geos.has(key)) geos.set(key, BUILD[kind](o)); return geos.get(key); }
+  /* (keyed by what changes the shape: a fruit with no stalk to hang by is the same whether it says so or not) */
+  function geo(kind, o = {}) { const key = kind + ':' + (o.hang || 0) + ':' + (o.lod || 0) + ':' + (o.L || ''); if (!geos.has(key)) geos.set(key, BUILD[kind](o)); return geos.get(key); }
 
-  /* ── fruit placed: an InstancedMesh of a kind's fruit, one per item { p: [x,y,z], ry, tilt, age, seed, s } ── */
+  /* ── fruit placed: an InstancedMesh of a kind's fruit, one per item { p: [x,y,z], ry, tilt, roll, age, seed, s, wind } (wind:
+     the twig it hangs from, as aFW above; none, and it hangs still) ── */
   function instances(kind, items, o = {}) {
     const base = geo(kind, o.geo || {}), g = new T.BufferGeometry(), piv = base.userData.pivot || [0, 0, 0];
     for (const k of ['position', 'normal', 'color', 'aFr']) g.setAttribute(k, base.attributes[k]); g.setIndex(base.index);
-    const n = items.length, A = new Float32Array(n), S = new Float32Array(n);
-    items.forEach((it, i) => { A[i] = it.age; S[i] = it.seed ?? i * 0.37; });
-    g.setAttribute('aAge', new T.InstancedBufferAttribute(A, 1)); g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 1));
+    const n = items.length, A = new Float32Array(n), S = new Float32Array(n), W = new Float32Array(n * 4);
+    items.forEach((it, i) => { A[i] = it.age; S[i] = it.seed ?? i * 0.37; if (it.wind) W.set(it.wind, i * 4); });
+    g.setAttribute('aAge', new T.InstancedBufferAttribute(A, 1)); g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 1)); g.setAttribute('aFW', new T.InstancedBufferAttribute(W, 4));
+    /* (its own attributes are its ages, dice and winds; the shape is the kind's, shared: only those are the mesh's to free) */
+    g.userData.shared = true;
     const m = new T.InstancedMesh(g, material(kind, piv), n), M = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler();
     items.forEach((it, i) => { e.set(it.tilt || 0, it.ry || 0, it.roll || 0, 'YXZ'); q.setFromEuler(e); M.compose(V(...it.p), q, V(it.s || 1, it.s || 1, it.s || 1)); m.setMatrixAt(i, M); });
     m.instanceMatrix.needsUpdate = true; m.customDepthMaterial = depth(kind, piv); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
-    m.userData.ages = A; return m;
+    m.userData.ages = A; m.userData.base = base; return m;
   }
 
   /* ── a row of fruit through their lives, for the studio: n of them from just set to rotten, spaced along x ── */
@@ -356,8 +396,9 @@ float frNf(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0 - 2.0*f);
 attribute float aAge; attribute float aSeed; attribute vec3 aFl; attribute vec3 aFa; attribute vec4 aFk;
 uniform vec4 uFlT;
 varying float vAge; varying vec4 vFk; varying float vFa;`;
+  /* (an age below 0: not there yet; from -0.12 to 0 it comes out of its twig, as a bud) */
   const FL_VB = `
-  { float ag = aAge, em = smoothstep(0.0, uFlT.x, ag), end = 1.0 - smoothstep(0.96, 1.0, ag);
+  { float ag0 = aAge, ag = clamp(aAge, 0.0, 1.0), em = smoothstep(0.0, uFlT.x, ag), end = (1.0 - smoothstep(0.96, 1.0, ag))*smoothstep(-0.12, 0.0, ag0);
     float st = uFlT.y + aFk.z*uFlT.z + aFk.y*0.04, fa = clamp((ag - st)/uFlT.w, 0.0, 1.0);
     vec3 p = position;
     if (aFk.x > 2.5){   /* (a spike or a head that only grows, then shrivels and drops) */
@@ -392,13 +433,14 @@ varying float vAge; varying vec4 vFk; varying float vFa;`;
     const key = 'fl-' + kind; if (mats.has(key)) return mats.get(key);
     const K = FLK[kind], U = { uFlT: { value: new T.Vector4(...K.T) }, uFlB: { value: V(...lin(K.bud)) }, uFlO: { value: V(...lin(K.open)) }, uFlS: { value: V(...lin(K.base)) }, uFlW: { value: V(...lin(K.wilt)) }, uFlC: { value: V(...lin(K.disc)) }, uFlD: { value: V(...lin(K.dry)) } };
     const m = Mats.lit({ color: 0xffffff, vertexColors: true, roughness: 0.7, side: T.DoubleSide }, 'flower'), base = m.onBeforeCompile;
+    windU(U);
     m.onBeforeCompile = sh => { base(sh); Object.assign(sh.uniforms, U);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FL_V).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FL_VB);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FL_V + windV()).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FL_VB).replace('#include <project_vertex>', WIND_PROJ);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FL_F).replace('#include <color_fragment>', '#include <color_fragment>\n' + FL_FC); };
-    m.customProgramCacheKey = () => 'flower-' + kind;
+    m.customProgramCacheKey = () => 'flower-' + kind; m.userData.shared = true;
     const d = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking, side: T.DoubleSide });
-    d.onBeforeCompile = sh => { Object.assign(sh.uniforms, U); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FL_V).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FL_VB); };
-    d.customProgramCacheKey = () => 'flowerd-' + kind;
+    d.onBeforeCompile = sh => { Object.assign(sh.uniforms, U); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FL_V + windV()).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FL_VB).replace('#include <project_vertex>', WIND_PROJ); };
+    d.customProgramCacheKey = () => 'flowerd-' + kind; d.userData.shared = true;
     const out = { mat: m, depth: d }; mats.set(key, out); return out;
   }
   /* a flower bud-to-fall geometry builder: parts pushed as triangles with their own attributes */
@@ -538,30 +580,30 @@ varying float vAge; varying vec4 vFk; varying float vFa;`;
      thirty-odd branchlets drooping, crowded with small cream male flowers, a round female flower or two at the foot of
      each ── */
   function coconutSpadix(o = {}) {
-    const R = Models.rng(o.seed || 23), B = fbuf(), col = lin(FLK.coconut.stalk), sp = lin('#6a5230');
+    const R = Models.rng(o.seed || 23), B = fbuf(), col = lin(FLK.coconut.stalk), sp = lin('#6a5230'), lod = o.lod || 0, nBr = lod ? 16 : 30, nM = lod ? 6 : 10;
     const axis = new T.CatmullRomCurve3([V(0, 0, 0), V(0.18, -0.1, 0), V(0.38, -0.3, 0), V(0.5, -0.55, 0)]);
     fstalk(B, axis, 0.022, 0.012, col, 6, 6);
     /* (the spathe: a long woody husk, open, curling back to one side) */
     { const rows = []; for (let i = 0; i <= 8; i++) { const t = i / 8, p = axis.getPointAt(Math.min(1, t * 0.95)), w = 0.07 * Math.sin(Math.PI * Math.min(1, 0.1 + t * 0.9)), row = []; for (let k = 0; k <= 4; k++) { const an = Math.PI * (0.55 + 0.9 * k / 4), q = p.clone().add(V(Math.cos(an) * w * 0.4, Math.sin(an) * w * 0.4 + 0.03, Math.sin(an * 1.3) * w)); row.push(B.v(q, sp, q, V(0, 1, 0), [0, 0, 0, 0])); } rows.push(row); }
       for (let i = 0; i < 8; i++) for (let k = 0; k < 4; k++) { B.tri(rows[i][k], rows[i + 1][k], rows[i][k + 1]); B.tri(rows[i][k + 1], rows[i + 1][k], rows[i + 1][k + 1]); } }
-    for (let k = 0; k < 30; k++) {
-      const t = 0.35 + 0.62 * k / 30, b0 = axis.getPointAt(t), an = k * 2.39996, Lr = 0.3 + 0.18 * R(), along = k / 30;
+    for (let k = 0; k < nBr; k++) {
+      const t = 0.35 + 0.62 * k / nBr, b0 = axis.getPointAt(t), an = k * 2.39996 * (30 / nBr), Lr = 0.3 + 0.18 * R(), along = k / nBr;
       const dir = V(0.6, -0.4, 0).add(V(Math.cos(an) * 0.6, Math.sin(an) * 0.2, Math.sin(an) * 0.8)).normalize();
       const br = new T.CatmullRomCurve3([b0, b0.clone().addScaledVector(dir, Lr * 0.5).add(V(0, -Lr * 0.08, 0)), b0.clone().addScaledVector(dir, Lr).add(V(0, -Lr * 0.3, 0))]);
-      fstalk(B, br, 0.004, 0.002, col, 4, 4);
+      fstalk(B, br, 0.004, 0.002, col, lod ? 3 : 4, lod ? 3 : 4);
       fflower(B, br.getPointAt(0.06), dir.clone().add(V(0, 0.6, 0)), 6, 0.012, 0.008, 0.5, along, R(), R);   /* (a female flower: round, with its perianth) */
-      for (let f = 0; f < 10; f++) { const c = br.getPointAt(0.2 + 0.78 * f / 10); fflower(B, c, dir.clone().add(V((R() - 0.5), 0.5, (R() - 0.5))), 3, 0.006, 0.0035, 0.4, along, R(), R); }
+      for (let f = 0; f < nM; f++) { const c = br.getPointAt(0.2 + 0.78 * f / nM); fflower(B, c, dir.clone().add(V((R() - 0.5), 0.5, (R() - 0.5))), 3, 0.006 * (lod ? 1.25 : 1), 0.0035 * (lod ? 1.25 : 1), 0.4, along, R(), R); }
     }
     return B.done();
   }
   const blooms = new Map(), BLOOM = { mango: o => panicle('mango', o), rambutan: o => panicle('rambutan', o), durian: durianBunch, cempedak: cempShoot, papaya: papayaFlower, banana: bananaHeart, coconut: coconutSpadix };
   function bloom(kind, o = {}) { const key = kind + JSON.stringify(o); if (!blooms.has(key)) blooms.set(key, BLOOM[kind](o)); return blooms.get(key); }
-  /* flowers placed: an InstancedMesh, one per item { p, ry, tilt, roll, age, seed, s } */
+  /* flowers placed: an InstancedMesh, one per item { p, ry, tilt, roll, age, seed, s, wind } */
   function bloomInstances(kind, items, o = {}) {
     const base = bloom(kind, o.geo || {}), g = new T.BufferGeometry();
     for (const k of ['position', 'normal', 'color', 'aFl', 'aFa', 'aFk']) g.setAttribute(k, base.attributes[k]); g.setIndex(base.index);
-    const n = items.length, A = new Float32Array(n), S = new Float32Array(n); items.forEach((it, i) => { A[i] = it.age; S[i] = it.seed ?? i * 0.37; });
-    g.setAttribute('aAge', new T.InstancedBufferAttribute(A, 1)); g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 1));
+    const n = items.length, A = new Float32Array(n), S = new Float32Array(n), W = new Float32Array(n * 4); items.forEach((it, i) => { A[i] = it.age; S[i] = it.seed ?? i * 0.37; if (it.wind) W.set(it.wind, i * 4); });
+    g.setAttribute('aAge', new T.InstancedBufferAttribute(A, 1)); g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 1)); g.setAttribute('aFW', new T.InstancedBufferAttribute(W, 4)); g.userData.shared = true;
     const F = flowers(kind), m = new T.InstancedMesh(g, F.mat, n), M = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler();
     items.forEach((it, i) => { e.set(it.tilt || 0, it.ry || 0, it.roll || 0, 'YXZ'); q.setFromEuler(e); M.compose(V(...it.p), q, V(it.s || 1, it.s || 1, it.s || 1)); m.setMatrixAt(i, M); });
     m.instanceMatrix.needsUpdate = true; m.customDepthMaterial = F.depth; m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.userData.ages = A; return m;
@@ -572,52 +614,328 @@ varying float vAge; varying vec4 vFk; varying float vFa;`;
     g.userData.info = { kind, ages }; return g;
   });
 
-  /* ══ a fruit tree: the tree grown (FloraGrow) and on it its flowers and fruit, each place on it (a site) at its own
-     point in the round of flowering and fruiting, so the tree carries every stage at once. A site's round (u, 0..1):
-     its flowers from 0 to 0.4 (their age u/0.4); its fruit set at 0.2 and grows, ripens and rots to 1 (age (u-0.2)/0.8);
-     fruit past 0.82 has fallen, and lies rotting under the tree. o.phase(i) gives a site's u (a snapshot) ══ */
+  /* ══ the round of flowering and fruiting ══════════════════════
+     A fruit tree (or plant) carries its flowers and fruit in sites, each place on it at its own point in the round, so
+     the tree has every stage on it at once. A site's round (u, 0..1): its flowers from 0 to bloomEnd, their age running
+     from the bud coming out of the twig to the last petal fallen; its fruit set at `set` and swell, ripen and go over
+     (age (u - set)/(1 - set), each fruit a little ahead or behind the others); a fruit falls at its kind's age (fall),
+     drops and bounces and lies under the tree rotting on, and once it is rotten through it sinks away into the ground.
+     Then the site flowers again. assemble() makes a tree's sites into their parts (the flowers, the fruit hanging, the
+     fruit on the ground) and a live round for them (fr.live): step it with the time gone by (real seconds, for a fall
+     to look like one; life seconds, the clock the round runs on: PERIOD of them a round) ══ */
+  /* (a fallen fruit lies rotten a while once it is rotten through, DWELL in ages, and then sinks away into the ground,
+     SINK; DECAY the two together) */
+  const PERIOD = 900, DWELL = 0.16, SINK = 0.07, DECAY = DWELL + SINK, G = 9.8;
+  /* (the life clock the held fruit keeps time by: the engine moves it on as it steps the trees) */
+  const life = { clock: 0 };
+  /* each kind's round: where its sites are on the tree (src), how long the fruit's stalks are (hang), how many to a site
+     and how far apart, how many sites, which way they face (dy) and how far out; when its fruit set, when its flowers are
+     gone, the age they fall at; how they come down (hop: how high a fruit bounces from a fall of a few metres, how far it
+     rolls) */
   const SITE = {
-    mango: { src: 'tips', hang: 0.26, perSite: [1, 2], spread: 0.06, n: 120, dy: [-0.75, 0.55], out: 1.08, fall: 0.82 },
-    rambutan: { src: 'tips', hang: 0.07, perSite: [6, 13], spread: 0.09, n: 70, dy: [-0.6, 0.6], out: 1.05, fall: 0.86 },
-    durian: { src: 'limbs', hang: 0.12, perSite: [1, 2], spread: 0.1, n: 40, fall: 0.62 },
-    cempedak: { src: 'trunk', hang: 0.035, perSite: [1, 1], spread: 0.0, n: 34, fall: 0.8 } };
-  function onTree(kind, grown, o = {}) {
-    const S = SITE[kind], R = Models.rng((o.seed || 1) * 19 + 7), g = new T.Group(), UPv = V(0, 1, 0);
-    const blooms = [], fruit = [], fallen = [], sites = [];
-    const cc = grown.info.crown.c, Rc = grown.info.crown.R, n = o.n ?? S.n;
-    /* (the places: each a point to hang from, the way out from the tree there, and whether its flowers stand up or hang) */
-    const spots = [];
-    if (S.src === 'tips') for (const c of grown.clumps.filter(c => c.d.y > S.dy[0] && c.d.y < S.dy[1]).sort(() => R() - 0.5).slice(0, n)) spots.push({ p: c.c.clone().addScaledVector(c.d, c.r * S.out), d: c.d.clone(), up: true });
-    else if (S.src === 'limbs') { for (let i = 0; i < n; i++) { const L = grown.limbs[Math.floor(R() * grown.limbs.length)]; if (!L) break; const t = 0.3 + 0.65 * R(), p = L.curve.getPointAt(t), tg = L.curve.getTangentAt(t); let sd = V().crossVectors(tg, UPv); if (sd.lengthSq() < 1e-4) sd.set(1, 0, 0); sd.normalize(); spots.push({ p: p.addScaledVector(sd, (R() - 0.5) * L.r(t)).add(V(0, -L.r(t) * 0.9, 0)), d: V(sd.x, 0, sd.z), up: false }); } }
-    else { const T0 = grown.trunk, H0 = T0.boleH; for (let i = 0; i < n; i++) { const onLimb = R() < 0.3 && grown.limbs.length; if (onLimb) { const L = grown.limbs[Math.floor(R() * grown.limbs.length)], t = 0.1 + 0.4 * R(), p = L.curve.getPointAt(t), a = R() * TAU; spots.push({ p: p.add(V(Math.cos(a) * L.r(t), -L.r(t) * 0.3, Math.sin(a) * L.r(t))), d: V(Math.cos(a), 0, Math.sin(a)), up: false }); continue; }
-      const y = 1.0 + R() * (H0 - 1.2), a = R() * TAU, [sx, sz] = T0.spine(y), r = T0.rAt(y, a); spots.push({ p: V(sx + Math.cos(a) * (r + 0.01), y, sz + Math.sin(a) * (r + 0.01)), d: V(Math.cos(a), 0, Math.sin(a)), up: false }); } }
-    spots.forEach((sp, i) => {
-      const tip = sp.p, u = o.phase ? o.phase(i) : R(), ry = Math.atan2(-sp.d.z, sp.d.x) + (R() - 0.5) * 0.6;
-      const site = { tip, d: sp.d, u, bloom: -1, fruit: [] }; sites.push(site);
-      if (u < 0.4) { site.bloom = blooms.length; const ax = sp.d.clone().multiplyScalar(0.5).add(UPv).normalize(); blooms.push({ p: tip.toArray(), ry, tilt: sp.up ? Math.acos(clamp(ax.y, -1, 1)) * 0.6 : 0, age: u / 0.4, seed: R() * 9 }); }
-      if (u >= 0.2) {
-        const age = (u - 0.2) / 0.8, nf = S.perSite[0] + Math.floor(R() * (S.perSite[1] - S.perSite[0] + 1));
-        for (let k = 0; k < nf; k++) {
-          const a2 = clamp(age * (0.95 + 0.1 * R()));
-          if (a2 > S.fall) { const rr = Math.sqrt(R()) * Rc * 0.9, aa = R() * TAU; fallen.push({ p: [cc.x + Math.cos(aa) * rr, 0.0, cc.z + Math.sin(aa) * rr], ry: R() * TAU, tilt: Math.PI / 2 * (0.85 + 0.15 * R()), age: Math.min(1, a2 + 0.08), seed: R() * 9, ground: true }); }
-          else { site.fruit.push(fruit.length); const off = S.spread * Math.sqrt(R()), oa = R() * TAU; fruit.push({ p: tip.clone().add(V(Math.cos(oa) * off, -0.015 - 0.4 * off * R(), Math.sin(oa) * off)).toArray(), ry: ry + k * 2.1, tilt: (R() - 0.5) * 0.16, age: a2, seed: R() * 9 }); }
-        }
+    mango: { src: 'tips', hang: 0.26, perSite: [1, 2], spread: 0.06, n: 120, dy: [-0.75, 0.55], out: 1.08, fall: 0.82, hop: [0.12, 0.35] },
+    rambutan: { src: 'tips', hang: 0.07, perSite: [6, 13], spread: 0.09, n: 70, dy: [-0.6, 0.6], out: 1.05, fall: 0.86, hop: [0.07, 0.3], cap: 40 },
+    durian: { src: 'limbs', hang: 0.12, perSite: [1, 2], spread: 0.1, n: 40, fall: 0.62, hop: [0.02, 0.06] },
+    cempedak: { src: 'trunk', hang: 0.035, perSite: [1, 1], spread: 0.0, n: 34, fall: 0.8, hop: [0.03, 0.1] },
+    papaya: { hang: 0.03, fall: 0.84, hop: [0.05, 0.25] },
+    banana: { set: 0.04, bloomEnd: 1.6, fall: 0.92, hop: [0.03, 0.15] },
+    coconut: { hang: 0.12, fall: 0.86, hop: [0.14, 0.7] } };
+  const setOf = S => S.set ?? 0.2, endOf = S => S.bloomEnd ?? 0.4;
+  /* a site's flowers' age at u in its round (below 0: not out yet; 1: gone), and a fruit's (j: how far ahead it runs) */
+  const bloomAge = (S, u) => { const e = endOf(S); return u < e ? Math.min(1, (u / e) * 1.12 - 0.12) : 1; };
+  const fruitAge = (S, u, j) => (u - setOf(S)) / (1 - setOf(S)) * j;
+  /* how big a fruit is at age a, as a share of its full size (the shader's growth) */
+  const growth = (kind, a) => { const t = clamp(a / 0.45), s = t * t * (3 - 2 * t); return mix(KINDS[kind].g[0], 1, 1 - Math.pow(1 - s, 2.2)); };
+  /* a fruit geometry's body: its pivot (the fruit's top, where the stalk joins it), the middle of its skin, its half size */
+  function body(g) {
+    if (g.userData.body) return g.userData.body;
+    const P = g.attributes.position.array, F = g.attributes.aFr.array, bb = new T.Box3(), v = V();
+    for (let i = 0, n = P.length / 3; i < n; i++) if (F[i * 4 + 3] > 0.5) bb.expandByPoint(v.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]));
+    const c = bb.getCenter(V()), half = bb.getSize(V()).multiplyScalar(0.5);
+    return (g.userData.body = { piv: V(...(g.userData.pivot || [0, 0, 0])), c, half });
+  }
+  /* what a fruit is like at age a: a word for it, a line about it, whether it is good to eat */
+  const NAMES = { mango: ['Mango', 'Mangifera indica'], rambutan: ['Rambutan', 'Nephelium lappaceum'], durian: ['Durian', 'Durio zibethinus'], cempedak: ['Cempedak', 'Artocarpus integer'],
+    papaya: ['Papaya', 'Carica papaya'], banana: ['Banana', 'Musa'], coconut: ['Coconut', 'Cocos nucifera'] };
+  const RIPE = {
+    mango: 'Ripe: it gives a little to the thumb and smells sweet at the stalk. The red is only where the sun reached it.',
+    rambutan: 'Ripe: red, its soft hairs tipped yellow-green. Inside, round one seed, white flesh, sweet and a little sharp.',
+    durian: 'Ripe, and you can smell it from here. Nobody picks a durian: it falls when it is ready, mostly at night.',
+    cempedak: 'Ripe: going brown and strong-smelling; inside, orange pods round the seeds, sweet and sticky.',
+    papaya: 'Ripe: yellow from its tip up and soft to a press. Inside, orange flesh round a hollow of black seeds.',
+    banana: 'Ripe: yellow, its first sugar spots coming. It peels from the tip as easily as from the stalk.',
+    coconut: 'A mature nut, brown and dry, the meat inside thick and white. A green one holds more water.' };
+  const NOTE = {
+    mango: 'On a long stalk at the end of a twig. A tree can bear for a hundred years.',
+    rambutan: 'Rambut is Malay for hair. They hang in loose bunches, a dozen to a twig.',
+    durian: 'Its thorns are hard enough to hurt, which is why durians are gathered from the ground, and from under a tree with care.',
+    cempedak: 'Straight off the trunk and the big limbs, as its cousin the jackfruit grows.',
+    papaya: 'The papaya is a giant herb, its trunk soft wood; it fruits within a year of the seed.',
+    banana: 'The plant is a giant herb, its trunk a roll of leaf sheaths. Each stem fruits once, and a sucker takes its place.',
+    coconut: 'A nut takes about a year to grow. It floats, and can sprout on a beach a sea away from its tree.' };
+  function stageOf(kind, a) {
+    const r = kind === 'durian' ? [0.08, 0.26, 0.42, 0.52, 0.72, 0.84, 0.93] : [0.1, 0.3, 0.44, 0.54, 0.7, 0.82, 0.93];
+    const nm = NAMES[kind][0], lc = nm.toLowerCase();
+    const L = [[nm + ' fruitlet', 'Just set, the dry flower still on its tip.', false], ['Young ' + lc, 'Still growing: green and hard.', false], ['Unripe ' + lc, 'Full grown, but green and hard: not ripe yet.', false],
+      ['Ripening ' + lc, 'Turning: ripening first on the side the sun reached.', true], ['Ripe ' + lc, RIPE[kind], true], ['Overripe ' + lc, 'Overripe: soft, its spots spreading. Still sweet, very sweet.', true],
+      ['Rotting ' + lc, 'Going rotten: soft and dark, and the flies have found it.', false], ['Rotten ' + lc, 'Rotten through, furred with mould. The ground will have it soon.', false]];
+    let i = 0; while (i < r.length && a >= r[i]) i++;
+    const [name, line, edible] = L[i];
+    return { name, word: ['fruitlet', 'young', 'unripe', 'ripening', 'ripe', 'overripe', 'rotting', 'rotten'][i], note: line + ' ' + NOTE[kind], edible, latin: NAMES[kind][1], age: a };
+  }
+
+  /* ── a tree's sites made into its parts, and set going. sites: [{ u0 (where in its round it is), P (how long its round
+     is, as a share of PERIOD), bloom: an item or none, fruit: [items] }]; items as instances() and bloomInstances() take
+     them, their ages worked out here from u0. o: fruitLod, bloomLod; ground(x, z): the ground's height under the tree,
+     in its own frame (flat at 0 if not said); cap: how many fruit can lie on the ground at once ── */
+  const _m = new T.Matrix4(), _m2 = new T.Matrix4(), _q = new T.Quaternion(), _q2 = new T.Quaternion(), _e = new T.Euler(), _v = V(), _v2 = V(), _s = V();
+  function assemble(kind, sites, o = {}) {
+    const S = SITE[kind], R = Models.rng((o.seed || 1) * 7 + 3), g = new T.Group(), lod = o.fruitLod ?? 1;
+    const blooms = [], items = [], lying = [];
+    sites.forEach((s, si) => {
+      s.P = s.P ?? 0.85 + 0.3 * R(); s.bi = -1; s.fi = [];
+      s.ba = bloomAge(S, s.u0);
+      if (s.bloom) { s.bi = blooms.length; blooms.push(Object.assign(s.bloom, { age: s.ba })); }
+      for (const it of s.fruit) {
+        it.j = it.j ?? 0.95 + 0.1 * R(); it.fallAt = it.fallAt ?? S.fall * (0.97 + 0.06 * R()); it.site = si; it.st = 'tree';
+        const a = fruitAge(S, s.u0, it.j);
+        it.i = items.length; s.fi.push(it.i); items.push(it);
+        if (a >= it.fallAt) { it.age = -1; it.st = 'gone'; if (a < 1 + DECAY) lying.push({ it, a }); } else it.age = a;
+        it.a = it.age;
       }
     });
     const parts = {};
     if (blooms.length) { parts.blooms = bloomInstances(kind, blooms, { geo: { lod: o.bloomLod ?? 1 } }); g.add(parts.blooms); }
-    if (fruit.length) { parts.fruit = instances(kind, fruit, { geo: { hang: S.hang, lod: o.fruitLod ?? 1 } }); g.add(parts.fruit); }
-    if (fallen.length) {
-      /* (lying on the ground: a fruit on its side rests on its widest girth) */
-      const gg = geo(kind, { lod: o.fruitLod ?? 1 }); gg.computeBoundingBox(); const bb = gg.boundingBox, rest = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) * 0.5;
-      for (const f of fallen) { f.p[1] = rest * 0.92; f.p[0] += (bb.max.y + bb.min.y) * 0.5 * Math.sin(f.ry) * 0; }
-      parts.fallen = instances(kind, fallen, { geo: { lod: o.fruitLod ?? 1 } }); g.add(parts.fallen);
+    if (items.length) { parts.fruit = instances(kind, items, { geo: { hang: S.hang || 0, lod } }); g.add(parts.fruit); }
+    const cap = o.cap ?? S.cap ?? Math.max(12, Math.min(96, Math.ceil(items.length * 0.5) + 10));
+    parts.fallen = instances(kind, Array.from({ length: cap }, () => ({ p: [0, 0, 0], age: -1, seed: R() * 9 })), { geo: { hang: 0, lod } }); g.add(parts.fallen);
+    const fr = { kind, S, sites, items, blooms, parts, cap, clock: 0, ground: o.ground || (() => 0) };
+    /* (the flowers cast no shadow worth the drawing of it) */
+    if (parts.blooms) parts.blooms.castShadow = false;
+    live(fr, g, R);
+    for (const L of lying) fr.live.lay(L.it, L.a);
+    for (const s of sites) s.n = Math.floor(s.u0);
+    fr.live.repack();
+    g.userData.fruit = fr; return g;
+  }
+
+  /* ── the round, live. Each part draws only what is there to see: the flowers out, the fruit hanging (not those not
+     set yet, fallen or picked), the fruit on the ground, packed at the front of its mesh (count), so what is not there
+     costs nothing to draw ── */
+  function live(fr, g, R) {
+    const { kind, S, sites, items, blooms, parts } = fr, F = parts.fruit, B = parts.blooms, Gm = parts.fallen;
+    const at = (m, k) => m && m.geometry.attributes[k];
+    const FA = at(F, 'aAge'), FS = at(F, 'aSeed'), FW = at(F, 'aFW'), BA = at(B, 'aAge'), BS = at(B, 'aSeed'), BW = at(B, 'aFW'), GA = at(Gm, 'aAge'), GS = at(Gm, 'aSeed');
+    const bH = F ? body(F.userData.base) : null, bG = body(Gm.userData.base), set = setOf(S), Z4 = [0, 0, 0, 0];
+    /* (each hanging fruit's and each flower's place, as a matrix in the tree's frame) */
+    const place = it => { _e.set(it.tilt || 0, it.ry || 0, it.roll || 0, 'YXZ'); it.q = new T.Quaternion().setFromEuler(_e); it.M = new T.Matrix4().compose(V(...it.p), it.q, V(it.s || 1, it.s || 1, it.s || 1)); };
+    items.forEach(place); blooms.forEach(place);
+    /* the ground's fruit: free, falling, bouncing, lying (rotting on, and at last sinking away), or in someone's hand */
+    const pool = Array.from({ length: fr.cap }, (_, i) => ({ i, mode: 'free', age: -1, rate: 0, s: 1, p: V(), q: new T.Quaternion(), M: new T.Matrix4(), t: 0, seed: R() * 9 }));
+    const rateOf = it => it.j / ((1 - set) * PERIOD * sites[it.site].P);
+    const restOf = (a, s) => bG.half.z * growth(kind, a) * s;
+    const write = e => {
+      const d = e.age > 1 + DWELL ? clamp((e.age - 1 - DWELL) / SINK) : 0, rest = restOf(Math.min(1, e.age), e.s);
+      _v.copy(e.p); if (d > 0) _v.y -= rest * 0.95 * d;
+      e.M.compose(_v, e.q, _s.setScalar(e.s * (1 - 0.45 * d)));
+    };
+    /* (the ground under the tree, for the frustum: its fruit lie within it, or it is stretched to take in one thrown) */
+    const GB = new T.Sphere(); { const bb = new T.Box3(); for (const it of items) bb.expandByPoint(_v.set(it.p[0], 0, it.p[2])); if (bb.isEmpty()) bb.expandByPoint(_v.set(0, 0, 0)); bb.getBoundingSphere(GB); GB.radius += 2.5; }
+    /* ── what is there, packed to the front of each mesh ── */
+    const FI = new Int32Array(items.length).fill(-1), BI = new Int32Array(blooms.length).fill(-1);
+    function packFruit() {
+      if (!F) return; let k = 0, ch = false;
+      for (let i = 0; i < items.length; i++) { const it = items[i]; if (it.st !== 'tree' || !(it.a > -0.06)) continue; if (FI[k] !== i) { FI[k] = i; ch = true; } FA.array[k] = Math.min(1, it.a); k++; }
+      if (ch || k !== F.count) { for (let j = 0; j < k; j++) { const it = items[FI[j]]; F.setMatrixAt(j, it.M); FS.array[j] = it.seed ?? 0; FW.array.set(it.wind || Z4, j * 4); } F.count = k; F.instanceMatrix.needsUpdate = FS.needsUpdate = FW.needsUpdate = true; }
+      FA.needsUpdate = true;
     }
-    g.userData.fruit = { kind, sites, parts }; return g;
+    function packBlooms() {
+      if (!B) return; let k = 0, ch = false;
+      for (let si = 0; si < sites.length; si++) { const s = sites[si]; if (s.bi < 0 || !(s.ba > -0.12 && s.ba < 1)) continue; if (BI[k] !== s.bi) { BI[k] = s.bi; ch = true; } BA.array[k] = s.ba; k++; }
+      if (ch || k !== B.count) { for (let j = 0; j < k; j++) { const b = blooms[BI[j]]; B.setMatrixAt(j, b.M); BS.array[j] = b.seed ?? 0; BW.array.set(b.wind || Z4, j * 4); } B.count = k; B.instanceMatrix.needsUpdate = BS.needsUpdate = BW.needsUpdate = true; }
+      BA.needsUpdate = true;
+    }
+    function packGround() {
+      let k = 0;
+      for (const e of pool) { if (e.mode === 'free' || e.mode === 'held') continue; Gm.setMatrixAt(k, e.M); GA.array[k] = Math.min(1, e.age); GS.array[k] = e.seed; k++; }
+      Gm.count = k; Gm.instanceMatrix.needsUpdate = GA.needsUpdate = GS.needsUpdate = true;
+    }
+    const repack = () => { packFruit(); packBlooms(); packGround(); };
+    /* (one to use: a free one, or else the one that has lain there longest) */
+    const alloc = () => { let best = null; for (const e of pool) { if (e.mode === 'free') return e; if (e.mode === 'lie' && (!best || e.age > best.age)) best = e; } return best; };
+    const free = e => { e.mode = 'free'; e.age = -1; };
+    /* the middle of a hanging fruit (or of one on the ground), in the tree's frame, at its age */
+    const midH = (it, a, out) => out.copy(bH.c).sub(bH.piv).multiplyScalar(growth(kind, a)).add(bH.piv).applyMatrix4(it.M);
+    const midG = (e, out) => { _m.compose(e.p, e.q, _s.setScalar(e.s)); return out.copy(bG.c).sub(bG.piv).multiplyScalar(growth(kind, Math.min(1, e.age))).add(bG.piv).applyMatrix4(_m); };
+    /* where a fruit comes to rest on the ground at (x, z): on its side, its long axis level, turned any way */
+    function restAt(e, x, z) { const r = restOf(Math.min(1, e.age), e.s); e.q1 = new T.Quaternion().setFromEuler(_e.set(Math.PI / 2 * (0.94 + 0.06 * R()), R() * TAU, 0, 'YXZ')); return V(x, fr.ground(x, z) + r, z); }
+    /* a fruit coming off its stalk (or let go of where it hung): it falls from there */
+    function fall(it, a, rate) {
+      it.st = 'gone'; it.a = -1;
+      const e = alloc(); if (!e) return null;
+      /* (the fruit on the ground is the kind's own without the long stalk: its top where the hanging one's was) */
+      const pH = _v.copy(bH.piv).applyMatrix4(it.M), s = it.s || 1;
+      e.s = s; e.q.copy(it.q); e.p.copy(pH).sub(_v2.copy(bG.piv).multiplyScalar(s).applyQuaternion(it.q));
+      e.age = a; e.rate = rate ?? rateOf(it); e.mode = 'fall'; e.t = 0; e.p0 = e.p.clone(); e.q0 = e.q.clone();
+      const c = midH(it, a, V()); e.p1 = restAt(e, c.x + (R() - 0.5) * 0.2, c.z + (R() - 0.5) * 0.2);
+      const drop = Math.max(0.05, e.p0.y - e.p1.y); e.tf = Math.sqrt(2 * drop / G);
+      /* (a bounce, smaller for a short fall; a roll on) */
+      const k = Math.min(1, drop / 3), dir = R() * TAU; e.hb = S.hop[0] * Math.sqrt(k); const rl = S.hop[1] * (0.4 + 0.6 * R()) * Math.sqrt(k);
+      e.p2 = restAt({ age: a, s }, e.p1.x + Math.cos(dir) * rl, e.p1.z + Math.sin(dir) * rl); e.q2 = e.q1.clone().multiply(_q.setFromAxisAngle(_v.set(0, 1, 0), (R() - 0.5) * 1.2));
+      e.th = 2 * Math.sqrt(2 * Math.max(e.hb, 0.005) / G) + 0.12;
+      write(e); return e;
+    }
+    /* one fallen before now (the tree as it is when first seen), lying under where it hung */
+    function lay(it, a) {
+      const e = alloc(); if (!e) return null;
+      const c = midH(it, Math.min(1, a), V()); e.s = it.s || 1; e.age = a; e.rate = rateOf(it); e.mode = 'lie';
+      e.p.copy(restAt(e, c.x + (R() - 0.5) * 0.7, c.z + (R() - 0.5) * 0.7)); e.q.copy(e.q1);
+      write(e); return e;
+    }
+    const ease = t => t * t * (3 - 2 * t);
+    /* ── a step: dtR real seconds, dtL life seconds; env.wind (1 a breeze, 2 and more a gale) shakes ripe fruit down ── */
+    function step(dtR, dtL, env) {
+      fr.clock += dtL;
+      const gale = env && env.wind ? Math.max(0, env.wind - 1.3) : 0;
+      for (const s of sites) {
+        const c = s.u0 + fr.clock / (PERIOD * s.P), n = Math.floor(c), u = c - n;
+        if (n !== s.n) {
+          /* (a new round: what is still hanging of the last comes down, and the site starts again) */
+          /* (one in someone's hand is theirs; the site bears again all the same) */
+          for (const i of s.fi) { const it = items[i]; if (it.st === 'tree') { const a = fruitAge(S, 1, it.j); if (a > 0.3) fall(it, Math.min(a, it.fallAt)); } it.st = 'tree'; }
+          s.n = n;
+        }
+        s.u = u; s.ba = bloomAge(S, u);
+        for (const i of s.fi) {
+          const it = items[i]; if (it.st !== 'tree') continue;
+          const a = fruitAge(S, u, it.j);
+          if (a >= it.fallAt || (gale > 0 && a > 0.5 && R() < gale * 0.02 * dtR * sm(0.5, 0.85, a))) { fall(it, a); continue; }
+          it.a = a;
+        }
+      }
+      for (const e of pool) {
+        if (e.mode === 'free' || e.mode === 'held') continue;
+        e.age += dtL * e.rate;
+        if (e.age >= 1 + DECAY) { free(e); continue; }
+        if (e.mode === 'fall') {
+          e.t += dtR; const u = Math.min(1, e.t / e.tf);
+          e.p.set(mix(e.p0.x, e.p1.x, u), Math.max(e.p1.y, e.p0.y - 0.5 * G * e.t * e.t), mix(e.p0.z, e.p1.z, u)); e.q.slerpQuaternions(e.q0, e.q1, ease(u));
+          if (u >= 1) { e.mode = 'hop'; e.t = 0; }
+          write(e);
+        } else if (e.mode === 'hop') {
+          e.t += dtR; const u = Math.min(1, e.t / e.th), b = Math.min(1, u * 1.25);
+          e.p.lerpVectors(e.p1, e.p2, 1 - (1 - u) * (1 - u)); e.p.y += e.hb * Math.sin(Math.PI * b) * (b < 1 ? 1 : 0); e.q.slerpQuaternions(e.q1, e.q2, ease(u));
+          if (u >= 1) { e.mode = 'lie'; e.p.copy(e.p2); e.q.copy(e.q2); }
+          write(e);
+        } else if (e.age > 1 + DWELL) write(e);
+      }
+      repack();
+    }
+    /* run the round on to life time T in steps of dt (for the studio: the tree as it is at T, all falls landed) */
+    function run(T1, dt = 2) { while (fr.clock < T1 - 1e-6) { const d = Math.min(dt, T1 - fr.clock); step(d, d); } for (let k = 0; k < 6; k++) step(1, 0); }
+    /* the ground under it moved (laid on the world): those lying are laid on it again */
+    function reground(fn) {
+      fr.ground = fn;
+      for (const e of pool) if (e.mode === 'lie' || e.mode === 'hop' || e.mode === 'fall') { const r = restOf(Math.min(1, e.age), e.s); e.p.y = fn(e.p.x, e.p.z) + r; if (e.p1) e.p1.y = fn(e.p1.x, e.p1.z) + r; if (e.p2) e.p2.y = fn(e.p2.x, e.p2.z) + r; write(e); }
+      packGround();
+    }
+
+    /* ── picking one: what can be picked (each a candidate as inspect.js takes them: where its middle is in the world,
+       how big, which way it is turned, and what to do as it is taken and as it is given back) ── */
+    const _w = V(), _wq = new T.Quaternion(), _ws = V(), _c = V();
+    function pickables(list, cam, reach = 26) {
+      g.updateWorldMatrix(true, false); const W = g.matrixWorld; W.decompose(_w, _wq, _ws);
+      if (_w.distanceTo(cam) > reach + 20) return;
+      const r2 = reach * reach, sc = _ws.x;
+      const add = (mid, q, a, s, from) => {
+        const p = mid.applyMatrix4(W); if (p.distanceToSquared(cam) > r2) return;
+        const gr = growth(kind, Math.min(1, a)), st = { age0: a, age: a, c0: life.clock, rate: from.rate }, qw = _wq.clone().multiply(q), e3 = new T.Euler().setFromQuaternion(qw, 'YXZ');
+        list.push({ kind, fruit: true, x: p.x, y: p.y, z: p.z, r: Math.max(bG.half.x, bG.half.y, bG.half.z) * gr * s * sc * 1.1, size: s * sc, q: qw, yaw: e3.y, restR: restOf(Math.min(1, a), s * sc),
+          opts: { kind, st, lod: 0, seed: from.seed }, info: () => stageOf(kind, st.age),
+          take: from.take, give: (how, at, M) => from.give(how, st, M) });
+      };
+      for (const it of items) {
+        if (it.st !== 'tree' || !(it.a >= 0.12)) continue;
+        add(midH(it, it.a, _c), it.q, it.a, it.s || 1, { rate: rateOf(it), seed: it.seed,
+          take() { it.st = 'held'; it.a = -1; packFruit(); },
+          give(how, st, M) {
+            if (how === 'back') { it.st = 'tree'; fall(it, st.age, st.rate); }
+            else if (how === 'land' && M) { it.st = 'gone'; landAt(M, st); }
+            else it.st = 'gone';
+            repack();
+          } });
+      }
+      for (const e of pool) {
+        if (!(e.mode === 'lie' || e.mode === 'hop') || e.age > 1 + DECAY * 0.5) continue;
+        add(midG(e, _c), e.q, e.age, e.s, { rate: e.rate, seed: e.seed,
+          take() { e.mode = 'held'; packGround(); },
+          give(how, st, M) {
+            if (how === 'back') { e.mode = 'lie'; e.age = st.age; write(e); }
+            else if (how === 'land' && M) { free(e); landAt(M, st); }
+            else free(e);
+            packGround();
+          } });
+      }
+    }
+    /* one thrown (or set down) somewhere: lying there, in the tree's frame, as it came to rest */
+    function landAt(M, st) {
+      const e = alloc(); if (!e) return;
+      g.updateWorldMatrix(true, false); _m2.copy(g.matrixWorld).invert().multiply(M); _m2.decompose(e.p, e.q, _s);
+      e.s = _s.x; e.age = st.age; e.rate = st.rate; e.mode = 'lie'; write(e);
+      if (!GB.containsPoint(e.p)) { GB.expandByPoint(e.p); GB.radius += 0.5; Gm.boundingSphere.copy(GB); }
+    }
+    /* how many are where (for the test bench) */
+    function count() {
+      const c = { hanging: 0, ripe: 0, flowering: 0, falling: 0, lying: 0, held: 0, drawn: [F ? F.count : 0, B ? B.count : 0, Gm.count], clock: +fr.clock.toFixed(1) };
+      for (const it of items) { if (it.st === 'tree' && it.a >= 0) { c.hanging++; if (it.a > 0.54 && it.a < 0.82) c.ripe++; } if (it.st === 'held') c.held++; }
+      for (const s of sites) if (s.bi >= 0 && s.ba >= 0 && s.ba < 1) c.flowering++;
+      for (const e of pool) { if (e.mode === 'fall' || e.mode === 'hop') c.falling++; else if (e.mode === 'lie') c.lying++; else if (e.mode === 'held') c.held++; }
+      return c;
+    }
+    /* (for the test bench: the ripest n come down now) */
+    function shake(n = 1) { const L = items.filter(it => it.st === 'tree' && it.a > 0.4).sort((a, b) => b.a - a.a).slice(0, n); for (const it of L) fall(it, it.a); repack(); return L.length; }
+    /* (frustum culling: each part as far as it can reach, the fruit as they sway, the ground as far as they roll) */
+    for (const [m, pad] of [[F, 1.2], [B, 1.0]]) if (m) { m.count = m.instanceMatrix.count; m.computeBoundingSphere(); m.boundingSphere.radius += pad; m.frustumCulled = true; }
+    Gm.boundingSphere = GB.clone(); Gm.frustumCulled = true;
+    fr.live = { step, run, reground, pickables, count, shake, lay, repack, get clock() { return fr.clock; } };
+    return fr.live;
+  }
+
+  /* ══ a fruit tree: the tree grown (FloraGrow), its sites on it where the kind bears: at the tips of the twigs round the
+     crown (a mango, a rambutan: their flowers stand up out of the leaves, the fruit hang below on their stalks), under
+     the big limbs (a durian's, hanging), or straight off the trunk (a cempedak's). Each site hangs from a twig that moves
+     in the wind as the tree's own twigs there do. o.phase(i) gives a site's place in its round (a snapshot); o.u puts
+     them all at about the same place in it (to see one stage on the whole tree) ══ */
+  function onTree(kind, grown, o = {}) {
+    const S = SITE[kind], R = Models.rng((o.seed || 1) * 19 + 7), UPv = V(0, 1, 0), H = grown.info.H, n = o.n ?? S.n, spots = [];
+    if (S.src === 'tips') for (const c of grown.clumps.filter(c => c.d.y > S.dy[0] && c.d.y < S.dy[1]).sort(() => R() - 0.5).slice(0, n)) spots.push({ p: c.c.clone().addScaledVector(c.d, c.r * S.out), d: c.d.clone(), up: true, w: [c.ph, 0.18] });
+    else if (S.src === 'limbs') { for (let i = 0; i < n; i++) { const L = grown.limbs[Math.floor(R() * grown.limbs.length)]; if (!L) break; const t = 0.3 + 0.65 * R(), p = L.curve.getPointAt(t), tg = L.curve.getTangentAt(t); let sd = V().crossVectors(tg, UPv); if (sd.lengthSq() < 1e-4) sd.set(1, 0, 0); sd.normalize(); spots.push({ p: p.addScaledVector(sd, (R() - 0.5) * L.r(t)).add(V(0, -L.r(t) * 0.9, 0)), d: V(sd.x, 0, sd.z), up: false, w: [L.ph, 0.03] }); } }
+    else { const T0 = grown.trunk, H0 = T0.boleH; for (let i = 0; i < n; i++) { const onLimb = R() < 0.3 && grown.limbs.length; if (onLimb) { const L = grown.limbs[Math.floor(R() * grown.limbs.length)], t = 0.1 + 0.4 * R(), p = L.curve.getPointAt(t), a = R() * TAU; spots.push({ p: p.add(V(Math.cos(a) * L.r(t), -L.r(t) * 0.3, Math.sin(a) * L.r(t))), d: V(Math.cos(a), 0, Math.sin(a)), up: false, w: [L.ph, 0.012] }); continue; }
+      const y = 1.0 + R() * (H0 - 1.2), a = R() * TAU, [sx, sz] = T0.spine(y), r = T0.rAt(y, a); spots.push({ p: V(sx + Math.cos(a) * (r + 0.01), y, sz + Math.sin(a) * (r + 0.01)), d: V(Math.cos(a), 0, Math.sin(a)), up: false, w: [0, 0] }); } }
+    const sites = spots.map((sp, i) => {
+      const tip = sp.p, u = o.phase ? o.phase(i) : o.u != null ? (o.u + 0.03 * R()) % 1 : R(), ry = Math.atan2(-sp.d.z, sp.d.x) + (R() - 0.5) * 0.6, wind = [sp.w[0], sp.w[1], clamp(tip.y / H), H];
+      const ax = sp.d.clone().multiplyScalar(0.5).add(UPv).normalize();
+      const bloom = { p: tip.toArray(), ry, tilt: sp.up ? Math.acos(clamp(ax.y, -1, 1)) * 0.6 : 0, seed: R() * 9, wind };
+      const nf = S.perSite[0] + Math.floor(R() * (S.perSite[1] - S.perSite[0] + 1)), fruit = [];
+      for (let k = 0; k < nf; k++) { const off = S.spread * Math.sqrt(R()), oa = R() * TAU; fruit.push({ p: tip.clone().add(V(Math.cos(oa) * off, -0.015 - 0.4 * off * R(), Math.sin(oa) * off)).toArray(), ry: ry + k * 2.1, tilt: (R() - 0.5) * 0.16, seed: R() * 9, wind }); }
+      return { u0: u, bloom, fruit };
+    });
+    return assemble(kind, sites, o);
   }
   for (const k of ['mango', 'rambutan', 'durian', 'cempedak']) Models.add('fruit/' + k + '-tree', (o = {}) => {
     const t = FloraGrow.model(k, o.seed || 2, o), f = onTree(k, t.userData.grown, o);
-    t.add(f); t.userData.fruit = f.userData.fruit; return t;
+    t.add(f); t.userData.fruit = f.userData.fruit;
+    /* (o.at: the tree as it is that many life seconds on, its round run on to then) */
+    if (o.at) f.userData.fruit.live.run(o.at);
+    return t;
   });
-  return { KINDS, FLK, material, depth, flowers, geo, bloom, instances, bloomInstances, onTree, lathe, stalk, join };
+  /* one fruit, for the hand (inspect.js): of a kind, at an age; o.st, and it keeps ripening (and going over) on the
+     life clock as it is held and wherever it is thrown, st.age telling how far it has got */
+  Models.add('fruit/one', (o = {}) => {
+    const kind = o.kind || 'mango', st = o.st || null, g = new T.Group();
+    const m = instances(kind, [{ p: [0, 0, 0], age: Math.min(1, st ? st.age : (o.age ?? 0.6)), seed: o.seed ?? 1.3 }], { geo: { lod: o.lod ?? 0 } }); g.add(m);
+    if (st) { const A = m.geometry.attributes.aAge; g.userData.anim = () => { const a = st.age0 + (life.clock - st.c0) * (st.rate || 0); st.age = a; const v = Math.min(1, a); if (A.array[0] !== v) { A.array[0] = v; A.needsUpdate = true; } }; }
+    g.userData.fruitKind = kind; return g;
+  });
+  return { KINDS, FLK, SITE, PERIOD, NAMES, life, material, depth, flowers, geo, bloom, instances, bloomInstances, onTree, assemble, stageOf, growth, lathe, stalk, join };
 })();

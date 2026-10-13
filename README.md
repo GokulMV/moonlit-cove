@@ -10,6 +10,7 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 
 - Walk the beach and out onto the reef, or let it walk itself
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands
+- Pick fruit round the camp (mango, rambutan, papaya, banana, coconuts): every tree flowers, sets fruit, ripens and drops it to rot on the ground, round after round, about every 15 minutes (faster with the time flow up); a fruit keeps ripening in your hand, and you can eat it when it's ripe
 - Drive the van down a coast that never repeats, and pitch camp anywhere
 - Let a sky lantern go with a wish, pinned to a board by the fire for everyone to read
 - Draw on the sketchboard and leave it in the toolbox for others to open

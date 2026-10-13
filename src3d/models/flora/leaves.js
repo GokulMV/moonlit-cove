@@ -89,7 +89,7 @@ const FloraLeaf = (() => {
     /* a mango: lanceolate, 15-30 cm, leathery, in whorls at the twigs' ends; very dark green and glossy, paler beneath;
        the new flush limp and wine-red to bronze */
     mango: { back: [1.2, 1.24, 1.0], card: 0.8, L: [0.15, 0.28], W: [0.2, 0.26], shape: 'elliptic', tip: 0.06, veins: [16, 24], va: 1.05, arr: 'rosette', twigs: [3, 4], per: [9, 13],
-      top: [108, 0.4, 0.19], tj: [6, 0.06, 0.035], under: [95, 0.28, 0.35], underK: 0.08, flush: [348, 0.42, 0.3], flushK: 0.22, yellow: 0.03, dmg: 0.22, twig: [40, 0.3, 0.3], gloss: [0.32, 28, 0.7] },
+      top: [108, 0.4, 0.22], tj: [6, 0.06, 0.035], under: [95, 0.28, 0.37], underK: 0.08, flush: [348, 0.42, 0.3], flushK: 0.22, yellow: 0.03, dmg: 0.22, twig: [40, 0.3, 0.3], gloss: [0.32, 28, 0.7] },
     /* a rambutan: pinnate, two to four pairs of elliptic leaflets 7-15 cm, dull green above, paler beneath */
     ramb: { back: [1.15, 1.2, 1.0], card: 0.7, L: [0.07, 0.13], W: [0.38, 0.46], shape: 'elliptic', tip: 0.04, veins: [8, 11], va: 1.0, arr: 'pinnate', twigs: [3, 4], per: [3, 5], leaflets: [4, 7],
       top: [98, 0.36, 0.26], tj: [7, 0.06, 0.04], under: [90, 0.2, 0.4], underK: 0.06, flush: [40, 0.4, 0.38], flushK: 0.12, yellow: 0.04, dmg: 0.3, twig: [30, 0.25, 0.3], gloss: [0.2, 22, 0.85] },

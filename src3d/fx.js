@@ -133,7 +133,7 @@ void main(){ vec4 t = texture2D(uPuff, vUv); gl_FragColor = vec4(mix(uLo, uHi, s
     /* twice as many as the default shows, in shuffled order, so the density setting draws an even share of them */
     const homes = [], shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     for (let rep = 0; rep < 2; rep++) {
-      for (const b of [...Layout.bushes, ...Layout.trees]) for (let i = 0; i < 7; i++) homes.push([b[0] + (r() - 0.5) * b[2] * 2.4, 0.4 + r() * 2.2, b[1] + (r() - 0.5) * b[2] * 2.0, r()]);
+      for (const b of [...Layout.bushes, ...Layout.trees, ...(Layout.fruit || []).map(f => [f.x, f.z, 2.4])]) for (let i = 0; i < 7; i++) homes.push([b[0] + (r() - 0.5) * b[2] * 2.4, 0.4 + r() * 2.2, b[1] + (r() - 0.5) * b[2] * 2.0, r()]);
       for (let i = 0; i < 14; i++) { const a = r() * TAU; homes.push([Layout.camp.x + Math.cos(a) * (4.6 + r() * 2), 0.5 + r() * 1.6, Layout.camp.z + Math.sin(a) * (2.8 + r() * 1.5) + 1.0, r()]); }
     }
     shuffle(homes);

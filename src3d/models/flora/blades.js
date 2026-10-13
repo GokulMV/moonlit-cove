@@ -308,7 +308,7 @@ const FloraBlade = (() => {
   }
   /* one variant painted: its colour (a), normal map (b) and relief (h) canvases */
   function canvases(kind, o = {}, k = 0) {
-    const Pn = P[kind], W = o.W || Pn.W, H = o.H || Pn.H;
+    const Pn = P[kind], q = FloraKit.Q.tex, W = Math.max(32, Math.round((o.W || Pn.W) * q)), H = Math.max(32, Math.round((o.H || Pn.H) * q));
     const cv = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c.getContext('2d', { willReadFrequently: true }); };
     const a = cv(), b = cv(), h = cv();
     b.fillStyle = 'rgb(128,128,255)'; b.fillRect(0, 0, W, H); h.fillStyle = 'rgb(128,128,128)'; h.fillRect(0, 0, W, H);

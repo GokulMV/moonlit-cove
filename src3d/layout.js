@@ -170,14 +170,22 @@ const Layout = (() => {
   ];
   /* broadleaf trees & bushes: [x, z, canopy radius, canopy height, seed] */
   const trees = [
-    [-5.8, 8.2, 2.7, 4.4, 11], [4.0, 8.8, 2.9, 4.8, 12], [-13.2, 6.6, 2.6, 4.0, 13], [11.2, 6.4, 2.5, 3.8, 14],
+    [-5.8, 8.2, 2.7, 4.4, 11], [4.0, 8.8, 2.9, 4.8, 12],
     [0.8, 15.8, 3.2, 5.6, 15], [-8.4, 16.2, 3.1, 5.8, 16], [9.4, 16.8, 3.2, 5.9, 17], [-19.5, 7.8, 2.8, 4.6, 18], [19.8, 7.6, 2.8, 4.4, 19]
   ];
   const bushes = [
-    [-3.2, 3.2, 1.5, 1.2, 21], [2.8, 3.5, 1.6, 1.3, 22], [8.0, 3.0, 1.4, 1.1, 23], [-9.4, 3.5, 1.6, 1.2, 24],
+    [-3.2, 3.2, 1.5, 1.2, 21], [2.8, 3.5, 1.6, 1.3, 22], [-9.4, 3.5, 1.6, 1.2, 24],
     [-16.2, 2.8, 1.7, 1.4, 25], [16.6, 2.6, 1.5, 1.2, 26], [0.0, 5.4, 1.8, 1.6, 27], [-6.8, 5.6, 1.7, 1.5, 28],
     [6.6, 5.2, 1.7, 1.5, 29], [13.0, 4.4, 1.6, 1.3, 30], [-12.4, 4.2, 1.6, 1.4, 31], [-21.5, 4.6, 1.8, 1.5, 32],
-    [21.8, 4.8, 1.8, 1.5, 33], [-0.5, 8.2, 2.0, 1.8, 34], [-14.5, 9.2, 2.0, 1.8, 35], [13.5, 9.6, 2.0, 1.8, 36]
+    [21.8, 4.8, 1.8, 1.5, 33], [-0.5, 8.2, 2.0, 1.8, 34]
+  ];
+  /* the fruit round the camp (orchard.js): a young mango and a rambutan at the forest's edge either side, a papaya by the
+     van, a clump of bananas behind the chairs. r: how far round its foot to keep clear (walking) */
+  const fruit = [
+    { kind: 'mango', x: -14.6, z: 7.2, ry: 0.4, seed: 3, r: 0.4, opts: { H: 7.4 } },
+    { kind: 'rambutan', x: 12.6, z: 7.4, ry: 2.1, seed: 5, r: 0.35, opts: { H: 6.6 } },
+    { kind: 'papaya', x: -10.9, z: 2.3, ry: 0.7, seed: 2, r: 0.2 },
+    { kind: 'banana', x: 8.5, z: 2.7, ry: 1.3, seed: 4, r: 0.5, opts: { stage: 0.55 } }
   ];
 
   const wind = [0.55, -0.83];     /* land breeze drifting smoke out toward the sea */
@@ -194,5 +202,5 @@ const Layout = (() => {
   };
 
   return { shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN,
-           camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, castle, palms, trees, bushes, wind, cameras, hotspots, board };
+           camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, castle, palms, trees, bushes, fruit, wind, cameras, hotspots, board };
 })();

@@ -317,11 +317,14 @@ const FloraKit = (() => {
       } } };
 
   const barkCache = new Map();
+  /* (how finely the plants' textures are painted: 1 in the studio, where they are looked at from inches away; less in the
+     scene, where painting them is time the visitor waits through: Q.tex 0.5 paints a quarter of the pixels) */
+  const Q = { tex: 1 };
   /* the bark of a kind as textures: { map (sRGB), normalMap, tile [m across, m up], rough (its mean roughness) } */
   function bark(kind) {
     if (barkCache.has(kind)) return barkCache.get(kind);
     const B = BARK[kind]; if (!B) throw new Error('FloraKit: no bark called ' + kind);
-    const W = B.w, H = B.h, K = Object.assign(noiseKit(B.seed), { c: new Float32Array(5), c2: new Float32Array(5), tile0: B.tile[0], tile1: B.tile[1] });
+    const W = Math.max(64, Math.round(B.w * Q.tex)), H = Math.max(64, Math.round(B.h * Q.tex)), K = Object.assign(noiseKit(B.seed), { c: new Float32Array(5), c2: new Float32Array(5), tile0: B.tile[0], tile1: B.tile[1] });
     const Hf = new Float32Array(W * H), M = [new Float32Array(W * H), new Float32Array(W * H), new Float32Array(W * H)], o = [0, 0, 0, 0];
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       o[1] = o[2] = o[3] = 0; B.hgt((i + 0.5) / W, (j + 0.5) / H, K, o); const k = j * W + i; Hf[k] = o[0]; M[0][k] = o[1]; M[1][k] = o[2]; M[2][k] = o[3];
@@ -519,7 +522,7 @@ const FloraKit = (() => {
     return parts;
   }
 
-  return { noiseKit, BARK, bark, barkMat, clamp, sm, mix, mix3, gridGeo, faceOut, mergeParts, trunk, buttress, tube, roots, angD };
+  return { Q, noiseKit, BARK, bark, barkMat, clamp, sm, mix, mix3, gridGeo, faceOut, mergeParts, trunk, buttress, tube, roots, angD };
 })();
 
 /* a row of bark samples, each on a column a metre across (for looking the barks over in the studio) */

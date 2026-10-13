@@ -518,6 +518,8 @@ const Engine = (() => {
     coastFollow(camX ?? Layout.camp.x);
     /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
     if (world) world.update(camX ?? Layout.camp.x, 250);
+    /* (the fruit trees stand by the camp as its palms do: on the new ground under them) */
+    if (orchard) orchard.reground();
   }
   Object.assign(api, { moveCamp, pitchStart, waveAt: (x, z) => waveAt(x, z) });
   Object.defineProperty(api, 'pitching', { get: () => pitch.on });
@@ -532,7 +534,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0; const faunaIn = {};
+  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -776,9 +778,13 @@ const Engine = (() => {
     world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
-    /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js) */
+    /* the fruit round the camp, flowering and fruiting on their own round, and the coconuts on its palms (orchard.js);
+       (their bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
+    FloraKit.Q.tex = opts.texQ ?? 0.5;
+    orchard = Orchard.build(natG, world, { palms: nature.palms }); Object.assign(api, { orchard });
+    /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js); and the fruit */
     inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
-      sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c)],
+      sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c)],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
     post = makePost(); gU.uSunVis.value = post.visTex;
@@ -898,6 +904,11 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     /* what is held up close, or thrown and on its way (its own clock: real time, whatever time of day is doing) */
     waveNow = o.waveT ?? t;
     if (inspect) inspect.update(iClock(), S);
+    /* the fruit's round, on the life clock (the scene's time flow), its falls in real time (the same clock as the hand's) */
+    if (orchard) { const tc = iClock(), dtR = orchT === null ? 0 : Math.max(0, Math.min(0.1, tc - orchT)); orchT = tc; orchard.update(dtR, o.flow ?? 1, { wind: o.wind ?? 1 }); }
+    /* the wind in the grown trees' leaves and twigs, and on the fruit hanging from them (FloraLeaf.WIND): a breeze, more
+       of it and gustier as the weather turns (o.wind: 1 a breeze, 2.6 a storm) */
+    { const w = o.wind ?? 1, W = FloraLeaf.U.uWindV.value; W.set(Layout.wind[0], Layout.wind[1], Math.min(1.5, 0.45 + 0.42 * (w - 1)), Math.min(1, 0.5 + 0.3 * (w - 1))); }
     /* the finely meshed surf follows the camera along the coast; so do the sky, the open sea, the shoreline the shaders
        draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     /* (the surf is meshed round what is being looked at, and round any swell that has been sent in, so a swell clicked far
@@ -1229,7 +1240,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     hold: (c, t) => inspect ? inspect.hold(c, t ?? iClock()) : null,
     turn: (dx, dy) => inspect && inspect.turn(dx, dy), zoom: f => inspect && inspect.zoom(f),
     throwIt: (t, dir) => inspect ? inspect.throwIt(t ?? iClock(), dir) : false,
-    putBack: t => inspect ? inspect.putBack(t ?? iClock()) : false, keep: t => inspect ? inspect.keep(t ?? iClock()) : false,
+    putBack: t => inspect ? inspect.putBack(t ?? iClock()) : false, keep: t => inspect ? inspect.keep(t ?? iClock()) : false, eat: t => inspect ? inspect.eat(t ?? iClock()) : false,
     get held() { return inspect ? inspect.held : null; }, get busy() { return !!inspect && inspect.busy; }, get flying() { return inspect ? inspect.flying : 0; },
     candidates: () => inspect ? inspect.candidates() : []
   };

@@ -202,7 +202,8 @@ const FloraGrow = (() => {
 
   function tree(kind, seed, o = {}) {
     const S = SPECIES[kind], R = Models.rng(seed * 7 + 13), lod = o.lod || 0, Kt = K(), tile = Kt.bark(S.bark).tile;
-    const H = lerp(R, S.H), boleH = H * lerp(R, S.bole), r0 = S.dbh(H) / 2, rTop = r0 * S.taper;
+    /* (o.H: a tree of that height, a young one, say, its crown and girth as the species has them for it) */
+    const H0 = lerp(R, S.H), H = o.H || H0, boleH = H * lerp(R, S.bole), r0 = S.dbh(H) / 2, rTop = r0 * S.taper;
     /* (the bark's own parts, each with its wind weights: [phase, sway (m), share of the height] per point) */
     const parts = [], winds = [];
     const addPart = (g, w) => { parts.push(g); const n = g.attributes.position.count, P = g.attributes.position.array, A = new Float32Array(n * 4); for (let i = 0; i < n; i++) { const q = w(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); A[i * 4] = q[0]; A[i * 4 + 1] = q[1]; A[i * 4 + 2] = clamp(P[i * 3 + 1] / H); A[i * 4 + 3] = H; } winds.push(A); };

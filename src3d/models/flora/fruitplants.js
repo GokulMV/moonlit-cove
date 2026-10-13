@@ -16,6 +16,29 @@
   const T = THREE, TAU = Math.PI * 2, V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (r, a) => a[0] + (a[1] - a[0]) * r(), mix = (a, b, t) => a + (b - a) * t;
   const P = () => FloraPlant;
+  /* a plant's flowers and fruit, set going (FloraFruit.assemble): the set added to the plant, its round on the plant's
+     userData (o.at: run on that many life seconds, as the trees do) */
+  function live(g, kind, sites, o) {
+    const set = FloraFruit.assemble(kind, sites, { seed: o.seed, fruitLod: o.fruitLod ?? 1, bloomLod: o.bloomLod ?? 1, cap: o.cap });
+    g.add(set); g.userData.fruit = set.userData.fruit; if (o.at) set.userData.fruit.live.run(o.at);
+    return set;
+  }
+  /* the bunches of a coconut palm's crown at top (in the palm's frame): each a short stalk out of a frond's axil,
+     branching, a nut on each branch, the youngest highest; each bunch a site with its spadix and its nuts. Returns the
+     sites and the bunches' stalks (the points along each, and its phase in the wind), for the palm to draw. o.share, o.Hp: how far up the palm the
+     crown is and its height, for the wind; o.n how many bunches */
+  function coconutSites(top, R, o = {}) {
+    const nB = o.n ?? 3 + Math.floor(R() * 3), sites = [], stalks = [];
+    for (let b = 0; b < nB; b++) {
+      const az = b / nB * TAU + R() * 0.8, u = (b + R() * 0.6) / nB, d = V(Math.cos(az), 0, Math.sin(az)), base = top.clone().add(V(0, 0.15 - 0.35 * u, 0)).addScaledVector(d, 0.2), stem = base.clone().addScaledVector(d, 0.35).add(V(0, -0.25, 0));
+      const ph = R(), wind = [ph, 0.03, o.share ?? 0.8, o.Hp ?? 12], nn = 4 + Math.floor(R() * 8), fruit = [];
+      for (let k = 0; k < nn; k++) { const a = az + (k / nn - 0.5) * 2.4, off = V(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.12 + 0.06 * (k % 2)), p = stem.clone().add(off).add(V(0, -0.05 - 0.08 * (k % 3), 0)); fruit.push({ p: p.toArray(), ry: -a, roll: 0.25 + 0.25 * R(), seed: R() * 9, wind }); }
+      stalks.push({ pts: [base, base.clone().addScaledVector(d, 0.2).add(V(0, -0.05, 0)), stem], ph });
+      sites.push({ u0: o.phase ? o.phase(b) : o.u != null ? (o.u + 0.03 * R()) % 1 : Math.min(0.995, u), bloom: { p: base.clone().add(V(0, 0.05, 0)).toArray(), ry: -az, seed: R() * 9, wind }, fruit });
+    }
+    return { sites, stalks };
+  }
+  FloraFruit.coconutSites = coconutSites;
 
   /* ── a papaya (Carica papaya): 2-5 m, a single grey-green trunk thick at its foot and set with crescent leaf scars;
      fifteen to twenty-five leaves at its top on hollow stalks half a metre to a metre long, each a palmate blade of
@@ -39,19 +62,16 @@
         blades[set].push(FloraBlade.ribbon(sp, { up: face, w: t => Dk * 0.62 * Math.min(1, 0.25 + t * 3), fold: () => 0.12, curl: () => -0.12, segs: 6, cols: 5, ao: t => 0.55 + 0.45 * t, wind: [ph, sw, share, Hp], ph: R() }));
       }
     }
-    /* (the fruit and the flowers, in the axils down the trunk: oldest lowest) */
-    const zone = Math.min(1.3, H * 0.4), fruit = [], fallen = [], flw = [];
+    /* (the fruit and the flowers, in the axils down the trunk, the oldest lowest: each axil a site of its own, its flower
+       out first, then its fruit swelling from it; the trunk holds them still) */
+    const zone = Math.min(1.3, H * 0.4), sites = [];
     for (let i = 0, n = o.n ?? 12 + Math.floor(R() * 10); i < n; i++) {
       const y = H - 0.12 - zone * (i + R() * 0.5) / n, a = i * 2.39996 + R() * 0.5, [sx, sz] = tr.spine(y), r = tr.rAt(y, a), u = 0.2 + 0.8 * clamp(H - y) / zone * (0.9 + 0.2 * R());
-      const p = V(sx + Math.cos(a) * (r + 0.004), y, sz + Math.sin(a) * (r + 0.004)), ry = -a, age = clamp((u - 0.2) / 0.8);
-      if (age > 0.84) { const rr = 0.3 + 1.2 * R(), aa = R() * TAU; fallen.push({ p: [Math.cos(aa) * rr, 0.07, Math.sin(aa) * rr], ry: R() * TAU, tilt: Math.PI / 2, age: Math.min(1, age + 0.06), seed: R() * 9 }); }
-      else fruit.push({ p: p.toArray(), ry, roll: 0.18, age, seed: R() * 9 });
+      const p = V(sx + Math.cos(a) * (r + 0.004), y, sz + Math.sin(a) * (r + 0.004)), ry = -a;
+      sites.push({ u0: o.phase ? o.phase(i) : o.u != null ? (o.u + 0.03 * R()) % 1 : Math.min(0.995, u), bloom: { p: [sx + Math.cos(a) * r, y + 0.03, sz + Math.sin(a) * r], ry, seed: R() * 9 }, fruit: [{ p: p.toArray(), ry, roll: 0.18, seed: R() * 9 }] });
     }
-    for (let i = 0; i < 2 + Math.floor(R() * 3); i++) { const y = H - 0.05 - 0.15 * R(), a = R() * TAU, [sx, sz] = tr.spine(y), r = tr.rAt(y, a); flw.push({ p: [sx + Math.cos(a) * r, y, sz + Math.sin(a) * r], ry: -a, age: 0.1 + 0.6 * R(), seed: R() * 9 }); }
     assemble(g, bark, 'papaya', blades, { leaves: [...FloraBlade.material('papaya', tex, [0.22, 22, 1.1]).leaves, FloraBlade.material('papaya-old', old, [0.12, 16, 1.0]).leaves[0]], depth: [...FloraBlade.material('papaya', tex).depth, FloraBlade.material('papaya-old', old).depth[0]] }, { H: Hp });
-    if (fruit.length) g.add(FloraFruit.instances('papaya', fruit, { geo: { hang: 0.03, lod: o.fruitLod ?? 1 } }));
-    if (fallen.length) g.add(FloraFruit.instances('papaya', fallen, { geo: { lod: o.fruitLod ?? 1 } }));
-    if (flw.length) g.add(FloraFruit.bloomInstances('papaya', flw));
+    live(g, 'papaya', sites, o);
     return g;
   });
 
@@ -82,7 +102,8 @@
     const M = plant(0, 0, o.H || lerp(R, [2.6, 3.8]), 0.12 + 0.02 * R(), 8 + Math.floor(R() * 4), true);
     for (let i = 0, n = o.suckers ?? 1 + Math.floor(R() * 3); i < n; i++) { const a = R() * TAU, d = 0.35 + 0.3 * R(); plant(Math.cos(a) * d, Math.sin(a) * d, lerp(R, [0.6, 2.2]), 0.05 + 0.03 * R(), 4 + Math.floor(R() * 4), false); }
     /* (the bunch: its stalk up out of the top, over and down; hands along it, then the bare rachis, then the heart) */
-    const stage = o.stage ?? (R() < 0.75 ? R() : -1), parts = {};
+    const stage = o.stage ?? (R() < 0.75 ? R() : -1);
+    let sites = null;
     if (stage >= 0) {
       const az = R() * TAU, out = V(Math.cos(az), 0, Math.sin(az)), t0 = M.top.clone().add(V(0, 0.05, 0));
       const stalkPts = [t0, t0.clone().add(V(0, 0.25, 0)).addScaledVector(out, 0.15), t0.clone().add(V(0, 0.15, 0)).addScaledVector(out, 0.45), t0.clone().add(V(0, -0.35, 0)).addScaledVector(out, 0.62), t0.clone().add(V(0, -0.95, 0)).addScaledVector(out, 0.66), t0.clone().add(V(0, -1.45, 0)).addScaledVector(out, 0.6)];
@@ -91,18 +112,21 @@
       const nH = 7 + Math.floor(R() * 4), fingers = [];
       for (let h = 0; h < nH; h++) {
         const t = 0.36 + 0.26 * h / nH, p = c.getPointAt(t), tg = c.getTangentAt(t), n = 16 + Math.floor(R() * 6) - h, ha = h * 2.4;
-        /* (a hand: two rows of fingers on a cushion, fanning round one side of the rachis, curving out and up) */
+        /* (a hand: two rows of fingers on a cushion, fanning round one side of the rachis, curving out and up; the finger
+           grows along +x and curves up, the roll turning it up to point a little above level, as bananas do) */
         for (let k = 0; k < n; k++) {
           const row = k % 2, an = ha + (Math.floor(k / 2) / Math.ceil(n / 2) - 0.5) * 2.6 + row * 0.12, d = V(Math.cos(an), 0, Math.sin(an)), dir = d.clone().addScaledVector(tg, -0.3).normalize();
-          fingers.push({ p: p.clone().addScaledVector(d, 0.05 + 0.02 * row).add(V(0, -0.025 * row, 0)).toArray(), ry: -Math.atan2(dir.z, dir.x), tilt: 0, roll: 0.35 + 0.25 * row, age: clamp(stage * (0.97 + 0.06 * R())), seed: R() * 9, s: (1 - 0.04 * h) });
+          const q = p.clone().addScaledVector(d, 0.05 + 0.02 * row).add(V(0, -0.025 * row, 0));
+          fingers.push({ p: q.toArray(), ry: -Math.atan2(dir.z, dir.x), tilt: 0, roll: 0.35 + 0.25 * row, seed: R() * 9, s: (1 - 0.04 * h), j: 0.97 + 0.06 * R(), wind: [0.3, 0.04, clamp(q.y / Hp), Hp] });
         }
       }
-      /* (the finger grows along +x and curves up: the roll turns it up to point a little above level, as bananas do) */
-      if (stage > 0.04) { const fm = FloraFruit.instances('banana', fingers.map(f => Object.assign(f, { roll: f.roll })), { geo: { lod: o.fruitLod ?? 1 } }); g.add(fm); parts.fruit = fm; }
-      const hp = c.getPointAt(1); parts.heart = FloraFruit.bloomInstances('banana', [{ p: hp.toArray(), ry: R() * TAU, age: clamp(0.05 + stage * 0.5), seed: R() * 9, s: 1 - 0.35 * stage }]); g.add(parts.heart);
+      /* (the bunch is one site, on its own round: the heart opening its bracts one by one as the hands form, the fingers
+         filling, ripening, going over and dropping) */
+      const hp = c.getPointAt(1);
+      sites = [{ u0: stage, P: 1, bloom: { p: hp.toArray(), ry: R() * TAU, seed: R() * 9, s: 0.85, wind: [0.3, 0.04, clamp(hp.y / Hp), Hp] }, fruit: fingers }];
     }
     assemble(g, bark, 'banana', blades, (() => { const mats = [tex[0], tex[1], old, dead].map((t, i) => FloraBlade.material('banana-' + i, [t], i === 3 ? [0.06, 10, 0.4] : [0.24, 24, 1.15], [1.18, 1.22, 1.0])); return { leaves: mats.map(m => m.leaves[0]), depth: mats.map(m => m.depth[0]) }; })(), { H: M.H + 2 });
-    g.userData.fruit = { kind: 'banana', stage, parts };
+    if (sites) live(g, 'banana', sites, Object.assign({ cap: 24 }, o));
     return g;
   });
 
@@ -127,21 +151,11 @@
     }
     /* (the dead fronds hanging against the trunk) */
     for (let i = 0, n = Math.floor(R() * 4); i < n; i++) { const az = R() * TAU, pts = arch(top.clone().add(V(0, -0.3, 0)), az, -1.25, 3 + R(), -0.15, 8, 0.03, R); blades[2].push(FloraBlade.ribbon(pts, { w: () => 0.9, fold: () => -1.1, curl: () => -0.2, segs: 8, cols: 5, ao: () => 0.45, wind: [R(), 0.08, share, Hp], ph: R() })); }
-    /* (the bunches: each a short stalk out of a frond's axil, branching, a nut on each branch; the youngest highest) */
-    const nuts = [], fallen = [], nB = 3 + Math.floor(R() * 3);
-    for (let b = 0; b < nB; b++) {
-      const az = b / nB * TAU + R() * 0.8, u = (b + R() * 0.6) / nB, d = V(Math.cos(az), 0, Math.sin(az)), base = top.clone().add(V(0, 0.15 - 0.35 * u, 0)).addScaledVector(d, 0.2), stem = base.clone().addScaledVector(d, 0.35).add(V(0, -0.25, 0));
-      bark.push(part(FloraKit.tube(new T.CatmullRomCurve3([base, base.clone().addScaledVector(d, 0.2).add(V(0, -0.05, 0)), stem]), t => 0.025 * (1 - 0.3 * t), { segs: 5, radial: 6, tile, col: () => [0.9, 0.82, 0.55] }), [R(), 0.03, share, Hp]));
-      const nn = 4 + Math.floor(R() * 8), age = clamp(0.1 + 0.85 * u);
-      for (let k = 0; k < nn; k++) { const a = az + (k / nn - 0.5) * 2.4, off = V(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.12 + 0.06 * (k % 2)), p = stem.clone().add(off).add(V(0, -0.05 - 0.08 * (k % 3), 0)), ag = clamp(age * (0.95 + 0.1 * R()));
-        if (ag > 0.86) { const rr = 0.8 + 2.5 * R(), aa = R() * TAU; fallen.push({ p: [Math.cos(aa) * rr, 0.1, Math.sin(aa) * rr], ry: R() * TAU, tilt: Math.PI / 2 * 0.9, age: ag, seed: R() * 9 }); }
-        else nuts.push({ p: p.toArray(), ry: -a, roll: 0.25 + 0.25 * R(), age: ag, seed: R() * 9 }); }
-    }
-    for (let k = 0; k < (o.fallen ?? 2 + Math.floor(R() * 3)); k++) { const rr = 0.8 + 3 * R(), aa = R() * TAU; fallen.push({ p: [Math.cos(aa) * rr, 0.1, Math.sin(aa) * rr], ry: R() * TAU, tilt: Math.PI / 2 * 0.92, age: 0.88 + 0.1 * R(), seed: R() * 9 }); }
+    /* (the bunches among the frond bases, each a site on its own round: its spadix first, then its nuts) */
+    const B = coconutSites(top, R, { share, Hp, phase: o.phase, u: o.u });
+    for (const st of B.stalks) bark.push(part(FloraKit.tube(new T.CatmullRomCurve3(st.pts), t => 0.025 * (1 - 0.3 * t), { segs: 5, radial: 6, tile, col: () => [0.9, 0.82, 0.55] }), [st.ph, 0.03, share, Hp]));
     assemble(g, bark, 'coconut', blades, { leaves: [...FloraBlade.material('coconut', tex, [0.26, 24, 1.2]).leaves, FloraBlade.material('coconut-dry', dry, [0.06, 10, 0.5]).leaves[0]], depth: [...FloraBlade.material('coconut', tex).depth, FloraBlade.material('coconut-dry', dry).depth[0]] }, { H: Hp });
-    if (nuts.length) g.add(FloraFruit.instances('coconut', nuts, { geo: { hang: 0.12, lod: o.fruitLod ?? 1 } }));
-    if (fallen.length) g.add(FloraFruit.instances('coconut', fallen, { geo: { lod: o.fruitLod ?? 1 } }));
-    { const a = R() * TAU, d = V(Math.cos(a), 0, Math.sin(a)); g.add(FloraFruit.bloomInstances('coconut', [{ p: top.clone().add(V(0, 0.2, 0)).addScaledVector(d, 0.15).toArray(), ry: -a, age: 0.2 + 0.25 * R(), seed: 3 }])); }
+    live(g, 'coconut', B.sites, o);
     return g;
   });
 })();

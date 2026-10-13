@@ -110,7 +110,6 @@ const Nature = (() => {
     const dm = Mats.foliage(dry, 0.4);
     const depth = [green, green2].map(t => Mats.cutoutDepth(t, 0.4)), dryDepth = Mats.cutoutDepth(dry, 0.4);
     const barkM = Trees.palmBarkMat(), bootM = Mats.lit({ color: new T.Color('#4a3a2a'), roughness: 0.95 }, 'rock');
-    const nutM = Mats.lit({ color: new T.Color('#5a4128'), roughness: 0.6 }), nutG = Mats.lit({ color: new T.Color('#5d6b2a'), roughness: 0.5 });
     const GOLD = 2.39996;
     refs.crowns = [];
     for (const [x, z, h, lx, lz, cr, seed] of Layout.palms) {
@@ -142,10 +141,7 @@ const Nature = (() => {
         const f = new T.Mesh(frondGeo(cr * 0.75, 1.0, -0.5, 1.1), dm); f.customDepthMaterial = dryDepth; f.castShadow = caster;
         f.rotation.set(0, r() * TAU, 0, 'YXZ'); f.position.y = -0.4; crown.add(f);
       }
-      for (let i = 0; i < 10; i++) {
-        const a = i / 10 * TAU + r(); const n = new T.Mesh(new T.SphereGeometry(0.12, 10, 8), r() < 0.5 ? nutM : nutG);
-        n.position.set(Math.cos(a) * (0.18 + r() * 0.08), -0.32 - r() * 0.2, Math.sin(a) * (0.18 + r() * 0.08)); n.castShadow = caster; crown.add(n);
-      }
+      /* (its coconuts are the orchard's: bunches among the frond bases, on their own round, orchard.js) */
       refs.crowns.push({ g: crown, fronds, ph: r() * TAU, amp: 0.018 + 0.012 * (h / 10) });
     }
   }
@@ -169,6 +165,7 @@ const Nature = (() => {
     /* (a beach hibiscus close round the camp, tropical almonds behind, casuarinas at the ends) */
     grownAt(root, Layout.trees, (x, z, seed) => Math.abs(x) > 17 ? 'casuarina' : z > 14 ? 'almond' : 'hibiscus');
     grownAt(root, Layout.bushes, () => 'grape');
+    refs.palms = refs.crowns;
     return refs;
   }
 
