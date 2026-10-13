@@ -151,8 +151,7 @@ void main(){
   p.y += sin(iQ.z - u*2.4)*u*u*FLEX;
   place(p, normal, iP.xyz, iP.w, iQ.x, iQ.y, iQ.w);
 }`;
-  /* a dolphin's markings, worked out on the animal itself: its pale cape and belly, the eye, the line of the mouth (the
-     whale's, OWNC, are its model's own colours) */
+  /* a dolphin or a whale, far off, lit: its colours its model's own (models/life/cetaceans.js) */
   const SEA_FS = `
 ${LIGHT}
 varying vec3 vN, vW, vC, vL; varying vec4 vP;
@@ -161,19 +160,7 @@ float hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
 void main(){
   vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), alb = vC, L = vL;
   float side = abs(L.z);
-  #ifdef OWNC
-    /* (its colours are the model's own, painted on it: models/life/cetaceans.js) */
-  #else
-    /* a bottlenose: dark cape along the back, grey flanks, a pale belly; the eye, the mouth along the beak */
-    float cape = smoothstep(0.04, 0.12, L.y - 0.06*sin(L.x*2.5 + 0.7));
-    alb = mix(vec3(0.38, 0.4, 0.43), vec3(0.15, 0.17, 0.2), cape);
-    alb = mix(alb, vec3(0.72, 0.73, 0.74), smoothstep(-0.06, -0.16, L.y)*smoothstep(-0.8, -0.3, L.x));
-    if (vP.x > 0.5) alb = vec3(0.16, 0.18, 0.21);
-    float mouth = smoothstep(0.012, 0.004, abs(L.y + 0.02 + 0.03*smoothstep(1.05, 0.88, L.x)))*smoothstep(0.86, 0.9, L.x)*step(0.02, side);
-    alb *= 1.0 - 0.6*mouth;
-    float e = length(vec2(L.x - 0.83, (L.y - 0.005)*1.4));
-    alb = mix(alb, vec3(0.01), smoothstep(0.022, 0.015, e)*step(0.05, side));
-  #endif
+  /* (its colours are the model's own, painted on it: models/life/cetaceans.js) */
   gl_FragColor = vec4(shade(alb, n, vW, 0.1, GLOSS), 1.0);
 }`;
   /* a whale's blow and the spray of its breaching: soft puffs of mist, each its own world size, rising and spreading
@@ -500,16 +487,13 @@ void main(){
     return b.geo();
   }
   function crabGeo() { return crabP().geo; }
+  /* a bottlenose, far off: its model built light (models/life/cetaceans.js), its nose toward +x; aW.x which part a
+     point is on (0 the body, 1 a flipper, 2 the flukes), aW.z how far back along it, for the tail's flex */
   function dolphinGeo() {
-    const b = Build(), dark = [0.16, 0.18, 0.21], pale = [0.6, 0.62, 0.64], U = p => [0, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0], UF = p => [1, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0];
-    b.lathe([[1.13, 0.012, 0.012, -0.02], [1.04, 0.045, 0.04, -0.03], [0.96, 0.07, 0.065, -0.02], [0.88, 0.13, 0.12, 0.02], [0.72, 0.2, 0.19, 0.02], [0.45, 0.26, 0.24, 0.01], [0.1, 0.26, 0.24, 0], [-0.3, 0.19, 0.17, 0], [-0.62, 0.11, 0.09, 0], [-0.86, 0.055, 0.045, 0], [-1.0, 0.035, 0.03, 0]], 10,
-      (p, a) => mix3(dark, pale, sm(-0.2, -0.7, Math.cos(a))), U);
-    b.panel([[0.18, 0.22, 0], [-0.1, 0.42, 0], [-0.36, 0.5, 0], [-0.22, 0.2, 0]], dark, UF, [0, 0, 1]);
-    for (const sd of [-1, 1]) {
-      b.panel([[0.62, -0.1, sd * 0.18], [0.44, -0.12, sd * 0.18], [0.36, -0.24, sd * 0.42]], dark, UF, [0, -1, 0]);
-      b.panel([[-0.95, 0, sd * 0.01], [-1.13, 0, sd * 0.34], [-1.23, 0, sd * 0.31], [-1.12, 0, sd * 0.02]], dark, UF, [0, 1, 0]);
-    }
-    return b.geo();
+    const g = Models.make('life/dolphin', { lite: true }); g.updateMatrixWorld(true);
+    const geo = Models.tagged(g, m => [m.userData.part || 0, 0, 0, 0]), P = geo.attributes.position, W = geo.attributes.aW;
+    for (let i = 0; i < P.count; i++) W.setZ(i, cl((1.12 - P.getX(i)) / 2.35, 0, 1));
+    return geo;
   }
 
   /* a humpback, far off: its model built light (models/life/cetaceans.js), at length 1, its nose toward +x; aW.x which
@@ -1097,7 +1081,7 @@ void main(){
     /* ── dolphins: now and then by day or dusk, a small pod passes along the coast offshore, each one rolling up through the
        surface in an arc every few seconds (and sometimes leaping clear), with a splash as it breaks the water and goes back in ── */
     const dolphins = (() => {
-      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.5, FLEX: 0.13 }, { uSeed: { value: 0 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
+      const MAX = 5, H = herd(dolphinGeo(), MAX, mat(DOLPHIN_VS, SEA_FS, { GLOSS: 0.5, FLEX: 0.13, OWNC: 1 }, { uSeed: { value: 0 } }), [['iP', 4], ['iQ', 4]]), A = H.A;
       const D = Array.from({ length: MAX }, () => ({ lat: 0, lag: 0, per: 4, ph: 0, size: 1, beat: 0, up: -1, down: -1 }));
       const pod = { on: false, n: 0, x: 0, x0: 0, dir: 1, off: 30, v: 4, t0: 0, next: 50 + rnd() * 70 };
       function start(t, cx, x) {
