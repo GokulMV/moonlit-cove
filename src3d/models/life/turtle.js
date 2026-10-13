@@ -8,36 +8,52 @@
   const T = THREE, M = Models, TAU = Math.PI * 2;
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; }, mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const L = 0.8;
-  /* the scutes' centres, on the shell's plan (x along, z across, in shell lengths) */
+  const sm2 = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  /* the scutes, as on a real green turtle's shell: five vertebrals down the middle, four costals either side (the
+     big plates), and round the rim a narrow band of marginals, twelve a side, the nuchal at the front between them.
+     The vertebrals' and costals' middles, on the shell's plan (x along, z across, in shell lengths) */
   const SC = [];
-  [[0.36, 0], [0.18, 0], [0, 0], [-0.18, 0], [-0.35, 0]].forEach(p => SC.push(p));
-  for (const sd of [-1, 1]) [[0.27, 0.2], [0.09, 0.235], [-0.09, 0.235], [-0.26, 0.2]].forEach(([x, z]) => SC.push([x, sd * z]));
-  const NM = 24, rimAt = k => { const a = k / NM * TAU; return [Math.cos(a) * 0.475, Math.sin(a) * 0.4]; };
-  for (let k = 0; k < NM; k++) SC.push(rimAt(k));
-  const tone = SC.map((_, i) => 0.85 + 0.3 * M.vn(i * 3.7, 1.3, 2.1));
-  function nearest(x, z) { let d1 = 9, d2 = 9, k1 = 0, k2 = 0; for (let k = 0; k < SC.length; k++) { const d = Math.hypot(x - SC[k][0], (z - SC[k][1]) * 1.08); if (d < d1) { d2 = d1; k2 = k1; d1 = d; k1 = k; } else if (d < d2) { d2 = d; k2 = k; } } return [k1, d1, d2, k2]; }
+  [[0.33, 0], [0.165, 0], [0.0, 0], [-0.165, 0], [-0.32, 0]].forEach(p => SC.push(p));
+  for (const sd of [-1, 1]) [[0.235, 0.225], [0.07, 0.25], [-0.1, 0.245], [-0.255, 0.2]].forEach(([x, z]) => SC.push([x, sd * z]));
+  const NM = 25;
+  const tone = Array.from({ length: SC.length + NM }, (_, i) => 0.82 + 0.32 * M.vn(i * 3.7, 1.3, 2.1));
+  /* which scute a point of the shell is on (k; the marginals are 13 on), how far from its middle (d1), and how far from
+     the seam with the next (by d2 - d1); rim: how far into the rim band (0 inside it, 1 at the edge) */
+  function scute(x, z, rim) {
+    if (rim > 0) {
+      const th = Math.atan2(z, x + 0.02), k = Math.round(th / TAU * NM + NM) % NM, f = th / TAU * NM - Math.round(th / TAU * NM);
+      const dS = 0.5 - Math.abs(f);
+      return [SC.length + k, 0.02 + 0.03 * Math.abs(f), 0.02 + 0.03 * Math.abs(f) + Math.min(dS * 0.07, rim * 0.06), -1];
+    }
+    let d1 = 9, d2 = 9, k1 = 0, k2 = 0;
+    for (let k = 0; k < SC.length; k++) { const d = Math.hypot((x - SC[k][0]) * 1.12, z - SC[k][1]); if (d < d1) { d2 = d1; k2 = k1; d1 = d; k1 = k; } else if (d < d2) { d2 = d; k2 = k; } }
+    return [k1, d1, d2, k2];
+  }
   /* the head's scales: a Voronoi of cells over its skin */
   const HS = Array.from({ length: 70 }, (_, i) => { const r = M.rng(91 + i); return [r(), r()]; });
-  const olive = lin('#4f4626'), dark = lin('#1e1910'), amber = lin('#9a7436'), cream = lin('#e4d7ab'), skin = lin('#4c4733'), skinPale = lin('#b8b08e');
+  const olive = lin('#463f26'), dark = lin('#1b1710'), amber = lin('#8c7440'), cream = lin('#e4d7ab'), skin = lin('#4c4733'), skinPale = lin('#b8b08e');
   /* the carapace's sections [x, half-width, half-height, centre, squareness], and the shell's colour at a point of its plan */
   const SECS = [[-L * 0.5, 0, 0, 0.0, 2], [-L * 0.47, L * 0.16, L * 0.035, 0.0, 2.2], [-L * 0.36, L * 0.33, L * 0.1, 0.004, 2.4], [-L * 0.15, L * 0.4, L * 0.155, 0.008, 2.5],
     [L * 0.08, L * 0.41, L * 0.17, 0.009, 2.5], [L * 0.28, L * 0.37, L * 0.14, 0.008, 2.4], [L * 0.42, L * 0.25, L * 0.085, 0.006, 2.2], [L * 0.49, L * 0.08, L * 0.03, 0.004, 2], [L * 0.5, 0, 0, 0.004, 2]];
   const prof = M.spline(SECS.map(r => [r[0], r[1], r[2], r[3], r[4]]));
-  function shellColour(x, z, up) {
-    if (!up) { const [k1, d1, d2] = nearest(x / L, z / L), seam = Math.min(1, (d2 - d1) / 0.012); return mix(cream.map(v => v * 0.62), cream, seam).map(v => v * (0.92 + 0.1 * M.vn(x * 40, z * 40, 1))); }
-    const px = x / L, pz = z / L, [k1, d1, d2] = nearest(px, pz), seam = Math.min(1, (d2 - d1) / 0.014);
-    /* sunburst streaks out from each scute's middle, amber and near-black; the seams between the scutes dark */
-    const c0 = SC[k1], ang = Math.atan2(pz - c0[1], px - c0[0]), streak = Math.pow(0.5 + 0.5 * Math.sin(ang * 7 + k1 * 1.7 + 4.5 * M.vn(px * 9, pz * 9, k1) + 2 * M.vn(px * 31, pz * 31, k1 + 7)), 1.6) * Math.min(1, d1 / 0.05);
-    let c = mix(olive, amber, 0.5 * streak + 0.25 * M.vn(px * 40, pz * 40, k1)).map(v => v * tone[k1]);
-    c = mix(c, dark, 0.3 * Math.pow(1 - streak, 3) * Math.min(1, d1 / 0.035) * M.vn(px * 12, pz * 12, k1 + 3));
-    /* (growth rings, faint, round each scute's middle) */
-    c = c.map(v => v * (0.9 + 0.1 * Math.sin(d1 * 260)));
-    return mix(dark, c, 0.08 + 0.92 * seam);
+  const rimOf = (u, a) => Math.max(sm2(0.84, 0.97, Math.abs(Math.sin(a))), sm2(0.08, 0.02, u), sm2(0.94, 0.985, u));
+  function shellColour(x, z, up, rim) {
+    const px = x / L, pz = z / L, [k1, d1, d2] = scute(px, pz, rim), seam = Math.min(1, (d2 - d1) / 0.012);
+    if (!up) return mix(cream.map(v => v * 0.6), cream, seam).map(v => v * (0.92 + 0.1 * M.vn(x * 40, z * 40, 1)));
+    /* streaks out from each scute's middle, yellow-brown and near-black on olive; the seams dark, edged a little paler */
+    const c0 = k1 < SC.length ? SC[k1] : [px * 0.92, pz * 0.92], ang = Math.atan2(pz - c0[1], px - c0[0]);
+    /* (streaks: noise drawn out along the rays from the middle, so they run outward, irregular) */
+    const streak = sm2(0.42, 0.75, M.vn(ang * 3.2 + k1 * 7.3, d1 * 9 + 0.6 * M.vn(px * 20, pz * 20, k1), k1 * 1.9)) * Math.min(1, d1 / 0.035);
+    let c = mix(olive, amber, 0.38 * streak * (0.5 + 0.8 * M.vn(px * 14, pz * 14, k1 + 2)) + 0.22 * M.vn(px * 40, pz * 40, k1)).map(v => v * tone[k1]);
+    c = mix(c, dark, 0.35 * Math.pow(1 - streak, 3) * Math.min(1, d1 / 0.03) * M.vn(px * 12, pz * 12, k1 + 3));
+    c = c.map(v => v * (0.9 + 0.1 * Math.sin(d1 * 240)));
+    const edge = Math.max(0, 1 - Math.abs(seam - 0.35) / 0.25) * 0.25;
+    return mix(dark, mix(c, amber, edge), 0.06 + 0.94 * seam);
   }
   let shTex = null, hdTex = null;
   const shellTex = () => shTex || (shTex = M.texFrom(1024, 1024, (u, v) => {
     const x = SECS[0][0] + u * (SECS[SECS.length - 1][0] - SECS[0][0]), a = Math.PI + v * TAU, [w, , , sq] = prof(x), sa = Math.sin(a), z = Math.max(0, w) * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / sq);
-    return shellColour(x, z, Math.cos(a) > 0);
+    return shellColour(x, z, Math.cos(a) > 0, rimOf(u, a));
   }));
   /* the head's skin: polygon scales, dark with pale seams, paler beneath */
   const headTex = () => hdTex || (hdTex = M.texFrom(512, 512, (u, v) => {
@@ -53,7 +69,7 @@
        picture of the whole shell (each texel worked back to where on the shell's plan it lies) ── */
     const shell = M.loft(SECS, 80, 96, null, { shape: (x, y, z, u, a) => {
         if (Math.cos(a) <= 0) { const cy = 0.004; return [x, cy + (y - cy) * 0.28, z]; }      /* (the plastron, nearly flat) */
-        const [k1, d1, d2] = nearest(x / L, z / L), seam = Math.min(1, (d2 - d1) / 0.03), rimK = k1 >= 13 ? 1 : 0;
+        const [k1, d1, d2] = scute(x / L, z / L, rimOf(u, a)), seam = Math.min(1, (d2 - d1) / 0.03), rimK = k1 >= SC.length ? 1 : 0;
         /* (each scute a little raised; the rim serrated at the back) */
         let yy = y + 0.004 * (seam - 0.5) * Math.cos(a);
         const back = x < -L * 0.3 ? 1 : 0, ser = back * rimK * Math.max(0, Math.cos(Math.atan2(z, x) * 18)) * 0.012;
@@ -86,8 +102,8 @@
         /* (irregular polygons: the nearest of a jittered grid of points, its seam where the next nearest is as near) */
         const fs = s * 12, fc = c * (3.5 + 2.5 * s); let d1 = 9, d2 = 9, cell = 0;
         for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const i = Math.floor(fs) + di, j = Math.floor(fc) + dj, px = i + 0.5 + 0.7 * (M.vn(i * 7.1, j * 3.3, 1.7) - 0.5), py = j + 0.5 + 0.7 * (M.vn(i * 2.9, j * 5.7, 4.1) - 0.5), d = Math.hypot(fs - px, fc - py); if (d < d1) { d2 = d1; d1 = d; cell = i * 31 + j; } else if (d < d2) d2 = d; }
-        const rim = 1 - Math.min(1, (d2 - d1) / 0.16);
-        let col = mix(mix(skin.map(v => v * 0.8), dark, 0.2 + 0.4 * M.vn(cell * 0.37, 1.3, 3)), skinPale, 0.55 * rim);
+        const rim = 1 - Math.min(1, (d2 - d1) / 0.07);
+        let col = mix(mix(skin.map(v => v * 0.8), dark, 0.2 + 0.4 * M.vn(cell * 0.37, 1.3, 3)), skinPale, 0.3 * rim);
         col = mix(col, skinPale, 0.5 * Math.max(0, (c - 0.86) / 0.14));
         return top ? col : mix(col, cream, 0.6);
       });
