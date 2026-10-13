@@ -144,7 +144,7 @@
      black eyes; five pairs of slender jointed legs, the first two with tiny pincers; the swimmerets fringed beneath; the
      tail fan of five blades, red tipped white; three long white antennae either side ── */
   M.add('life/shrimp', () => {
-    const g = new T.Group(), red = lin('#cf3424'), redD = lin('#8a1c12'), white = lin('#f7f3ec'), clear = lin('#f0b2a2');
+    const g = new T.Group(), red = lin('#cf3424'), redD = lin('#8a1c12'), white = lin('#f7f3ec'), clear = lin('#f0c8b0'), amber = lin('#e7a14e');
     /* the body, lofted along x from the tail (−0.027) to the tip of the rostrum (0.034), and bent down behind the carapace */
     const XB = 0.004, KAP = 20, NSEG = 6;
     const bend = (x, y, z) => { if (x >= XB) return [x, y, z]; const sArc = XB - x, ph = KAP * sArc, r = 1 / KAP + y; return [XB - r * Math.sin(ph), -1 / KAP + r * Math.cos(ph), z]; };
@@ -153,10 +153,12 @@
       [0.008, 0.0052, 0.0062, 0.0008, 2.1], [0.016, 0.005, 0.006, 0.0008, 2.1], [0.022, 0.0036, 0.0045, 0.0009, 2], [0.026, 0.0016, 0.0024, 0.0016, 2], [0.034, 0, 0, 0.0028, 2]], 120, 36,
       (x, y, z, u, a) => {
         const up = Math.cos(a), sg = segAt(x), f = sg >= 0 ? ((XB - x) / 0.031 * NSEG) % 1 : 0;
-        let c = mix(clear, red, 0.75 + 0.25 * Math.abs(Math.sin(a)));
-        if (up > 0.82) c = white;                                         /* the white line down its back */
-        else if (up > 0.6) c = mix(red, white, (up - 0.6) / 0.22 * 0.6);
-        if (up < -0.6) c = mix(c, clear, 0.6);                             /* paler, clearer beneath */
+        /* (as Lysmata amboinensis is: a broad red band along each side of its back, split down the middle by a thin
+           white line; yellow-orange flanks below it, clearer beneath) */
+        let c = mix(amber, clear, sm(-0.15, -0.65, up));
+        c = mix(c, red, sm(0.12, 0.3, up));
+        if (up > 0.9) c = mix(red, white, sm(0.9, 0.95, up));
+        if (up < -0.6) c = mix(c, clear, 0.6);
         if (sg >= 0 && f < 0.1) c = mix(c, redD, 0.5);                     /* each segment's edge, a darker line */
         if (x > 0.026) c = mix(red, white, 0.5);                           /* the rostrum */
         return c;
@@ -185,7 +187,7 @@
     {
       const ph = KAP * (XB + 0.027), end = bend(-0.0262, 0, 0), fan = new T.Object3D(); fan.position.set(...end); fan.rotation.z = ph; g.add(fan);
       const fanM = M.lit('#ffffff', { vertexColors: true, roughness: 0.35, side: T.DoubleSide, transparent: true, opacity: 0.95 });
-      const blade = (ang, len, w) => M.sheet(6, 8, (s, c) => { const a = ang + (c - 0.5) * w; return [-Math.cos(a) * s * len, 0.0002 * Math.sin(Math.PI * c), Math.sin(a) * s * len]; }, (s, c) => mix(red, white, s > 0.72 ? 0.85 : 0.1 * Math.sin(c * 20)));
+      const blade = (ang, len, w) => M.sheet(6, 8, (s, c) => { const a = ang + (c - 0.5) * w; return [-Math.cos(a) * s * len, 0.0002 * Math.sin(Math.PI * c), Math.sin(a) * s * len]; }, (s, c) => mix(mix(red, amber, 0.35), white, s > 0.7 && Math.abs(c - 0.5) < 0.32 ? 0.9 : 0.08 * Math.sin(c * 20)));
       fan.add(new T.Mesh(blade(0, 0.0105, 0.32), fanM));
       for (const sd of [-1, 1]) for (const [ang, len] of [[0.42, 0.011], [0.78, 0.0095]]) fan.add(new T.Mesh(blade(sd * ang, len, 0.36), fanM));
     }

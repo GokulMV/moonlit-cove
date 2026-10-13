@@ -88,13 +88,19 @@
     const W = 512, Hh = 256, cv = M.canvas(W, Hh), x = cv.getContext('2d'), r = M.rng(41);
     const gr = x.createLinearGradient(0, 0, 0, Hh); gr.addColorStop(0, '#f4ece0'); gr.addColorStop(0.2, '#e8cfa8'); gr.addColorStop(0.5, '#d9b07a'); gr.addColorStop(0.8, '#e8cfa8'); gr.addColorStop(1, '#f4ece0');
     x.fillStyle = gr; x.fillRect(0, 0, W, Hh);
-    /* the spots: dark brown, blurred at their edges, crowded on the back, few and small toward the sides */
-    for (let i = 0; i < 150; i++) {
-      const v = 0.5 + (r() - 0.5) * 0.62 * (0.4 + 0.6 * r()), u = 0.05 + r() * 0.9, rad = (6 + r() * 16) * (1 - 1.2 * Math.abs(v - 0.5));
-      if (rad < 2) continue;
-      const g2 = x.createRadialGradient(u * W, v * Hh, rad * 0.2, u * W, v * Hh, rad);
-      g2.addColorStop(0, 'rgba(58,32,18,0.95)'); g2.addColorStop(0.65, 'rgba(70,40,22,0.85)'); g2.addColorStop(1, 'rgba(90,55,30,0)');
-      x.fillStyle = g2; x.beginPath(); x.ellipse(u * W, v * Hh, rad * 1.25, rad * 0.8, r() * 3, 0, Math.PI * 2); x.fill();
+    /* the spots: round, near-black to dark brown, each in a faint grey-blue halo, crowded on the back, smaller and fewer
+       toward the sides. (The picture runs four times as far round the shell as along it, per texel: so a spot round on
+       the shell is drawn four times as wide as it is tall here) */
+    const AS = 0.26;
+    for (let i = 0; i < 170; i++) {
+      const v = 0.5 + (r() - 0.5) * 0.62 * (0.4 + 0.6 * r()), u = 0.06 + r() * 0.88, rad = (8 + r() * 22) * (1 - 1.25 * Math.abs(v - 0.5)) * (1 - 0.5 * Math.pow(Math.abs(u - 0.5) * 2, 3));
+      if (rad < 3) continue;
+      x.save(); x.translate(u * W, v * Hh); x.scale(1, AS);
+      const h2 = x.createRadialGradient(0, 0, rad * 0.7, 0, 0, rad * 1.35); h2.addColorStop(0, 'rgba(150,150,150,0.35)'); h2.addColorStop(1, 'rgba(150,150,150,0)');
+      x.fillStyle = h2; x.beginPath(); x.arc(0, 0, rad * 1.35, 0, Math.PI * 2); x.fill();
+      const g2 = x.createRadialGradient(0, 0, rad * 0.2, 0, 0, rad);
+      g2.addColorStop(0, 'rgba(26,16,12,0.97)'); g2.addColorStop(0.7, 'rgba(48,28,16,0.9)'); g2.addColorStop(1, 'rgba(80,50,30,0)');
+      x.fillStyle = g2; x.beginPath(); x.arc(0, 0, rad, 0, Math.PI * 2); x.fill(); x.restore();
     }
     /* the pale line along its back, where the mantle's two halves met */
     x.fillStyle = 'rgba(246,234,214,0.8)'; x.fillRect(W * 0.08, Hh * 0.5 - 2.5, W * 0.84, 5);
