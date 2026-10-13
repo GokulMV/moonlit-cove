@@ -230,18 +230,18 @@
       const fixed = new T.Mesh(finger(0.0065 * k + 0.0012, 0.0016 * k + 0.0004, 1), clawM); fixed.position.set(L * 0.9, -Hh * 0.42, 0); fixed.rotation.z = -0.1; hand.add(fixed);
       const dact = new T.Object3D(); dact.position.set(L * 0.84, Hh * 0.3, 0); hand.add(dact);
       dact.add(new T.Mesh(finger(0.0072 * k + 0.0012, 0.0015 * k + 0.0004, -1), clawM));
-      claws.push({ J, dact, big });
+      /* (its parts as rods, for keeping it clear of the eyes: each joint, how long, how thick) */
+      claws.push({ J, dact, big, sd, rods: [[J[0], 0.0034 * k + 0.001, 0.0019 * k + 0.0005], [J[1], 0.0085 * k + 0.002, 0.0029 * k + 0.0006], [J[2], 0.0055 * k + 0.0015, 0.0033 * k + 0.0006], [hand, L, Hh * 0.75]] });
     }
     /* each claw swung up or down at its root until the tips of its fingers just rest on the sand (looked for in small
        steps: the nearest above the sand) */
-    {
-      const bb = new T.Box3();
-      for (const c of claws) {
-        const r0 = c.J[0].rotation.z; let best = r0, bd = 1e9;
-        for (let a = -0.9; a <= 1.2; a += 0.03) { c.J[0].rotation.z = r0 + a; c.J[0].updateMatrixWorld(true); bb.setFromObject(c.J[0]); const d = bb.min.y - 0.0004; if (d >= 0 && d < bd) { bd = d; best = r0 + a; } }
-        c.J[0].rotation.z = best; c.base0 = best;
-      }
-    }
+    const restBB = new T.Box3();
+    const rest = c => {
+      const r0 = c.J[0].rotation.z; let best = r0, bd = 1e9;
+      for (let a = -0.9; a <= 1.2; a += 0.03) { c.J[0].rotation.z = r0 + a; c.J[0].updateMatrixWorld(true); restBB.setFromObject(c.J[0]); const d = restBB.min.y - 0.0004; if (d >= 0 && d < bd) { bd = d; best = r0 + a; } }
+      c.J[0].rotation.z = best; c.base0 = best;
+    };
+    for (const c of claws) rest(c);
 
     /* ── the eyes: two stout stalks, flattened, from the front of the shield, up and forward and apart; each with a long
        black cornea round its end and a pale ring below it ── */
@@ -256,6 +256,18 @@
       const ball = new T.SphereGeometry(1, lite ? 8 : 22, lite ? 6 : 16); ball.scale(0.0026, 0.00135, 0.00118);
       const em = new T.Mesh(ball, eyeM); em.position.x = 0.0092; e.add(em);
       eyes.push({ e, sd, z0: e.rotation.z, x0: e.rotation.x });
+    }
+    /* (and the claws below the eyes, as a hermit crab holds them: each lowered and turned out a little at a time, and
+       rested on the sand again, until no part of it comes near the eyestalk on its side) */
+    {
+      const P = new T.Vector3(), Q = new T.Vector3();
+      const rod = (o, len) => { o.updateMatrixWorld(true); return [new T.Vector3().setFromMatrixPosition(o.matrixWorld), new T.Vector3(len, 0, 0).applyMatrix4(o.matrixWorld)]; };
+      const gap = (a0, a1, b0, b1) => { let d = 1e9; for (let i = 0; i <= 10; i++) { P.lerpVectors(a0, a1, i / 10); for (let j = 0; j <= 10; j++) d = Math.min(d, P.distanceTo(Q.lerpVectors(b0, b1, j / 10))); } return d; };
+      for (const c of claws) {
+        const eye = eyes.find(e => e.sd === c.sd);
+        const clear = () => { const [e0, e1] = rod(eye.e, 0.0118); return c.rods.every(([o, len, r]) => { const [a0, a1] = rod(o, len); return gap(a0, a1, e0, e1) > (r + 0.0017) * KB; }); };
+        for (let it = 0; it < 16 && !clear(); it++) { c.J[1].rotation.z -= 0.08; c.J[0].rotation.y -= c.sd * 0.05; rest(c); }
+      }
     }
     /* ── the antennules (short, elbowed, the ends flicking) and the long antennae, sweeping out and back ── */
     const antM = M.lit('#ffffff', { vertexColors: true, roughness: 0.5 }), ants = [], flicks = [];
