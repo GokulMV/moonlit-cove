@@ -168,7 +168,7 @@ const Paint = (() => {
   }
 
   /* ground decals over the beach (world rect in metres):
-     color = premultiplied tint (scorch, wrack, scuffs) · relief = R footprint relief, G trampled mask, B contact occlusion */
+     color = premultiplied tint (scorch, wrack, scuffs) · relief = R tyre-track relief, G trampled mask, B contact occlusion */
   function decals(rect, ppm) {
     const W = Math.round(rect.w * ppm), H = Math.round(rect.d * ppm);
     const C = cv(W, H), a = C.getContext('2d', RF);
@@ -212,29 +212,7 @@ const Paint = (() => {
       a.strokeStyle = `rgba(${55 + r() * 25},${50 + r() * 20},35,${0.22 + r() * 0.2})`; a.lineWidth = 0.012 + r() * 0.02; a.lineCap = 'round';
       a.beginPath(); a.moveTo(x, z); a.bezierCurveTo(x + 0.1, z - 0.05 + r() * 0.1, x + 0.2, z + r() * 0.1, x + 0.25 + r() * 0.2, z + (r() - 0.5) * 0.15); a.stroke();
     }
-    /* footprints: along the paths and scattered through the trampled area */
-    const print = (cx, cz, ang, side) => {
-      for (const [ctx, col, gr] of [[RR.x, 'rgb(152,152,152)', 1.3], [RR.x, 'rgb(96,96,96)', 1]]) {
-        ctx.save(); ctx.translate(cx, cz); ctx.rotate(ang); ctx.fillStyle = col; ctx.beginPath();
-        ctx.ellipse(-0.1, 0, 0.06 * gr, 0.052 * gr, 0, 0, TAU); ctx.ellipse(0.065, side * 0.004, 0.085 * gr, 0.062 * gr, 0, 0, TAU); ctx.fill(); ctx.restore();
-      }
-    };
-    for (const pts of paths) {
-      let carry = 0, idx = 0; const step = 0.62;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const [x0, z0] = pts[i], [x1, z1] = pts[i + 1], L = Math.hypot(x1 - x0, z1 - z0); if (!L) continue;
-        let d = step - carry;
-        while (d <= L) { const t = d / L, tx = (x1 - x0) / L, tz = (z1 - z0) / L, sd = idx++ % 2 ? 1 : -1;
-          print(x0 + (x1 - x0) * t - tz * sd * 0.1, z0 + (z1 - z0) * t + tx * sd * 0.1, Math.atan2(tz, tx) + (r() - 0.5) * 0.2, sd); d += step; }
-        carry = L - (d - step);
-      }
-    }
-    for (let i = 0; i < 190; i++) {
-      const ang = r() * TAU, k = Math.sqrt(r());
-      const cx = Layout.camp.x + 0.6 + Math.cos(ang) * 5.4 * k, cz = Layout.camp.z + Math.sin(ang) * 3.2 * k;
-      if (Math.abs(cx - Layout.rug.x) < 2.0 && Math.abs(cz - Layout.rug.z) < 1.45) continue;
-      print(cx, cz, r() * TAU, r() < 0.5 ? 1 : -1);
-    }
+    /* (no painted footprints: the only prints in the sand are the ones the walker leaves, laid by marks.js) */
     /* tyre tracks from the van toward the trees */
     const vr = Layout.van.rot, fx = Math.cos(vr), fz = -Math.sin(vr);
     const front = [Layout.van.x + fx * 1.4, Layout.van.z + fz * 1.4];
