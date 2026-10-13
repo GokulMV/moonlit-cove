@@ -43,10 +43,12 @@ const COMPRESS = new Set(['.html', '.js', '.svg', '.json', '.txt', '.webmanifest
    The radio on the table streams stations from their broadcasters' own HTTPS servers (any host, so media-src allows https:),
    asks the Radio Browser directory for them, and plays the visitor's own songs from blob: URLs. Spotify links pasted into
    the radio play in Spotify's own player (an iframe from open.spotify.com, driven by its iFrame API, a script from there
-   that loads the rest from Spotify's CDN), and a pasted link's name is asked of Spotify's oEmbed */
-const SPOTIFY = 'https://open.spotify.com', SPOTIFY_CDN = 'https://embed-cdn.spotifycdn.com';
-const CSP = ["default-src 'self'", `script-src 'self' 'unsafe-inline' ${SPOTIFY} ${SPOTIFY_CDN}`, "style-src 'self' 'unsafe-inline'", "font-src 'self' data:", "img-src 'self' data: blob:",
-  "media-src 'self' data: blob: https:", `connect-src 'self' https://*.api.radio-browser.info https://all.api.radio-browser.info ${SPOTIFY} ${SPOTIFY_CDN}`, `frame-src ${SPOTIFY}`,
+   that loads the rest from Spotify's CDN), and a pasted link's name is asked of Spotify's oEmbed. In front of the site,
+   Cloudflare adds its Web Analytics beacon (a script from static.cloudflareinsights.com that reports page loads, no
+   cookies, to cloudflareinsights.com) */
+const SPOTIFY = 'https://open.spotify.com', SPOTIFY_CDN = 'https://embed-cdn.spotifycdn.com', CF_BEACON = 'https://static.cloudflareinsights.com', CF_RUM = 'https://cloudflareinsights.com';
+const CSP = ["default-src 'self'", `script-src 'self' 'unsafe-inline' ${SPOTIFY} ${SPOTIFY_CDN} ${CF_BEACON}`, "style-src 'self' 'unsafe-inline'", "font-src 'self' data:", "img-src 'self' data: blob:",
+  "media-src 'self' data: blob: https:", `connect-src 'self' https://*.api.radio-browser.info https://all.api.radio-browser.info ${SPOTIFY} ${SPOTIFY_CDN} ${CF_RUM}`, `frame-src ${SPOTIFY}`,
   "worker-src 'self' blob:", "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'", "form-action 'self'"].join('; ');
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Content-Security-Policy': CSP };
 
