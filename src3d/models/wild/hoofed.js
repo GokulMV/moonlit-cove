@@ -96,8 +96,8 @@ const Hoofed = (() => {
         const st = R.every(t, 3.5, 0.9, 3), step = st > 0 ? Math.sin(Math.PI * st) : 0;
         P.off.set(0, -0.01, 0); P.set('chest', 0, 0, -0.06); P.set('hips', 0, 0.02 * wave(t, 1, 0.3), 0.02);
         for (const key in LEGS) { const L = LEGS[key]; plant(P, key, L.toe.clone().add(V(key === 'LF' ? 0.06 * sst(0.3, 0.8, st) : 0, key === 'LF' ? 0.03 * step : 0, 0))); }
-        const g = sp.head.graze, sn = V(g[0] + 0.03 * wave(t, 3, 0.6), g[1] + 0.015 * Math.max(0, Math.sin(t * 1.7)), g[2] + 0.05 * wave(t, 4, 0.5));
-        lookAt(P, sn.clone().add(V(0.3, -0.25, 0)), 1);
+        const g = sp.head.graze, z = sp.size || 1, sn = V(g[0] + 0.03 * z * wave(t, 3, 0.6), g[1] + 0.015 * z * Math.max(0, Math.sin(t * 1.7)), g[2] + 0.05 * z * wave(t, 4, 0.5));
+        R.ccd(P, ['neck1', 'neck2', 'head'], S.tail.head.toArray(), sn, { iters: 10, k: 0.5 });
         face(P, t, 0.04 + 0.04 * Math.max(0, Math.sin(t * 9)), 0, 0.2); tailTo(P, s => sp.tailCarry ?? -1.2, swish(t, 0.8));
         if (sp.root) sp.root(P, t);
       },
@@ -111,7 +111,7 @@ const Hoofed = (() => {
       drink: (P, t) => {
         P.off.set(0, -0.02, 0); P.set('chest', 0, 0, -0.08);
         standLegs(P, { LF: 0.04, RF: 0.02 });
-        const g = sp.head.graze; lookAt(P, V(g[0] + 0.05, g[1] - 0.01, g[2]).add(V(0.25, -0.3, 0)), 1);
+        const g = sp.head.graze; R.ccd(P, ['neck1', 'neck2', 'head'], S.tail.head.toArray(), V(g[0] + 0.03 * (sp.size || 1), g[1] - 0.01 * (sp.size || 1), g[2]), { iters: 10, k: 0.5 });
         face(P, t, 0.03 + 0.03 * Math.max(0, Math.sin(t * 6)), 0.2, 0.3); tailTo(P, s => sp.tailCarry ?? -1.2, swish(t, 0.4));
       },
       lie: (P, t) => {

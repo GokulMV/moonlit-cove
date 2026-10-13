@@ -564,6 +564,18 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     names.forEach((n, i) => { const rest = (i < names.length - 1 ? S.head[names[i + 1]] : S.tail[n]).clone().sub(S.head[n]).normalize(), want = new T.Vector3(...pts[i + 1]).sub(new T.Vector3(...pts[i])).normalize();
       P.aim(n, new T.Quaternion().setFromUnitVectors(rest, want)); });
   }
+  /* a chain (neck and head, say) bent so that a point carried by its last bone (rest pose) comes to target: each
+     bone in turn, from the last, turned toward it (k of the way each time) — cyclic coordinate descent */
+  function ccd(P, names, tip, target, { iters = 8, k = 0.6 } = {}) {
+    const S = P.S, T3 = new T.Vector3(...(target.isVector3 ? target.toArray() : target));
+    for (let it = 0; it < iters; it++) for (let i = names.length - 1; i >= 0; i--) {
+      const n = names[i], J = P.world(n), tp = P.at(names[names.length - 1], tip), a = tp.clone().sub(J).normalize(), b = T3.clone().sub(J).normalize();
+      if (a.dot(b) > 0.99999) continue;
+      const Qw = new T.Quaternion(); P.world(n, new T.Vector3(), Qw);
+      const dq = new T.Quaternion().setFromUnitVectors(a, b); dq.slerp(new T.Quaternion(), 1 - k);
+      P.aim(n, dq.multiply(Qw));
+    }
+  }
   /* hairs as fine tubes, each from a root along a way, curving as it goes: roots [{ p, d (its way, scaled to its
      length), bend ([x, y, z] it bows toward by its tip), r }], bind as any part's; col(s, i), m sides round */
   function strands(roots, bind, col, { m = 3, n = 6, mat } = {}) {
@@ -622,5 +634,5 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     return g;
   }
 
-  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, eye, lid, chainTo, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
+  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, eye, lid, chainTo, ccd, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
 })();
