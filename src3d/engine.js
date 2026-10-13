@@ -460,6 +460,7 @@ const Engine = (() => {
     for (const d of surge.dyn) { d.p0.copy(d.P0); d.q0.copy(d.Q0); d.o.position.copy(d.p0); d.o.quaternion.copy(d.q0); d.hit = null; }
     Object.assign(surge, { waves: [], fireOut: null, lightsOut: null, lantOut: [null, null, null], candleOut: null, vanHit: null, rugWet: null, combo: 0 });
     if (camp.rugMat) camp.rugMat.color.setRGB(1, 1, 1);
+    if (shacks && camp.castle) shacks.restore(camp.castle);
     canDone = false;
     surge.dyn.forEach(d => { if (d.L0) { d.L.copy(d.L0); d.S.crossVectors(UP, d.L); d.axis.copy(d.S).normalize(); } });
   }
@@ -768,6 +769,8 @@ const Engine = (() => {
     flora = Flora.build(natG, world);
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
+    /* (and the camp's sand castle washes away as theirs do; washed flat, there is no castle left to walk round) */
+    if (camp.castle) shacks.adopt(Object.assign(camp.castle, { onGone: on => { const ob = Layout.castle.ob; if (ob) ob[2] = on ? 0 : (Layout.castle.radius || 0.9) * 0.82; } }));
     world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
@@ -1010,7 +1013,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       fi.dens = o.dens; fi.pxScale = pxScale; fi.van = camp.vanGroup.position; fi.swash = swashFront; fi.calm = !!o.calm;
       for (const sp of fauna.update(fi)) { surge.ripples.push({ x: sp.x, z: sp.z, t0: wt, A: sp.k }); }
     }
-    if (shacks) shacks.update(S, t);
+    if (shacks) shacks.update(S, t, wt, swashFront);
     const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
     fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;
     fxP.smoke = F.smoke; fxP.steam = F.steam * fireK; fxP.pxScale = pxScale; fxP.douse = surge.fireOut == null ? 0 : Math.exp(-Math.max(0, wt - surge.fireOut) / 2.4) * (wt >= surge.fireOut ? 1 : 0);

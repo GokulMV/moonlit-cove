@@ -888,7 +888,8 @@
     for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
-    campObs.push([Layout.castle.x, Layout.castle.z, (Layout.castle.radius || 0.9) * 0.82, 'castle']);
+    /* (the castle's radius goes to 0 when the sea has washed it flat: Layout.castle.ob) */
+    campObs.push(Layout.castle.ob = [Layout.castle.x, Layout.castle.z, (Layout.castle.radius || 0.9) * 0.82, 'castle']);
     obstacles.push(...campObs);
   }
   /* the obstacles near (x, z), each as [dx, dz, radius, the obstacle] measured from it to the point */

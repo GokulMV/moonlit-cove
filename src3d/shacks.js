@@ -439,19 +439,109 @@ const Shacks = (() => {
       if (castlePlans.size > 400) castlePlans.delete(castlePlans.keys().next().value);
       return out;
     }
-    world.place(ch => { const claims = []; for (const p of castlePlan(ch)) { claims.push([p.x, p.z, 1.6]); ch.obstacle(p.x, p.z, 0.65, 'castle'); } return claims; });
+    /* (a castle the sea has washed flat is gone: nothing left for anyone to walk round) */
+    world.place(ch => { const claims = []; for (const p of castlePlan(ch)) { claims.push([p.x, p.z, 1.6]); if (!p.gone) ch.obstacle(p.x, p.z, 0.65, 'castle'); } return claims; });
     let castles = 0;
+
+    /* ── the sea and the castles. Each one standing near the camera (and the camp's own, given by adopt) is
+       L = { p: where it stands, in the world, and how it was built (x, z, seed, wear, toys, toyAng, flag), g: the group
+       it stands in, body: the castle itself in that (its bucket and spade lie beside it, things of their own), ch: its
+       chunk, when it has one }. Its wear runs on past 1 as the waves flatten the last mound, and at 1.6 it is gone ── */
+    const liveC = new Set();
+    /* how tall it stands at a wear, as the model builds it (its towers), and then the mound pressed flatter */
+    const HF = w => 1 - 0.32 * sm(0.1, 0.6, w) - 0.45 * sm(0.6, 0.95, w), flatK = w => w <= 1 ? 1 : Math.max(0.04, 1 - 0.96 * (w - 1) / 0.6);
+    const tall = w => HF(Math.min(1, w)) * flatK(w);
+    /* the castle built again as it is now (the old one thrown away); the first time, the bucket and the spade too */
+    function buildCastle(L, first) {
+      const { p, g } = L;
+      if (L.body) { g.remove(L.body); L.body.traverse(m => { if (m.isMesh) m.geometry.dispose(); }); }
+      if (L.wetM) { L.wetM.dispose(); L.wetM = null; }
+      const m = Models.make('beach/sandcastle', { seed: p.seed, wear: Math.min(1, p.wear), toys: first && p.toys, toyAng: p.toyAng, flag: p.flag, lite: !!L.ch, soak: p.soaked ? 1 : 0 });
+      const toys = m.userData.toys, body = new T.Group();
+      for (const c of [...m.children]) (toys.includes(c) ? g : body).add(c);
+      body.scale.y = flatK(p.wear); body.visible = !p.gone; g.add(body);
+      Object.assign(L, { body, sand: m.userData.sand, r: m.userData.base });
+      if (first) L.toys = toys.map(o => ({ o, P: o.position.clone(), d: 0, spin: 0, fall: 0 }));
+      g.updateMatrixWorld(true);
+      if (L.ch) (first ? g : body).traverse(q => { if (q.isMesh) L.ch.keep(q.geometry); });
+    }
     world.decorate(ch => {
       for (const p of castlePlan(ch)) {
-        const g = Models.make('beach/sandcastle', { seed: p.seed, wear: p.wear, toys: p.toys, lite: true });
-        g.position.set(p.x, 0, p.z); g.rotation.y = p.rot; g.updateMatrixWorld(true);
-        g.traverse(m => { if (m.isMesh) ch.keep(m.geometry); });
+        const g = new T.Group(); g.position.set(p.x, 0, p.z); g.rotation.y = p.rot;
+        const L = { p, g, ch }; buildCastle(L, true);
         ch.near.add(g); castles++;
+        liveC.add(L); g.addEventListener('removed', () => liveC.delete(L));
       }
     }, 'near');
+    /* a castle washed flat: gone from what the van and a walker must go round */
+    function lose(L) {
+      if (L.onGone) return L.onGone(true);
+      if (L.ch) for (const b of L.ch.obs) for (const ob of b) if (ob[3] === 'castle' && Math.abs(ob[0] - L.p.x) < 0.05 && Math.abs(ob[1] - L.p.z) < 0.05) ob[2] = 0;
+    }
+    /* the sea over a castle. As a wave runs up round it the castle slumps, the water undercutting it, and goes dark as it
+       soaks; the further the water runs on past it, the more of it the wave takes. When the water has drained off it, it
+       is built again as the wave has left it: towers to stumps, then a wet mound, then each wave pressing that flatter
+       till it is gone. The bucket and the spade are carried up the sand on the water and left where it drops them */
+    const _u = new T.Vector3(), _Y = new T.Vector3(0, 1, 0);
+    let lastWt = null;
+    function washCastles(wt, swash) {
+      if (!swash) return;
+      const dt = lastWt === null ? 0 : Math.max(0, Math.min(0.5, wt - lastWt)); lastWt = wt;
+      if (dt <= 0) return;
+      for (const L of liveC) {
+        const p = L.p; if (p.gone) continue;
+        /* how far past its seaward foot the water has run just now (m; below 0, short of it), along its middle and either
+           side of it (the swash comes up in tongues: one may reach a side of it and not the middle) */
+        const gz = Layout.shoreDZ(p.x), nz = Math.sqrt(1 + gz * gz);
+        let over = -1e9;
+        for (const f of [-0.7, 0, 0.7]) {
+          const x = p.x + f * L.r, up = (p.z - Layout.shoreZ(x)) / nz;
+          over = Math.max(over, swash(x, wt) - (up - 0.8 * L.r * Math.sqrt(1 - f * f)));
+        }
+        let W = L.wash;
+        if (over > 0) {
+          if (!W) W = L.wash = { max: 0, w: p.wear, dry: 0, t: 0 };
+          W.max = Math.max(W.max, over); W.dry = 0;
+          W.w1 = Math.min(1.6, p.wear + 0.3 + 0.4 * Math.min(W.max, 3));
+        } else if (W) W.dry += dt;
+        if (!W) continue;
+        W.t += dt;
+        W.w += (W.w1 - W.w) * (1 - Math.exp(-dt / 0.55));
+        L.body.scale.y = tall(W.w) / HF(Math.min(1, p.wear));
+        if (!p.soaked && L.sand) {
+          if (!L.wetM) { L.wetM = Mats.lit({ vertexColors: true, roughness: 0.96 }, 'sandc'); L.sand.material = L.wetM; }
+          const k = sm(0, 0.8, W.t); L.wetM.color.setScalar(1 - 0.4 * k); L.wetM.roughness = 0.96 - 0.16 * k;
+        }
+        if (L.toys && over > 0) {
+          /* (up the beach, in the castle's own frame) */
+          _u.set(-gz / nz, 0, 1 / nz).applyAxisAngle(_Y, -p.rot);
+          for (const q of L.toys) {
+            const bucket = q.o.userData.toy === 'bucket', v = (bucket ? 0.55 : 0.18) * Math.min(1, 0.4 + over);
+            q.d = Math.min(bucket ? 3 : 0.8, q.d + v * dt); q.spin += (bucket ? 0.7 : 0.25) * dt * Math.min(1, over); q.fall = Math.min(1, q.fall + dt / 0.9);
+            const o = q.o.position.copy(q.P).addScaledVector(_u, q.d);
+            /* (round the castle, not through it) */
+            const rr = Math.hypot(o.x, o.z), rm = 0.85 * L.r; if (rr < rm) { o.x *= rm / Math.max(rr, 1e-3); o.z *= rm / Math.max(rr, 1e-3); }
+            if (bucket) q.o.rotation.y = q.spin; else { q.o.rotation.x = 0.45 + 1.05 * sm(0, 1, q.fall); q.o.position.y = q.P.y * (1 - 0.75 * sm(0, 1, q.fall)); }
+          }
+        }
+        if (W.dry > 0.45) {
+          L.wash = null; p.wear = W.w1; p.soaked = true;
+          if (p.wear >= 1.6) { p.gone = true; L.body.visible = false; lose(L); }
+          else buildCastle(L, false);
+        }
+      }
+    }
+    /* the camp's own castle (camp.js builds it, its toys among the camp's things the sea moves) */
+    function adopt(L) { L.p.wear0 = L.p.wear; liveC.add(L); }
+    /* and built again with the camp, as it was first made */
+    function restore(L) {
+      const p = L.p; Object.assign(p, { wear: p.wear0, soaked: false, gone: false }); L.wash = null;
+      buildCastle(L, false); if (L.onGone) L.onGone(false);
+    }
 
     /* every frame: the lights come on after dusk and breathe a little; the glows are sized for the distance */
-    function update(S, t, cam) {
+    function update(S, t, wt, swash) {
+      washCastles(wt, swash);
       const night = S ? S.night : 1, k = sm(0.25, 0.75, night), fl = 0.92 + 0.05 * Math.sin(t * 2.1) + 0.03 * Math.sin(t * 5.3 + 1.7), A = S ? S.amb : [0, 0, 0];
       M.bulb.color.setRGB(1.0 * 1.5 * k * fl + A[0] * 0.5, 0.62 * 1.5 * k * fl + A[1] * 0.5, 0.3 * 1.5 * k * fl + A[2] * 0.5);
       M.lamp.color.setRGB(1.0 * 0.8 * k * fl + A[0] * 0.5, 0.55 * 0.8 * k * fl + A[1] * 0.5, 0.24 * 0.8 * k * fl + A[2] * 0.5);
@@ -461,7 +551,7 @@ const Shacks = (() => {
     /* (for the test bench: the sites laid out so far, along the coast) */
     const sites = () => [...plans.values()].flat().map(p => ({ kind: p.kind, x: p.x, z: Layout.vegZ(p.x) }));
     const castleSites = () => [...castlePlans.values()].flat().map(p => ({ x: p.x, z: p.z, wear: p.wear }));
-    return { update, sites, castleSites, get castles() { return castles; }, get count() { return count; }, M };
+    return { update, sites, castleSites, adopt, restore, get castles() { return castles; }, get count() { return count; }, M, debug: { liveC } };
   }
   return { build };
 })();

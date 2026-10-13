@@ -733,10 +733,15 @@ void main(){
     refs.bottle = bg; refs.bottleModel = bm; refs.cork = bm.userData.cork; refs.letterProp = bm.userData.letter;
     refs.dyn.push({ o: bg, kind: 'float', half: 0.1, tip: 0.0, seaward: true });
     /* a sand castle built by the camp (models/beach/sandcastle.js), its gate toward the camp, a bucket and a spade left
-       lying beside it */
+       lying beside it. A swell that runs up over it washes it away (shacks.js, which has it as one of the coast's
+       castles); the bucket floats off and the spade is knocked flat, as the camp's other things are */
     const SC = Layout.castle, cg = grp(SC.x, 0, SC.z, SC.rot); root.add(cg);
-    const cm = Models.make('beach/sandcastle', { seed: SC.seed, wear: 0.1, toys: true, toyAng: 4.02, flag: 'leaf' }); cg.add(cm);
-    refs.castle = cg; SC.radius = cm.userData.radius;
+    const cp = { x: SC.x, z: SC.z, rot: SC.rot, seed: SC.seed, wear: 0.1, toys: true, toyAng: 4.02, flag: 'leaf' };
+    const cm = Models.make('beach/sandcastle', cp), cbody = new T.Group(), toys = cm.userData.toys;
+    for (const c of [...cm.children]) (toys.includes(c) ? cg : cbody).add(c);
+    cg.add(cbody);
+    for (const o of toys) refs.dyn.push(o.userData.toy === 'bucket' ? { o, kind: 'float', half: 0.09, tip: 0.6 } : { o, kind: 'tip', half: 0.06, tip: 1.05 });
+    refs.castle = { p: cp, g: cg, body: cbody, sand: cm.userData.sand, r: cm.userData.base }; SC.radius = cm.userData.radius;
   }
 
   /* ── the wish board: a corkboard between two driftwood posts under a little plank roof, to the right of the fire.

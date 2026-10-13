@@ -16,8 +16,11 @@
    m across with its moat.
    opts: { seed, wear (0), moat (true), toys (false): a bucket and a
    spade left beside it, toyAng: which way from the middle the bucket
-   lies (radians, from +x toward +z) }
-   userData.radius: how far out it reaches, for walking round it
+   lies (radians, from +x toward +z), soak (0): the sea has just been
+   over it, and it is wet through }
+   userData: radius, how far out it reaches, for walking round it
+   (base: the castle's own, without the toys); toys, the bucket and the
+   spade (for whatever carries them off); sand, the castle's own mesh
    ───────────────────────────────────────────────────────────── */
 (() => {
   const T = THREE, M = Models, TAU = Math.PI * 2;
@@ -44,6 +47,9 @@
   const tint = (k, x, y, z, dd = 0) => { const g = grainK(x, y, z) * k; return [SAND[0] * g * (1 - 0.3 * dd), SAND[1] * g * (1 - 0.34 * dd), SAND[2] * g * (1 - 0.42 * dd)]; };
 
   M.add('beach/sandcastle', (o = {}) => {
+    /* (o.soak: the sea has been over it, and it is wet through: darker all over and no browner, as the wet sand round it
+       is, and with a little of its sheen) */
+    const soak = Math.min(1, Math.max(0, o.soak || 0)), tintW = (k, x, y, z, dd) => soak ? tint(k, x, y, z, dd * (1 - soak)).map(v => v * (1 - 0.4 * soak)) : tint(k, x, y, z, dd);
     const seed = o.seed || 1, wear = Math.min(1, Math.max(0, o.wear || 0)), r = M.rng(seed * 7 + 3), washed = sm(0.6, 0.95, wear);
     /* how damp it still is: fresh from the bucket, dark; dried by the sun, pale; washed by the tide, dark again */
     const damp = Math.max(0.72 * (1 - sm(0, 0.5, wear)), 0.85 * washed);
@@ -99,7 +105,7 @@
         th => [0.003, y0 + H - 0.006 + dome]);
       return lathe(rows, opt.nc || nc, x, z, 0, (px, py, pz, s) => {
         const h = Math.max(0, Math.min(1, (py - y0) / Math.max(H, 0.03)));
-        return tint((0.86 + 0.14 * h) * (s > 0.8 ? 1.04 : 1), px, py, pz, damp * (1 - 0.55 * h));
+        return tintW((0.86 + 0.14 * h) * (s > 0.8 ? 1.04 : 1), px, py, pz, damp * (1 - 0.55 * h));
       });
     }
     for (const t of towers) parts.push(tower(t));
@@ -124,7 +130,7 @@
         const n = M.vn(a * 22 + nz, v * 30, u0 * 30) - 0.5, slumpU = Math.sign(u0) * (0.01 * wear + 0.03 * washed) * (1 - Math.min(1, v / Math.max(hw, 0.01)));
         const u = u0 * (1 + 0.15 * washed) + slumpU + 0.004 * n, vv = (v + crenel) * (1 - 0.1 * wear) + 0.003 * n;
         return [ax + ux * a + px * u, y0 + vv, az + uz * a + pz * u];
-      }, (s, c, p) => { const h = Math.max(0, Math.min(1, (p[1] - y0) / Math.max(hw, 0.02))); return tint(0.86 + 0.12 * h, p[0], p[1], p[2], damp * (1 - 0.5 * h)); });
+      }, (s, c, p) => { const h = Math.max(0, Math.min(1, (p[1] - y0) / Math.max(hw, 0.02))); return tintW(0.86 + 0.12 * h, p[0], p[1], p[2], damp * (1 - 0.5 * h)); });
     }
     const hw0 = (0.06 + r() * 0.025) * (1 - 0.35 * sm(0.1, 0.7, wear) - 0.4 * washed), wb = 0.09 + r() * 0.015, wt = 0.05 + r() * 0.012;
     /* which towers the walls join: round the ring (the keep only when it stands in a row of two) */
@@ -153,7 +159,7 @@
     {
       const rows = [th => [Rm(th) + 0.016, -0.006], th => [Rm(th) - 0.008, hm * 0.4], th => [Rm(th) - 0.026, hm * 0.82], th => [Rm(th) - 0.05, hm]];
       for (let k = 1; k <= 6; k++) { const f = 1 - k / 6.4; rows.push(th => { const rr = (Rm(th) - 0.05) * f; return [Math.max(0.003, rr), hm + 0.0025 * (M.vn(Math.cos(th) * rr * 9, 3.1, Math.sin(th) * rr * 9) - 0.5) + washed * 0.035 * (1 - f * f)]; }); }
-      parts.push(lathe(rows, nc + 16, 0, 0, 0, (x, y, z, s) => tint(0.88 + 0.06 * s, x, y, z, damp * 0.85)));
+      parts.push(lathe(rows, nc + 16, 0, 0, 0, (x, y, z, s) => tintW(0.88 + 0.06 * s, x, y, z, damp * 0.85)));
     }
     /* ── the moat round it, the sand dug out of it heaped into a bank outside ── */
     let reach = R0 * 1.05;
@@ -164,13 +170,14 @@
         th => [B(th) + 0.024, bH * 0.75 + lumpB(th, 0.9)], th => [B(th) + 0.006, 0.011], th => [B(th) - 0.012, 0.0028], th => [Rm(th) + 0.035, 0.0022], th => [Rm(th) + 0.012, 0.002]];
       const W = 1 - 0.6 * washed;
       parts.push(lathe(rows, nc + 20, 0, 0, 0, (x, y, z, s) => { const fl = sm(0.6, 0.78, s), bank = 1 - Math.abs(s - 0.35) * 2.2;
-        return tint((0.95 - 0.08 * Math.max(0, bank)) * (s < 0.12 ? 1.03 : 1), x, y, z, Math.min(0.75, 0.6 * damp + 0.9 * fl * W)); }));
+        return tintW((0.95 - 0.08 * Math.max(0, bank)) * (s < 0.12 ? 1.03 : 1), x, y, z, Math.min(0.75, 0.6 * damp + 0.9 * fl * W)); }));
       reach = R0 + mw + 0.19;
     }
     const sand = M.mergeC(parts.map(geo => ({ geo })));
     const g = new T.Group();
-    const sandM = mat('sand', () => Mats.lit({ vertexColors: true, roughness: 0.96 }, 'sandc'));
+    const sandM = soak > 0.5 ? mat('sandw', () => Mats.lit({ vertexColors: true, roughness: 0.8 }, 'sandc')) : mat('sand', () => Mats.lit({ vertexColors: true, roughness: 0.96 }, 'sandc'));
     const sm0 = new T.Mesh(sand, sandM); sm0.castShadow = sm0.receiveShadow = true; g.add(sm0);
+    const base = reach;
     /* ── shells pressed into its sides, hinge down, and lying on the platform: cockles (a ribbed fan, banded with its
        growth), a cowrie or two (a glossy spotted dome), now and then a mussel (long, blue-black) ── */
     {
@@ -234,6 +241,7 @@
       }
     }
     /* ── a bucket and a spade, left beside it ── */
+    const toys = [];
     if (o.toys) {
       const cols = ['#d8392b', '#2a6fd0', '#f0b81c', '#21a37a'], ci = Math.floor(r() * 4), plastic = hex => mat('pl' + hex, () => M.litP(hex, { roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.3, side: T.DoubleSide }));
       const bucket = new T.Group();
@@ -254,9 +262,10 @@
       const a2 = ang + 1.4 + r() * 0.8, d2 = reach - 0.05;
       sp.position.set(Math.cos(a2) * d2, 0.07, Math.sin(a2) * d2); sp.rotation.set(0.45, -a2 + Math.PI / 2, 0.15);
       sp.traverse(m => { if (m.isMesh) m.castShadow = true; }); g.add(sp);
+      bucket.userData.toy = 'bucket'; sp.userData.toy = 'spade'; toys.push(bucket, sp);
       reach += 0.25;
     }
-    g.userData = { radius: reach, top: topY, gate: gate && gate.at };
+    g.userData = { radius: reach, base, top: topY, gate: gate && gate.at, toys, sand: sm0 };
     return g;
   });
 })();
