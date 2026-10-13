@@ -112,7 +112,10 @@ void main(){
 ${LIGHT}
 varying vec3 vN, vW, vC; varying vec4 vP;
 void main(){ vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0); gl_FragColor = vec4(shade(vC, n, vW, 0.1, GLOSS), 1.0); }`;
-  const CRAB = { hx: 0.012, hs: 0.009, hy: 0.026, hz: 0.02 };      /* where the legs join the body */
+  /* the ghost crabs on the sand: models/life/crab.js's own crab, built light, as one geometry (CRAB: where its legs join
+     its body, for the stride) */
+  let crabParts = null; const crabP = () => crabParts || (crabParts = Models.make('life/crab', { lite: true, parts: true }).userData.parts);
+  const CRAB = new Proxy({}, { get: (t, k) => +crabP().hip[k].toFixed(5) });
   const CRAB_VS = `
 ${ORIENT}
 attribute vec4 iP, iQ;   /* where (x, y, z, facing) · stride phase, stride, sunk into its burrow, size */
@@ -506,28 +509,7 @@ void main(){
     for (const sd of [-1, 1]) b.panel([[-0.03, 0, sd * 0.003], [0.028, 0, sd * 0.003], [0.028, 0, sd * 0.05], [-0.03, 0, sd * 0.05]], [1, 1, 1], p => [1, sd, (Math.abs(p[2]) - 0.003) / 0.047, p[0] > 0 ? 1 : -1], [0, 1, 0]);
     return b.geo();
   }
-  function crabGeo() {
-    const b = Build(), shell = [0.8, 0.73, 0.58], leg = [0.86, 0.8, 0.67];
-    /* a ribbon from a to c, w wide, lying flat to `up` */
-    const seg = (a, c, w, wa, wc) => {
-      let px = -(c[2] - a[2]), pz = c[0] - a[0]; const l = Math.hypot(px, pz) || 1; px *= w / 2 / l; pz *= w / 2 / l;
-      b.strip([[a[0] + px, a[1], a[2] + pz], [c[0] + px, c[1], c[2] + pz]], [[a[0] - px, a[1], a[2] - pz], [c[0] - px, c[1], c[2] - pz]], leg, (p, i) => i ? wc : wa, [0, 1, 0]);
-    };
-    b.lathe([[-0.02, 0.002, 0.003, 0.024], [-0.014, 0.009, 0.019, 0.026], [0.0, 0.012, 0.025, 0.027], [0.014, 0.009, 0.021, 0.026], [0.021, 0.003, 0.006, 0.025]], 8, shell, W0);
-    for (const sd of [-1, 1]) {
-      for (let k = 0; k < 4; k++) {
-        const hx = CRAB.hx - k * CRAB.hs, a = (1.5 - k) * 0.45, hip = [hx, CRAB.hy, sd * CRAB.hz];
-        const knee = [hx + Math.sin(a) * 0.022, 0.042, sd * (CRAB.hz + 0.03)], tip = [hx + Math.sin(a) * 0.042, 0.0, sd * (CRAB.hz + 0.048)];
-        seg(hip, knee, 0.0035, [1, sd, k, 0], [1, sd, k, 0.5]); seg(knee, tip, 0.0028, [1, sd, k, 0.5], [1, sd, k, 1]);
-      }
-      /* the claws, one bigger than the other; the eyes, dark clubs on stalks */
-      const cs = sd > 0 ? 1.35 : 1;
-      b.panel([[0.019, 0.022, sd * 0.008], [0.019 + 0.012 * cs, 0.02, sd * 0.01], [0.019 + 0.014 * cs, 0.016, sd * (0.008 + 0.006 * cs)], [0.019, 0.016, sd * 0.016]], shell, () => [2, sd, 0, 0], [0, 1, 0]);
-      b.panel([[0.017, 0.03, sd * 0.007], [0.0195, 0.03, sd * 0.007], [0.0195, 0.04, sd * 0.008], [0.017, 0.04, sd * 0.008]], shell, () => [3, sd, 0, 0], [1, 0, 0]);
-      b.panel([[0.0165, 0.04, sd * 0.008], [0.02, 0.04, sd * 0.008], [0.02, 0.048, sd * 0.009], [0.0165, 0.048, sd * 0.009]], [0.04, 0.04, 0.04], () => [3, sd, 0, 0], [1, 0, 0]);
-    }
-    return b.geo();
-  }
+  function crabGeo() { return crabP().geo; }
   function dolphinGeo() {
     const b = Build(), dark = [0.16, 0.18, 0.21], pale = [0.6, 0.62, 0.64], U = p => [0, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0], UF = p => [1, 0, cl((1.12 - p[0]) / 2.35, 0, 1), 0];
     b.lathe([[1.13, 0.012, 0.012, -0.02], [1.04, 0.045, 0.04, -0.03], [0.96, 0.07, 0.065, -0.02], [0.88, 0.13, 0.12, 0.02], [0.72, 0.2, 0.19, 0.02], [0.45, 0.26, 0.24, 0.01], [0.1, 0.26, 0.24, 0], [-0.3, 0.19, 0.17, 0], [-0.62, 0.11, 0.09, 0], [-0.86, 0.055, 0.045, 0], [-1.0, 0.035, 0.03, 0]], 10,

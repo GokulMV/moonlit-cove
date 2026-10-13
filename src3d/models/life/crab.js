@@ -3,6 +3,7 @@
    At the origin in metres, its front toward +x, its right side toward +z. userData.anim(t) keeps it alive in the
    hand: the legs reach and paddle, the eyes tilt, the big claw opens and closes */
 Models.add('life/crab', (o = {}) => {
+  const lite = !!o.lite;      /* (fewer facets, the shell painted vertex by vertex: the crabs out on the sand, many at once) */
   const T = THREE, M = Models, g = new T.Group(), r = M.rng(o.seed || 7);
   const W = 0.022, Lh = 0.0175, H = 0.0088, CY = 0.0055;   /* the shell's half-width (z), half-length (x), half-height, centre */
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; };
@@ -32,24 +33,24 @@ Models.add('life/crab', (o = {}) => {
     return c.map(v => v * (0.95 + 0.1 * M.vn(x * 1400, z * 1400, 7.7)));
   };
   /* (painted once, kept for every crab after) */
-  const shellTex = Models.__crabTex || (Models.__crabTex = M.texFrom(512, 512, (u, v) => {
+  const shellTex = lite ? null : Models.__crabTex || (Models.__crabTex = M.texFrom(512, 512, (u, v) => {
     const x = SECS[0][0] + u * (SECS[SECS.length - 1][0] - SECS[0][0]), a = Math.PI + v * Math.PI * 2, [w, , , sq] = prof(x), sa = Math.sin(a), z = Math.max(0, w) * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / sq);
     return shellCol(x, z, Math.cos(a) > 0);
   }));
-  const shell = M.loft(SECS, 56, 72, null, { shape: (x, y, z) => {
+  const shell = M.loft(SECS, lite ? 18 : 56, lite ? 22 : 72, lite ? (x, y, z) => shellCol(x, z, y > CY) : null, { shape: (x, y, z) => {
     /* domed above, flatter beneath; the grooves pressed in, and a fine granulation all over */
     let yy = y > CY ? CY + (y - CY) * 1.05 : CY + (y - CY) * 0.55;
     if (y > CY) yy -= 0.00045 * grooves(x, z);
     const gr = M.vn(x * 1300, y * 1300, z * 1300) - 0.5;
     return [x, yy + gr * 0.00012, z * (1 + gr * 0.004)];
   } });
-  const shellM = M.litP('#ffffff', { map: shellTex, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.4 });
+  const shellM = lite ? M.lit('#ffffff', { vertexColors: true, roughness: 0.6 }) : M.litP('#ffffff', { map: shellTex, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.4 });
   g.add(new T.Mesh(shell, shellM));
 
   /* ── legs and claws: chains of joints, each segment along its joint's +x ── */
   const legM = M.lit('#ffffff', { vertexColors: true, roughness: 0.58 });
   function seg(len, r0, r1, flat = 0.55, tip = false) {
-    const geo = new T.CylinderGeometry(r1, r0, len, 12, 6, false); geo.rotateZ(-Math.PI / 2); geo.translate(len / 2, 0, 0); geo.scale(1, 1, flat);
+    const geo = new T.CylinderGeometry(r1, r0, len, lite ? 5 : 12, lite ? 2 : 6, false); geo.rotateZ(-Math.PI / 2); geo.translate(len / 2, 0, 0); geo.scale(1, 1, flat);
     /* (tapered to a point, for the last segment of a leg) */
     if (tip) { const P = geo.attributes.position; for (let i = 0; i < P.count; i++) { const t = P.getX(i) / len, k = Math.pow(Math.max(0, 1 - t), 0.8); P.setY(i, P.getY(i) * (0.25 + 0.75 * k)); P.setZ(i, P.getZ(i) * (0.25 + 0.75 * k)); } geo.computeVertexNormals(); }
     return M.paint(geo, (x, y) => { const t = x / len, band = Math.exp(-(((t - 0.02) / 0.12) ** 2)) + Math.exp(-(((t - 0.98) / 0.12) ** 2)), up = y > 0 ? 1 : 0;
@@ -62,7 +63,7 @@ Models.add('life/crab', (o = {}) => {
       if (i === 0) j.position.set(...at); else j.position.x = parts[i - 1][1];
       j.add(new T.Mesh(geo, legM));
       /* (a knuckle at each joint) */
-      if (i) { const kn = new T.Mesh(M.paint(new T.SphereGeometry(kr, 10, 8), () => DUSK), legM); kn.scale.set(1, 1, 0.65); j.add(kn); }
+      if (i) { const kn = new T.Mesh(M.paint(new T.SphereGeometry(kr, lite ? 5 : 10, lite ? 4 : 8), () => DUSK), legM); kn.scale.set(1, 1, 0.65); j.add(kn); }
       p.add(j); J.push(j); p = j;
     });
     return J;
@@ -91,11 +92,11 @@ Models.add('life/crab', (o = {}) => {
        brown */
     const L = 0.016 * k, Hh = 0.0082 * k, Th = 0.0046 * k, hand = new T.Object3D(); hand.position.x = (0.006 * k + 0.002) * 0.92; hand.rotation.y = sd * 0.35; J[1].add(hand);
     const gran = (x, y, z) => M.vn(x * 2400 + sd * 9, y * 2400, z * 2400);
-    const palm = M.loft([[0, 0.0022 * k, 0.003 * k, 0, 2], [L * 0.15, Th * 0.92, Hh * 0.86, 0, 2.3], [L * 0.6, Th, Hh, 0, 2.5], [L * 0.9, Th * 0.82, Hh * 0.8, -0.001 * k, 2.4], [L, Th * 0.45, Hh * 0.45, -0.0018 * k, 2.1]], 32, 32,
+    const palm = M.loft([[0, 0.0022 * k, 0.003 * k, 0, 2], [L * 0.15, Th * 0.92, Hh * 0.86, 0, 2.3], [L * 0.6, Th, Hh, 0, 2.5], [L * 0.9, Th * 0.82, Hh * 0.8, -0.001 * k, 2.4], [L, Th * 0.45, Hh * 0.45, -0.0018 * k, 2.1]], lite ? 8 : 32, lite ? 8 : 32,
       (x, y, z) => { const gg = gran(x, y, z); let c = mix(PALE, LILAC, (big ? 0.55 : 0.3) * sm(-Hh * 0.6, Hh * 0.4, -y)); c = mix(c, SAND, 0.25 * sm(0, Hh, y)); if (gg > 0.72) c = mix(c, lin('#fbf7ef'), 0.6); return c.map(v => v * (0.95 + 0.08 * M.vn(x * 900, y * 900, 3))); },
       { shape: (x, y, z) => { const gg = gran(x, y, z), b = gg > 0.72 ? 0.00022 * sm(0.72, 0.85, gg) : 0, l = Math.hypot(y, z) || 1; return [x, y + y / l * b, z + z / l * b]; } });
     hand.add(new T.Mesh(palm, clawM));
-    const finger = (len, rr, dn) => M.loft([[0, rr * 0.8, rr, 0, 2.2], [len * 0.45, rr * 0.72, rr * 0.88, 0, 2.2], [len * 0.85, rr * 0.38, rr * 0.42, 0, 2], [len, rr * 0.08, rr * 0.08, 0, 2]], 14, 14,
+    const finger = (len, rr, dn) => M.loft([[0, rr * 0.8, rr, 0, 2.2], [len * 0.45, rr * 0.72, rr * 0.88, 0, 2.2], [len * 0.85, rr * 0.38, rr * 0.42, 0, 2], [len, rr * 0.08, rr * 0.08, 0, 2]], lite ? 4 : 14, lite ? 5 : 14,
       (x) => mix(PALE, lin('#5a4630'), sm(0.6, 0.95, x / len)),
       { shape: (x, y, z) => { const t = x / len, teeth = y * dn > 0 ? 0 : 0.0003 * Math.max(0, Math.sin(t * 20)) * (1 - t); return [x, y + dn * 0.3 * len * t * t + dn * teeth, z]; } });
     const fixed = new T.Mesh(finger(0.0085 * k, 0.0023 * k, 1), clawM); fixed.position.set(L * 0.9, -Hh * 0.42, 0); fixed.rotation.z = -0.1; hand.add(fixed);
@@ -109,10 +110,10 @@ Models.add('life/crab', (o = {}) => {
   const eyes = [];
   for (const sd of [1, -1]) {
     const e = new T.Object3D(); e.position.set(Lh * 0.96, CY + H * 0.45, sd * W * 0.52); e.rotation.order = 'YXZ'; e.rotation.set(sd * 0.32, 0, -0.28); g.add(e);
-    const st = M.paint(new T.CylinderGeometry(0.0019, 0.0023, 0.012, 12, 4), (x, y) => mix(SAND, PALE, (y + 0.006) / 0.012)); st.translate(0, 0.006, 0); e.add(new T.Mesh(st, stalkM));
+    const st = M.paint(new T.CylinderGeometry(0.0019, 0.0023, 0.012, lite ? 6 : 12, lite ? 1 : 4), (x, y) => mix(SAND, PALE, (y + 0.006) / 0.012)); st.translate(0, 0.006, 0); e.add(new T.Mesh(st, stalkM));
     /* the eye: the cornea swells round the stalk's end, long and dark (club-shaped, bigger on its outer side), and above
        it a short pale horn, the style */
-    const ball = M.paint(new T.SphereGeometry(1, 28, 20), (x, y, z) => { const f = 0.8 + 0.2 * Math.abs(Math.sin(x * 9e3) * Math.sin(y * 9e3 + 1) * Math.sin(z * 9e3 + 2)); return [0.06 * f, 0.055 * f, 0.05 * f]; });
+    const ball = M.paint(new T.SphereGeometry(1, lite ? 8 : 28, lite ? 6 : 20), (x, y, z) => { const f = 0.8 + 0.2 * Math.abs(Math.sin(x * 9e3) * Math.sin(y * 9e3 + 1) * Math.sin(z * 9e3 + 2)); return [0.06 * f, 0.055 * f, 0.05 * f]; });
     ball.scale(0.0036, 0.0074, 0.0034); const em = new T.Mesh(ball, eyeM); em.position.set(0, 0.0112, sd * 0.0005); e.add(em);
     const sty = M.paint(new T.ConeGeometry(0.0014, 0.0048, 10, 3), (x, y) => mix(PALE, SAND, 0.4 + (y + 0.0024) * 120)); sty.translate(0, 0.0024, 0);
     const cm = new T.Mesh(sty, stalkM); cm.position.y = 0.0176; e.add(cm);
@@ -129,5 +130,36 @@ Models.add('life/crab', (o = {}) => {
     for (const e of eyes) { e.e.rotation.z = e.z0 + 0.12 * Math.sin(t * 0.7 + e.sd); e.e.rotation.x = e.x0 + 0.08 * Math.sin(t * 0.9 + e.sd * 2); }
   };
   g.userData.anim(0);
+  /* for drawing many (fauna.js): one geometry, its colours as aCol and, as aW, what each point belongs to (0 the shell,
+     [1, side, leg, how far out along it] a leg, [2, side] a claw, [3, side] an eye), the feet set on the sand; and where
+     the legs join the body there */
+  if (o.parts) {
+    const W_ = W;
+    g.updateMatrixWorld(true);
+    const parts = [], tag = new Map();
+    legs.forEach(L => L.J[0].traverse(m => { if (m.isMesh) tag.set(m, { leg: L }); }));
+    claws.forEach(c => c.J[0].traverse(m => { if (m.isMesh) tag.set(m, { w: [2, c.big ? 1 : -1, 0, 0] }); }));
+    eyes.forEach(e => e.e.traverse(m => { if (m.isMesh) tag.set(m, { w: [3, e.sd, 0, 0] }); }));
+    const v = new T.Vector3(); let minY = 1e9;
+    g.traverse(m => { if (!m.isMesh) return; const P = m.geometry.attributes.position; for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(m.matrixWorld); minY = Math.min(minY, v.y); } });
+    const hipY = CY - 0.0015 - minY, LEGLEN = 0.05;
+    g.traverse(m => {
+      if (!m.isMesh) return;
+      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld); geo.translate(0, -minY, 0);
+      const P = geo.attributes.position, W = new Float32Array(P.count * 4), t = tag.get(m);
+      for (let i = 0; i < P.count; i++) {
+        if (t && t.leg) { const L = t.leg, hx = LEG[L.i][0], d = Math.hypot(P.getX(i) - hx, P.getY(i) - hipY, P.getZ(i) - L.sd * W_ * 0.93); W.set([1, L.sd, L.i, Math.min(1, d / LEGLEN)], i * 4); }
+        else if (t) W.set(t.w, i * 4);
+      }
+      geo.setAttribute('aW', new T.BufferAttribute(W, 4));
+      const c = geo.attributes.color ? [1, 1, 1] : m.material.color.toArray();
+      parts.push({ geo, c, W });
+    });
+    /* (merged: colours as mergeC makes them, the tags carried alongside) */
+    const merged = M.mergeC(parts.map(p => ({ geo: p.geo, c: p.c }))), Wall = new Float32Array(merged.attributes.position.count * 4);
+    let o4 = 0; for (const p of parts) { Wall.set(p.W, o4); o4 += p.W.length; }
+    merged.setAttribute('aW', new T.BufferAttribute(Wall, 4)); merged.setAttribute('aCol', merged.attributes.color); merged.deleteAttribute('color');
+    g.userData.parts = { geo: merged, hip: { hx: LEG[0][0], hs: LEG[0][0] - LEG[1][0], hy: hipY, hz: W_ * 0.93 } };
+  }
   return g;
 });
