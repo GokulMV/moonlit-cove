@@ -4,17 +4,25 @@
    long black corneas, the elbowed antennules and the long red antennae, the third maxillipeds folded under the face, the
    left claw much the bigger (its palm swollen and studded with pale granules) held up in front of the face, the right
    claw small beside it, and two pairs of long jointed walking legs, banded and granular, their last segments long curved
-   points that reach the sand. (The last two pairs of legs and the soft curled abdomen stay inside the shell.)
+   points that reach the sand. Behind the shield the soft back of the carapace swells out of the mouth and fills it,
+   wrinkled and darker, and the soft abdomen curls away from it up into the coil; the last two pairs of legs stay in.
    At the origin in metres, standing on the sand: its front toward +x, its right side toward +z.
    o.lite: fewer facets, for the many along the tide line. userData.anim(t, flying) keeps it alive in the hand;
-   userData.parts: { shell, body } (each one geometry with vertex colours, as built) and ap (the middle of the shell's
-   mouth, where the body draws in), for shallows.js to draw many of them */
+   userData.parts: { shell (with the soft back, which stays put), body } (each one geometry with vertex colours, as
+   built) and ap (the middle of the shell's mouth, where the body draws in), for shallows.js to draw many of them */
 (() => {
   const T = THREE, M = Models, TAU = Math.PI * 2;
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; }, mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   /* (a sheet turned to face the other way) */
   const flip = g => { const I = g.index.array; for (let i = 0; i < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } const N = g.attributes.normal.array; for (let i = 0; i < N.length; i++) N[i] = -N[i]; return g; };
+  /* how much light gets into the shell: the inside bright and pearly only near the lip, dark a quarter turn in (s 0
+     deep in, 1 at the lip); and the soft back lit out of the mouth, in shadow inside it (u along it, UM at the lip) */
+  const UM = 0.7, deepIn = s => 0.03 + 0.97 * Math.pow(sm(0.74, 0.99, s), 1.3), softIn = u => 0.16 + 0.84 * sm(UM - 0.16, UM + 0.05, u);
+  /* (the same as a strip of texture, so the gloss and the sky's reflection go dark in there too: for aoMap, clearcoatMap
+     and specularIntensityMap) */
+  let OCC = null;
+  const occTex = (fn, alongU) => { const n = 64, d = new Uint8Array(n * 4); for (let i = 0; i < n; i++) d.fill(Math.round(255 * Math.max(0, Math.min(1, fn((i + 0.5) / n)))), i * 4, i * 4 + 4); const t = new T.DataTexture(d, alongU ? n : 1, alongU ? 1 : n); t.magFilter = t.minFilter = T.LinearFilter; t.needsUpdate = true; t.userData.keep = true; return t; };
 
   /* ── the shell, in its own frame: the coil's axis up (+y), the apex at the top. θ winds from the apex to the mouth
      (clockwise seen from the apex: a right-handed shell), φ goes round the tube (0 straight out from the axis, π/2 up
@@ -52,9 +60,9 @@
       col = mix(col, CHALK, sm(2.6 * TAU, 1.2 * TAU, th) * 0.8);
       return col.map(v => v * (0.88 + 0.2 * M.vn(p[0] * 2400, p[1] * 2400, p[2] * 2400)));
     });
-    /* the inside, glossy and pearly, as far in as can be seen; then the lip, rounded, joining the two */
+    /* the inside, glossy and pearly near the lip and going dark further in; then the lip, rounded, joining the two */
     const inA = th1 - 1.15 * TAU, inner = (M.sheet(lite ? 24 : 110, nc, (s, c) => surf(inA + s * (th1 - inA), c * TAU, TH * (0.4 + 0.6 * s)),
-      (s, c) => mix(lin('#d8c9bc'), lin('#d39470'), sm(0.75, 1, s) * 0.55)));
+      (s, c) => mix(lin('#d8c9bc'), lin('#d39470'), sm(0.75, 1, s) * 0.55).map(v => v * deepIn(s))));
     const lip = M.sheet(lite ? 3 : 8, nc, (u, c) => { const a = surf(th1, c * TAU), b = surf(th1, c * TAU, TH), n = centre(th1).sub(centre(th1 - 0.02)).normalize(), bulge = Math.sin(Math.PI * u) * TH * 0.55;
       return [a[0] + (b[0] - a[0]) * u + n.x * bulge, a[1] + (b[1] - a[1]) * u + n.y * bulge, a[2] + (b[2] - a[2]) * u + n.z * bulge]; }, (u) => mix(lin('#a98a6a'), lin('#e2d2c0'), u));
     /* (the very tip, closed) */
@@ -65,7 +73,7 @@
     /* (and the outer sheet outward from the coil, the inner one inward: as made, both face the same way; the middle of
        the last whorl's outside says which) */
     { const N = outer.attributes.normal, j = (ns - 4) * (nc + 1), v = new T.Vector3(N.getX(j), N.getY(j), N.getZ(j)), p = new T.Vector3().fromBufferAttribute(outer.attributes.position, j), cc = centre(th0 + (ns - 4) / ns * (th1 - th0)); if (v.dot(p.sub(cc)) < 0) flip(outer); else flip(inner); }
-    return { outer: M.mergeC([{ geo: outer }, { geo: lip }, { geo: tip }]), inner, apC, apN };
+    return { outer: M.mergeC([{ geo: outer }, { geo: lip }, { geo: tip }]), inner, apC, apN, centre, gr, th1, RA, RB };
   }
 
   M.add('life/hermit', (o = {}) => {
@@ -76,7 +84,7 @@
        crab's abdomen curls to the right, into the coil), resting on the sand behind ── */
     const S = shellParts(o);
     const e1 = S.apN.clone(), e2 = new T.Vector3(0, 1, 0).addScaledVector(e1, -e1.y).normalize(), e3 = new T.Vector3().crossVectors(e1, e2);
-    const f1 = new T.Vector3(1, -0.32, 0.04).normalize(), up = new T.Vector3(-0.62, 0.7, 0.3), f2 = up.addScaledVector(f1, -up.dot(f1)).normalize(), f3 = new T.Vector3().crossVectors(f1, f2);
+    const f1 = new T.Vector3(1, -(o.tilt ?? 0.32), 0.04).normalize(), up = new T.Vector3(-0.62, 0.7, 0.3), f2 = up.addScaledVector(f1, -up.dot(f1)).normalize(), f3 = new T.Vector3().crossVectors(f1, f2);
     const Rm = new T.Matrix4().makeBasis(f1, f2, f3).multiply(new T.Matrix4().makeBasis(e1, e2, e3).transpose());
     const place = new T.Matrix4().multiply(Rm).multiply(new T.Matrix4().makeTranslation(-S.apC.x, -S.apC.y, -S.apC.z));
     S.outer.applyMatrix4(place); S.inner.applyMatrix4(place);
@@ -84,14 +92,49 @@
     /* (the mouth's middle at x = 0; the shell's lowest point just on the sand) */
     const yA = 0.0006 - S.outer.boundingBox.min.y;
     S.outer.translate(0, yA, 0); S.inner.translate(0, yA, 0);
+    if (!OCC) OCC = { inner: occTex(deepIn, false), soft: occTex(softIn, true) };
     const shellM = M.litP('#ffffff', { vertexColors: true, roughness: 0.38, clearcoat: 0.35, clearcoatRoughness: 0.3 });
-    const innerM = M.litP('#ffffff', { vertexColors: true, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
+    const innerM = M.litP('#ffffff', { vertexColors: true, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, aoMap: OCC.inner, clearcoatMap: OCC.inner, specularIntensityMap: OCC.inner });
     const shellG = new T.Group(); shellG.add(new T.Mesh(S.outer, shellM), new T.Mesh(S.inner, innerM)); g.add(shellG);
 
     /* ── the crab's front half, out of the mouth ── */
     const body = new T.Group(); g.add(body);
     const BX = 0.0035, BY = yA - 0.0035;     /* the middle of its front half: just out of the mouth, low in it */
+    /* (its front half a size up from the numbers below, grown about the middle of the mouth: a crab this big fills
+       the mouth of its shell, as it must to draw back into it) */
+    const KB = o.kb ?? 1.25, PIV = new T.Vector3(0, yA, 0); body.scale.setScalar(KB); body.position.copy(PIV).multiplyScalar(1 - KB);
+    const inBody = (x, y, z) => new T.Vector3(x, y, z).sub(PIV).multiplyScalar(KB).add(PIV);
     const R6 = lite ? 6 : 24;
+
+    /* ── the soft back, filling the mouth: lofted along the coil from a whorl in (where the abdomen ends) out to the
+       lip, most of the way across the tube; then out of the mouth, swelling a little and narrowing down and forward
+       into the thorax under the shield. Its sections turn from the tube's (across the coil, along its axis) to the
+       crab's own (across it, up) on the way ── */
+    const thA = S.th1 - 0.85 * TAU, lift = new T.Vector3(0, yA, 0), QM = 0.86, aE = 0.004 * KB, bE = 0.0026 * KB, DP = o.dome ?? 1.6;
+    const inC = th => S.centre(th).applyMatrix4(place).add(lift), radial = th => new T.Vector3(Math.cos(th), 0, Math.sin(th)).applyMatrix4(Rm), axis = new T.Vector3(0, 1, 0).applyMatrix4(Rm);
+    const P0 = inC(S.th1), P1 = P0.clone().addScaledVector(f1, 0.003), P2 = inBody(BX + 0.003, BY, 0);
+    const A0 = radial(S.th1), AE = new T.Vector3(0, 0, Math.sign(A0.z) || -1), BE = new T.Vector3(0, 1, 0);
+    const station = u => {
+      if (u <= UM) { const th = thA + (u / UM) * (S.th1 - thA), s = S.gr(th), q = QM * Math.sqrt(sm(0, 0.12, u / UM)); return [inC(th), radial(th), axis.clone(), S.RA * s * q, S.RB * s * q]; }
+      /* (out of the mouth: rounded, staying full a little way, then falling away into the thorax) */
+      const t = (u - UM) / (1 - UM), it = 1 - t, w = sm(0, 1, t), k = 1 - Math.sqrt(Math.max(0, 1 - Math.pow(t, DP)));
+      const c = P0.clone().multiplyScalar(it * it).addScaledVector(P1, 2 * it * t).addScaledVector(P2, t * t);
+      const A = A0.clone().lerp(AE, w).normalize(), B = axis.clone().lerp(BE, w); B.addScaledVector(A, -B.dot(A)).normalize();
+      return [c, A, B, S.RA * QM + (aE - S.RA * QM) * k, S.RB * QM + (bE - S.RB * QM) * k];
+    };
+    /* (its colour: a duller, deeper red than the shield, mottled paler, a fine net of darker creases in its soft skin;
+       in shadow inside the shell) */
+    const SOFT = lin('#93361d'), SOFTD = lin('#4a1509'), SOFTP = lin('#c27050');
+    const softG = M.loft([[0, 1, 1, 0, 2], [1, 1, 1, 0, 2]], lite ? 20 : 96, lite ? 10 : 48, (x, y, z, u) => {
+      const crease = lite ? 0 : Math.pow(1 - Math.abs(2 * M.vn(x * 1300, y * 1300 + 7, z * 1300) - 1), 7);
+      let c = mix(SOFT, SOFTP, 0.5 * sm(0.45, 0.85, M.vn(x * 520 + 3, y * 520, z * 520)));
+      c = mix(c, SOFTD, 0.55 * crease);
+      return c.map(v => v * softIn(u) * (0.9 + 0.12 * M.vn(x * 2600, y * 2600, z * 2600)));
+    }, { shape: (x, y, z, u) => { const [c, A, B, a, b] = station(u); return c.addScaledVector(A, z * a).addScaledVector(B, y * b).toArray(); } });
+    /* (facing outward: as lofted along this path it may be inside out) */
+    { const P = softG.attributes.position, N = softG.attributes.normal, i = Math.floor(P.count * 0.85), c = station(softG.attributes.uv.getX(i))[0];
+      if (new T.Vector3().fromBufferAttribute(P, i).sub(c).dot(new T.Vector3().fromBufferAttribute(N, i)) < 0) flip(softG); }
+    shellG.add(new T.Mesh(softG, M.litP('#ffffff', { vertexColors: true, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.35, aoMap: OCC.soft, clearcoatMap: OCC.soft, specularIntensityMap: OCC.soft })));
     /* the colour of its limbs: red, paler beneath, darker toward each joint, speckled with pale granules on top */
     const limbPaint = (len, off, tip = false) => (x, y, z) => {
       const t = x / len, joint = Math.exp(-(((t - 0.02) / 0.1) ** 2)) + Math.exp(-(((t - 0.98) / 0.1) ** 2));
@@ -263,7 +306,7 @@
       g.updateMatrixWorld(true);
       const bodyParts = [];
       body.traverse(m => { if (!m.isMesh) return; const c = m.geometry.attributes.color ? [1, 1, 1] : m.material.color.toArray(); bodyParts.push({ geo: m.geometry, m: m.matrixWorld.clone(), c }); });
-      g.userData.parts = { shell: M.mergeC([{ geo: S.outer }, { geo: S.inner }]), body: M.mergeC(bodyParts), ap: new T.Vector3(0.001, yA - 0.002, 0) };
+      g.userData.parts = { shell: M.mergeC([{ geo: S.outer }, { geo: S.inner }, { geo: softG }]), body: M.mergeC(bodyParts), ap: new T.Vector3(0.001, yA - 0.002, 0) };
     }
     return g;
   });
