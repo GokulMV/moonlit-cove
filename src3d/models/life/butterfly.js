@@ -127,10 +127,17 @@
       }
       wings.push({ hinge, sd });
     }
-    g.userData.anim = (t, flying) => {
-      /* resting with its wings half up, opening and closing slowly, a quick flutter now and then; in flight, beating */
+    /* anim(t, flying, beat, glide): resting, its wings half up, opening and closing slowly, a quick flutter now and then.
+       In flight the wings beat right through: up until they nearly meet over its back, then down through level to a
+       little below, the downstroke quicker than the up (beat, if given, is the stroke's phase in radians; glide holds them
+       open in a shallow V) */
+    g.userData.anim = (t, flying, beat, glide) => {
       const slow = 0.5 + 0.5 * Math.sin(t * 1.6), flut = Math.max(0, Math.sin(t * 0.37)) ** 8 * Math.sin(t * 40) * 0.5;
-      const a = flying ? 0.75 + 0.75 * Math.sin(t * 34) : Math.min(1.5, 0.25 + 1.05 * slow * slow + flut);
+      let a;
+      if (flying) {
+        const ph = beat ?? t * 34, sk = ph + 0.38 * Math.sin(ph);
+        a = glide ? 0.34 + 0.04 * Math.sin(t * 2.7) : 0.52 + 0.93 * Math.sin(sk);
+      } else a = Math.min(1.5, 0.25 + 1.05 * slow * slow + flut);
       for (const w of wings) w.hinge.rotation.x = -w.sd * a;
       for (const n of ants) n.a.rotation.z = 0.06 * Math.sin(t * 2.3 + n.sd);
     };

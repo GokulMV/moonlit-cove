@@ -9,7 +9,7 @@ const Engine = (() => {
   const api = {};
   let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas, cloudNoiseMs = 0;
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
-  let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null;
+  let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null, stars = null;
   let uncork = null;
   /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
   const NEAR = { W: 192, D: 100, CELL: 0.4 };
@@ -198,7 +198,7 @@ const Engine = (() => {
     const compile = m => { quad.material = m; R.compile(qs, qc); };
     /* (for the test bench: the sun's and the moon's share showing, read back) */
     const readVis = () => { const b = new Uint16Array(8); R.readRenderTargetPixels(visRT, 0, 0, 2, 1, b); return [T.DataUtils.fromHalfFloat(b[0]), T.DataUtils.fromHalfFloat(b[4])]; };
-    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis, height: () => H || 720 };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -384,6 +384,26 @@ const Engine = (() => {
   }
   const userAmpJS = (w, x, wt) => { const sc = Math.max(w.s0 - (wt - (w.x - w.s0 / CU)) * CU, 0), hw = Math.min(9 + 0.8 * (w.s0 - sc), 46), dx = (x - w.xc) / hw;
     const along = 0.82 + 0.36 * (0.5 + 0.25 * Math.sin(x * 0.31 + w.xc) + 0.25 * Math.sin(x * 0.13 + 1.7 * w.xc)); return w.amp * along * Math.exp(-dx * dx); };
+  /* ── the sea's height at a point just now: the very sums the shaders work out (glsl.js, WAVEH: swellL, waveH), for the
+     things that float and swim and should rise and fall with the swell that is passing ── */
+  function swellJS(s, tau, amp, spd, sb) {
+    const x = s + tau * spd, shoal = 1 + 0.8 * smJ(sb + 14, sb, s), broken = smJ(sb + 0.2, sb - 1.6 - 0.1 * sb, s);
+    const pb = Math.max(0, Math.min(1, (sb - s) / Math.max(sb, 1))), bore = 0.66 + (0.24 - 0.66) * pb, steep = smJ(sb + 8, sb + 0.5, s) * (1 - broken);
+    const lf = (0.9 + 0.035 * Math.max(s, 0)) * (1 + (0.48 - 1) * Math.max(steep, 0.7 * broken)), lb = 2.3 + 0.07 * Math.max(s, 0);
+    const prof = x < 0 ? Math.exp(-x * x / (lf * lf)) : Math.exp(-x * x / (lb * lb)), k = spd > 2 ? 0.27 / (1 + 0.08 * Math.max(amp - 1.5, 0)) : 0.16;
+    return amp * k * shoal * (1 + (bore - 1) * broken) * prof * smJ(-0.3, 1.4, s);
+  }
+  function waveAt(x, z, wt = waveNow) {
+    const g = shoreDZ(x), s = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); if (s < -0.5 || !gU) return 0;
+    const nA = 0.5 + 0.24 * Math.sin(x * 0.19 + 1.3) + 0.18 * Math.sin(x * 0.071 + 0.4) + 0.12 * Math.sin(x * 0.53 + 2.0);
+    let h = 0;
+    for (const W of gU.uWv.value) { if (W.y <= 0) continue; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w), W.y, 1.55, 3 + 7 * nA * W.y); }
+    for (const w of surge.waves) {
+      const amp = userAmpJS(w, x, wt) * smJ(w.x - w.s0 / CU, w.x - w.s0 / CU + 1.8, wt); if (amp < 0.01) continue;
+      h += swellJS(s, wt - w.x, amp, CU, Math.min((3 + 4.6 * amp) * (0.88 + 0.24 * nA), Math.max(4, 0.5 * w.s0 * (0.9 + 0.2 * nA))));
+    }
+    return h;
+  }
   /* is (x, z) under the swash of a click-swell at time wt? (mirrors the ground shader, tongues and all) */
   function swashAt(x, z, wt) {
     const r = -sOf(x, z); let best = null;
@@ -496,7 +516,7 @@ const Engine = (() => {
     /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
     if (world) world.update(camX ?? Layout.camp.x, 250);
   }
-  Object.assign(api, { moveCamp, pitchStart });
+  Object.assign(api, { moveCamp, pitchStart, waveAt: (x, z) => waveAt(x, z) });
   Object.defineProperty(api, 'pitching', { get: () => pitch.on });
   /* upcoming breakers (tide + click swells) for the soundscape: arrival times on the wave clock */
   function waveSchedule(wt0, wt1) {
@@ -676,6 +696,11 @@ const Engine = (() => {
       vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false
     });
     const sky = new T.Mesh(new T.SphereGeometry(5000, 48, 24), skyMat); sky.renderOrder = 1000; sky.frustumCulled = false; scene.add(sky); skyMesh = sky;
+    /* the real night sky (stars.js): the stars and planets drawn just after the sky, behind its clouds; the Milky Way and the
+       moon's lit side drawn by the sky itself */
+    stars = Stars.build(scene, { uCB: skyMat.uniforms.uCB, uCBOn: skyMat.uniforms.uCBOn });
+    Object.assign(skyMat.uniforms, { uEqT: { value: stars.eqT }, uMW: { value: stars.milky }, uMWK: { value: 0.011 }, uSunM: { value: new T.Vector3() } });
+    Object.assign(api, { stars });
     /* environment: the same sky, rendered into a prefiltered cube map so every glossy surface reflects it */
     envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 }, uCQ: { value: 0.4 }, uPxA: { value: 0.03 }, uPix: { value: 0.02 } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
     envScene = new T.Scene(); { const m = new T.Mesh(new T.SphereGeometry(400, 64, 32), envSkyMat); m.frustumCulled = false; envScene.add(m); }
@@ -703,7 +728,7 @@ const Engine = (() => {
     if (camp.bottleModel) uncork = Uncork.make({ scene, camera, bottle: camp.bottle, model: camp.bottleModel, ground: 0, onPop: () => { if (api.onBottlePop) api.onBottlePop(); } });
     surge.rng = Textures.rng(4242); registerDyn(camp.dyn);
     scene.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = o.material.metalness > 0.5 ? 1.8 : 1.45; });
-    fx = FX.build(fxG, camp, nature, noiseTex);
+    fx = FX.build(fxG, camp, nature, noiseTex); Object.assign(api, { fx });
     depthOnly = new T.MeshBasicMaterial({ colorWrite: false, side: T.DoubleSide });
     fireS = localShadow(170, 0.08, 12, 2, 256); canS = localShadow(150, 0.3, 12, 3, 1024);
     const nCast = tagLocalCasters(campG);
@@ -717,7 +742,7 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
       uSunVis: { value: null }
     });
     /* (the clouds' own uniforms, the very same, for their shadows on the sand and the sea) */
@@ -755,14 +780,9 @@ const Engine = (() => {
     return { casters: nCast };
   }
 
-  /* the shoreline the shaders draw: the headlands nearest the camera and the coast's waves, measured from a reference
-     near it (Layout.coastGL), refreshed as the camera moves along the coast */
-  let coastX = NaN, coastV = -1;
-  function coastFollow(x) {
-    if (Math.abs(x - coastX) < 24 && coastV === Layout.coastVer) return;
-    coastX = x; coastV = Layout.coastVer;
-    const U = Mats.coastU; Layout.coastGL(x, U.uHeadL.value, U.uCoast.value, U.uCoastP.value, U.uCoastQ.value);
-  }
+  /* the shoreline the shaders draw: the strip of it round the camera (Mats.coastFill), carried along as it moves */
+  /* (every frame: when there is nothing new to work out it costs nothing) */
+  function coastFollow(x) { Mats.coastFill(x); }
   Object.assign(api, { coastFollow });
 
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -860,6 +880,9 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
        or a resized window shows the frame in only part of it */
     if (canvas.width !== lastCW || canvas.height !== lastCH) { lastCW = canvas.width; lastCH = canvas.height; R.setSize(lastCW, lastCH, false); }
     const S = Sky.compute(o.ms, o.loc), t = o.t;
+    /* the tide: where the water's edge is now (everything that knows where the sea is reads it from Layout), and where it
+       reached at the last high water (the sand it left is still damp) */
+    { const TD = o.tide === false ? { dz: 0, hi: 0 } : S.tide; Layout.tide.dz = TD.dz; Layout.tide.hi = TD.hi; Mats.U.uTideZ.value = TD.dz; if (gU) gU.uTideHi.value = TD.hi; }
     /* under a deck of cloud the sun no longer lights the scene directly: its light dims and its shadows soften away */
     { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0;
       if (ov > 0) { const k = 1 - 0.75 * ov; S.keyCol = S.keyCol.map(v => v * k); S.shadowK *= 1 - 0.85 * ov; } }
@@ -915,6 +938,10 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
     V(skyMat.uniforms.uLdM, S.keyDir);
+    /* the stars: the sky turned to the time and the place, as bright as the night (and the moon) lets them be */
+    if (stars) { const k = o.sky ? Math.min(1, 0.55 * o.sky.cumulus + o.sky.stratus + o.sky.storm + 0.6 * (o.sky.rain || 0)) : 0;
+      stars.update({ ms: o.ms, loc: o.loc, t, k: S.stars * 0.42, px: Math.max(1, post.height() / 900), cover: k, moonDir: S.moonDirV });
+      skyMat.uniforms.uSunM.value.set(S.sunM[0], S.sunM[1], S.sunM[2]); }
     const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; cloudMotion(o.cloudT ?? t, o.wind ?? 1); su.uCO.value.copy(camera.position); su.uCQ.value = o.cloudQ ?? 1; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
     if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }
     /* under a deck of cloud the sun and moon no longer glitter on the sea */
@@ -1061,6 +1088,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
   const bottleApi = {
     open: (cb, o) => { if (uncork) uncork.open(cb, o); else if (cb) cb(null); }, abort: () => { if (uncork) uncork.abort(); },
     letterBack: () => { if (uncork) uncork.letterBack(); }, letterRest: () => (uncork ? uncork.letterRest() : origin('bottle')),
+    /* the letter put back the way it came out, in your hands (null where that can't be: then letterRest and letterBack) */
+    putBack: done => (uncork && !uncork.quick ? uncork.putBack(done) : null), letterIn: () => { if (uncork) uncork.letterIn(); },
     dist: () => (uncork ? uncork.dist() : null), get phase() { return uncork ? uncork.phase : 'rest'; }, get busy() { return !!uncork && uncork.busy; }
   };
   function prop(name, visible) {

@@ -197,6 +197,9 @@ const Paint = (() => {
     for (const [x, z] of Layout.lanterns) soft(AO.x, x, z, 0.24, 0.24, 0, 0.8, 0.45);
     for (const p of Layout.palms) soft(AO.x, p[0], p[1], 0.45, 0.45, 0, 0.7, 0.4);
     soft(AO.x, Layout.bottle.x, Layout.bottle.z, 0.16, 0.08, Layout.bottle.rot, 0.6);
+    soft(AO.x, Layout.castle.x, Layout.castle.z, 0.95, 0.95, 0, 0.32, 0.62);
+    /* the sand knelt on and scuffed round the castle while it was built */
+    soft(TG.x, Layout.castle.x, Layout.castle.z, 1.5, 1.25, Layout.castle.rot, 0.55, 0.45);
     /* trampled sand round the camp and along the paths people walk */
     soft(TG.x, Layout.camp.x + 0.6, Layout.camp.z, 5.6, 3.4, 0.05, 0.85, 0.5);
     soft(TG.x, Layout.fire.x, Layout.fire.z, 2.4, 2.0, 0, 1.0, 0.5);
@@ -208,7 +211,7 @@ const Paint = (() => {
     a.fillStyle = rad(a, Layout.fire.x, Layout.fire.z, 0.72, [[0, 'rgba(20,14,10,0.45)'], [0.55, 'rgba(20,14,10,0.18)'], [1, 'rgba(20,14,10,0)']]);
     a.beginPath(); a.arc(Layout.fire.x, Layout.fire.z, 0.72, 0, TAU); a.fill();
     for (let x = rect.x + 0.2; x < rect.x + rect.w; x += 0.25 + r() * 0.5) {
-      const z = Layout.shoreZ(x) + 2.4 + r() * 0.5;
+      const z = Layout.shoreMeanZ(x) + 2.4 + r() * 0.5;
       a.strokeStyle = `rgba(${55 + r() * 25},${50 + r() * 20},35,${0.22 + r() * 0.2})`; a.lineWidth = 0.012 + r() * 0.02; a.lineCap = 'round';
       a.beginPath(); a.moveTo(x, z); a.bezierCurveTo(x + 0.1, z - 0.05 + r() * 0.1, x + 0.2, z + r() * 0.1, x + 0.25 + r() * 0.2, z + (r() - 0.5) * 0.15); a.stroke();
     }

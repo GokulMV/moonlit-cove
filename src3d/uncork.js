@@ -7,7 +7,10 @@
    shake the rolled letter slides further out of the neck until it
    can be taken (paper.js then unrolls it to read, and its twine
    falls away), and the bottle is put back down. Closing the letter
-   puts it back in the bottle, and the cork hops back into the neck.
+   puts it back the same way, in your hands (putBack): the bottle comes
+   up off the sand again, the letter rolls up and comes to its neck and
+   slides in, the cork is fetched off the sand and twisted back in, and
+   the bottle goes back down where it lay.
    Everything moves in the world (the bottle leaves its place on the
    sand for the scene while it is held), relative to the camera while
    it is in your hands, so a camera that is still settling keeps it
@@ -93,6 +96,7 @@ const Uncork = (() => {
     }
 
     function open(cb, opts = {}) {
+      if (st.phase === 'putback') settle();
       if (st.phase !== 'rest') { if (st.phase === 'down' && cb) cb(letterRest()); return; }
       restWorld(); camera.updateMatrixWorld(); camera.matrixWorld.decompose(cam.p, cam.q, _s);
       st.cb = cb; st.quick = !!opts.quick; st.t0 = performance.now() / 1000; st.last = st.t0;
@@ -170,6 +174,7 @@ const Uncork = (() => {
         return;
       }
       if (st.phase === 'back') { stepBack(performance.now() / 1000); stepCork(dt, 1); return; }
+      if (st.phase === 'putback') { stepPutBack(t, u); return; }
       stepCork(dt, clamp01((u - TL.pop) / 0.7)); stepTwine(dt);
       if (st.phase === 'down') return;
 
@@ -265,6 +270,78 @@ const Uncork = (() => {
       if (b.cork0) { cork.position.lerpVectors(b.cork0.p, rest.cork.p, e); cork.quaternion.slerpQuaternions(b.cork0.q, rest.cork.q, e); }
       if (k >= 1) { home(); if (b.cork0) corkHome(); letterHome(); st.back = null; st.phase = 'rest'; }
     }
+    /* ── putting the letter back, the way it came out. putBack() starts it and says where the rolled letter is to come
+       to (the mouth of the neck, as the bottle will be held: paper.js flies it there, rolling it up on the way); letterIn()
+       says it has arrived; then it slides in, the cork is fetched and twisted home, and the bottle goes back down ── */
+    function putBack(done) {
+      if (st.phase === 'putback') return null;
+      restWorld();
+      if (model.parent === bottle) { toScene(model); setWorld(st.rP, st.rQ, st.rS); }
+      camera.updateMatrixWorld(); camera.matrixWorld.decompose(cam.p, cam.q, _s);
+      st.t0 = now(); st.last = st.t0; st.cb = null;
+      st.pb = { p0: model.position.clone(), q0: model.quaternion.clone(), s0: model.scale.x, letterAt: 0, corkT: 0, lowerT: 0, corkFrom: null, done, hold: null, cam0: cam.p.clone() };
+      roll.visible = twine.visible = false; st.twine.free = false;
+      st.phase = 'putback';
+      held(HOLD.a, false, 0, poseA);
+      const m = new T.Matrix4().compose(poseA.p, poseA.q, new T.Vector3(1, 1, 1)), p = new T.Vector3(ud.neckX + 0.045, 0, 0).applyMatrix4(m);
+      return { p: p.toArray(), q: poseA.q.toArray(), s: 1 };
+    }
+    function letterIn() { if (st.pb && !st.pb.letterAt) st.pb.letterAt = now(); }
+    /* all of it at once: the bottle home on the sand, the letter in it, its cork in (the view went elsewhere meanwhile) */
+    function settle() {
+      if (st.phase !== 'putback') return;
+      const d = st.pb && st.pb.done; st.pb = null; st.hop = null;
+      home(); corkHome(); letterHome(); st.phase = 'rest'; if (d) d();
+    }
+    function stepPutBack(t, u) {
+      const b = st.pb;
+      /* (the camera has gone off somewhere: no hands to hold it in, so it is simply back where it lay) */
+      if (cam.p.distanceTo(b.cam0) > 0.6) { settle(); return; }
+      /* (and if the letter never comes to the neck, it is taken as having come all the same) */
+      if (!b.letterAt && u > 4) b.letterAt = t;
+      held(HOLD.a, true, u, poseA);
+      /* the bottle: up off the sand and round toward you, as it came up the first time; held while the letter goes in and
+         the cork is pushed home; then down again, the way it came up, to just where it lay */
+      if (!b.lowerT) {
+        const s = clamp01(u / 1.15), e = sm5(s), b0 = b.p0, b1 = _v.copy(b.p0).add(_v2.set(0, 0.32, 0)), b2 = _p.set(0, -0.12, 0.06).applyQuaternion(cam.q).add(poseA.p);
+        const a = 1 - e, P = new T.Vector3().copy(b0).multiplyScalar(a * a * a).addScaledVector(b1, 3 * a * a * e).addScaledVector(b2, 3 * a * e * e).addScaledVector(poseA.p, e * e * e);
+        const settle = u - 1.15; if (settle > 0) P.y += 0.008 * Math.exp(-settle * 7) * Math.sin(settle * 15);
+        setWorld(P, _q.slerpQuaternions(b.q0, poseA.q, sm5((s - 0.08) / 0.92)), lerp(b.s0, 1, e));
+        if (s >= 1 && !b.hold) b.hold = { p: P.clone(), q: _q.clone() };
+      } else {
+        const s = clamp01((t - b.lowerT) / 1.15), e = sm5(s), from = b.hold;
+        const a = 1 - e, c1 = _v.copy(from.p).add(_v2.set(0, -0.12, 0.06).applyQuaternion(cam.q)), c2 = _p.copy(st.rP).add(_v2.set(0, 0.32, 0));
+        const P = new T.Vector3().copy(from.p).multiplyScalar(a * a * a).addScaledVector(c1, 3 * a * a * e).addScaledVector(c2, 3 * a * e * e).addScaledVector(st.rP, e * e * e);
+        setWorld(P, _q.slerpQuaternions(from.q, st.rQ, sm5(s)), lerp(1, st.rS, e));
+        if (s >= 1) { home(); corkHome(); letterHome(); const d = b.done; st.pb = null; st.phase = 'rest'; if (d) d(); return; }
+      }
+      if (b.lowerT) return;
+      if (b.hold) { b.hold.p.copy(model.position); b.hold.q.copy(model.quaternion); }
+      /* the letter, come to the neck rolled up: in it slides, down to the bottom */
+      if (b.letterAt) {
+        const k = sm5((t - b.letterAt) / 0.85); roll.visible = twine.visible = true;
+        roll.position.set(lerp(ud.neckX + 0.045, rest.roll.x, k), lerp(0, rest.roll.y, k), 0); twine.position.copy(roll.position); twine.quaternion.setFromAxisAngle(UP, Math.PI / 2);
+        if (k >= 1 && !b.corkT) b.corkT = t;
+      }
+      /* the cork: fetched off the sand (or wherever it lies) into the neck, then twisted home a little further each turn */
+      if (b.corkT) {
+        if (!st.cork.free) { if (!b.lowerT) b.lowerT = t + 0.15; return; }
+        const k = clamp01((t - b.corkT) / 0.75);
+        if (k < 1) {
+          if (!b.corkFrom) { st.hop = null; b.corkFrom = { p: cork.position.clone(), q: cork.quaternion.clone(), s: cork.scale.x }; }
+          model.updateMatrixWorld(true);
+          const tgt = _v.set(rest.cork.p.x + 0.03, rest.cork.p.y, rest.cork.p.z).applyMatrix4(model.matrixWorld), tq = model.getWorldQuaternion(_q2).multiply(rest.cork.q), e = sm5(k);
+          cork.position.lerpVectors(b.corkFrom.p, tgt, e); cork.position.y += 0.22 * Math.sin(Math.PI * k);
+          cork.quaternion.slerpQuaternions(b.corkFrom.q, tq, e); cork.scale.setScalar(lerp(b.corkFrom.s, 1, e));
+        } else {
+          if (cork.parent !== model) { model.attach(cork); st.cork.still = false; }
+          const tw = clamp01((t - b.corkT - 0.75) / 0.8), i = Math.min(TWISTS - 1, Math.floor(tw * TWISTS)), f = tw * TWISTS - i;
+          cork.position.copy(rest.cork.p); cork.position.x += 0.03 * (1 - (i + sm(0.15, 0.85, f)) / TWISTS);
+          cork.quaternion.copy(rest.cork.q).premultiply(_q2.setFromAxisAngle(X, 0.55 * Math.sin(f * Math.PI * 2)));
+          if (tw >= 1) { corkHome(); b.lowerT = t + 0.2; }
+        }
+      }
+    }
     /* the letter is back in the bottle on the sand: it shows again, and the cork hops back in */
     function letterBack() {
       if (model.parent !== bottle) home();
@@ -275,9 +352,10 @@ const Uncork = (() => {
     /* how far the bottle is from the camera while it is in hand (for focusing on it), else null */
     function dist() {
       if (st.phase === 'rest' || st.phase === 'down' || st.phase === 'quick' || !model.visible || model.parent === bottle) return null;
+      if (st.phase === 'putback' && st.pb && st.pb.lowerT) return null;
       return model.getWorldPosition(_v).distanceTo(camera.position);
     }
-    return { open, update, abort, letterBack, letterRest, dist, get phase() { return st.phase; }, get busy() { return st.phase !== 'rest' && st.phase !== 'down'; } };
+    return { open, update, abort, letterBack, letterRest, putBack, letterIn, settle, dist, get quick() { return st.quick; }, get phase() { return st.phase; }, get busy() { return st.phase !== 'rest' && st.phase !== 'down'; } };
   }
   return { make, TL };
 })();

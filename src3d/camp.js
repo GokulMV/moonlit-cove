@@ -736,6 +736,11 @@ void main(){
     const bm = Models.make('beach/bottle'); bg.add(bm);
     refs.bottle = bg; refs.bottleModel = bm; refs.cork = bm.userData.cork; refs.letterProp = bm.userData.letter;
     refs.dyn.push({ o: bg, kind: 'float', half: 0.1, tip: 0.0, seaward: true });
+    /* a sand castle built by the camp (models/beach/sandcastle.js), its gate toward the camp, a bucket and a spade left
+       lying beside it */
+    const SC = Layout.castle, cg = grp(SC.x, 0, SC.z, SC.rot); root.add(cg);
+    const cm = Models.make('beach/sandcastle', { seed: SC.seed, wear: 0.1, toys: true, toyAng: 4.02, flag: 'leaf' }); cg.add(cm);
+    refs.castle = cg; SC.radius = cm.userData.radius;
   }
 
   /* ── the wish board: a corkboard between two driftwood posts under a little plank roof, to the right of the fire.

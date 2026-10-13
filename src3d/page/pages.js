@@ -230,26 +230,56 @@ const Pages = (() => {
       d.box(86, 652, 580, 150, 'REFLECTIONS', ['the sky, prefiltered into a cube map,', 'rebuilt only when the sky changes'], { dash: true });
       d.box(714, 652, 600, 150, 'ADAPTIVE SIZE', ['the render scale drops when frames run', 'slow, and climbs back when they’re quick'], { dash: true });
     }, ['everything renders in half float, then tone-maps', 'the fire is ray-marched, not a sprite', 'occlusion fades out far away (no shimmer)', 'phones get fewer pixels, not fewer effects']],
-    ['The coast, from above', 'Built around you in 128-metre chunks; every 280 metres rolls its own headland.', d => {
-      const a = d.a, X0 = 86, X1 = 1314, bulge = [[300, 70, 62], [800, 118, 80], [1170, 58, 50]];
-      const shore = x => 452 + 18 * Math.sin(x * 0.011) - bulge.reduce((s, [c, amp, w]) => s + amp * Math.exp(-(((x - c) / w) ** 2)), 0);
+    ['The coast, from above', 'The real coast, 3.6 km of it round the camp: headlands, points, bays and reefs, each its own roll of the dice.', d => {
+      /* drawn from the coast itself (Layout.Coast): a third of a pixel a metre along it, its bends drawn 4.4 times deeper so
+         they show, the beach 12 times wider */
+      const a = d.a, C = Layout.Coast, X0 = 86, X1 = 1314, SPAN = 3600, Y0 = 404, K = 1.5, KB = 4.2, base = Layout.SH.base, PXM = (X1 - X0) / SPAN;
+      const px = x => X0 + (x + SPAN / 2) / SPAN * (X1 - X0), xOf = p => (p - X0) / (X1 - X0) * SPAN - SPAN / 2;
+      const sy = x => Y0 + (C.shoreZ(x) - base) * K, vy = x => sy(x) + (C.vegZ(x) - C.shoreZ(x)) * KB;
       a.save(); a.beginPath(); a.rect(X0, 176, X1 - X0, 650); a.clip();
-      for (let y = 196; y < 440; y += 22) d.line(Array.from({ length: 62 }, (_, i) => [X0 + i * 20, y + 4 * Math.sin(i * 0.9 + y)]).filter(([x, yy]) => yy < shore(x) - 10), { color: 'rgba(170,205,255,0.16)', w: 1.2 });
-      const sh = []; for (let x = X0; x <= X1; x += 6) sh.push([x, shore(x)]); d.line(sh, { color: d.LINE, w: 2.4 });
-      const fe = sh.map(([x, y]) => [x, y + 96 + 10 * Math.sin(x * 0.03) - 0.4 * (452 - y)]); d.line(fe, { color: d.SOFT, w: 1.6, dash: [6, 6] });
-      const r = rnd(5); for (let i = 0; i < 520; i++) { const x = X0 + r() * (X1 - X0), y0 = fe[Math.round((x - X0) / 6)][1], y = y0 + 8 + r() * 300; if (y < 820) d.circle(x, y, 3 + r() * 5, { color: 'rgba(170,205,255,0.32)', w: 1 }); }
-      for (const [c, amp, w] of bulge) { for (let i = 0; i < 70; i++) { const x = c + (r() - 0.5) * w * 1.6, ys = shore(x), y = ys + r() * (amp * 0.9); if (y < ys + 2) continue; d.line([[x, y], [x + 7, y - 4]], { color: 'rgba(225,238,255,0.55)', w: 1.2 }); }
-        d.circle(c + (r() - 0.5) * 20, shore(c) - 26, 7, { color: d.LINE, w: 1.6 }); d.circle(c + w * 0.5, shore(c + w * 0.5) - 18, 5, { color: d.LINE, w: 1.4 }); }
-      for (let k = -2; k <= 3; k++) { const x = 690 + k * 140; d.line([[x, 176], [x, 826]], { color: 'rgba(200,225,255,0.28)', w: 1.2, dash: [4, 8] }); }
+      const sh = [], fe = []; for (let p = X0; p <= X1; p += 2) { const x = xOf(p); sh.push([p, sy(x)]); fe.push([p, vy(x)]); }
+      /* the sea's long lines, stopping short of the shore */
+      for (let y = 196; y < 460; y += 20) { let run = []; for (let p = X0; p <= X1; p += 12) { const yy = y + 3 * Math.sin(p * 0.05 + y); if (yy < sy(xOf(p)) - 9) run.push([p, yy]); else { if (run.length > 1) d.line(run, { color: 'rgba(170,205,255,0.16)', w: 1.2 }); run = []; } } if (run.length > 1) d.line(run, { color: 'rgba(170,205,255,0.16)', w: 1.2 }); }
+      d.line(sh, { color: d.LINE, w: 2.4 }); d.line(fe, { color: d.SOFT, w: 1.6, dash: [6, 6] });
+      /* the forest beyond its edge */
+      const r = rnd(5); for (let i = 0; i < 620; i++) { const p = X0 + r() * (X1 - X0), y = vy(xOf(p)) + 6 + r() * 340; if (y < 826) d.circle(p, y, 2.5 + r() * 4.5, { color: 'rgba(170,205,255,0.3)', w: 1 }); }
+      /* headlands: rock hatched over the sand at their foot and the land behind, their stacks out in the sea */
+      const H = C.heads(-SPAN / 2, SPAN / 2);
+      for (const h of H) {
+        const c = px(h.hx), wpx = Math.max(6, h.w * PXM * 2.2);
+        for (let i = 0; i < (h.minor ? 18 : 46); i++) { const p = c + (r() - 0.5) * wpx * 1.6, y0 = sy(xOf(p)), y = y0 + 3 + r() * (h.minor ? 18 : 40); d.line([[p, y], [p + 6, y - 4]], { color: 'rgba(225,238,255,0.55)', w: 1.2 }); }
+        for (let k = 0; k < h.stacks; k++) d.circle(c + (k ? 1 : -0.4) * wpx * 0.5, sy(h.hx) - 14 - 8 * k, 3.5 + (k ? 0 : 1.5), { color: d.LINE, w: 1.4 });
+      }
+      /* reefs: rock running out from the beach into the sea */
+      const RF = C.reefs(-SPAN / 2, SPAN / 2);
+      for (const f of RF) {
+        const g = C.shoreDZ(f.x), n = Math.hypot(g, 1), dx = g / n, dz = -1 / n, ca = Math.cos(f.ang), sa = Math.sin(f.ang), ox = dx * ca - dz * sa, oz = dx * sa + dz * ca;
+        const pts = []; for (let t = 0; t <= 1.001; t += 0.1) { const x = f.x + ox * f.len * t, z = C.shoreZ(f.x) + 1.5 + oz * f.len * t; pts.push([px(x) + f.bend * PXM * Math.sin(Math.PI * t), Y0 + (z - base) * K]); }
+        d.line(pts, { color: d.LINE, w: 4.2 }); d.line(pts, { color: '#1d4a85', w: 1.6, dash: [3, 4] });
+      }
+      /* the chunks round the camp */
+      for (let k = -3; k <= 3; k++) { const p = px(-64 + k * 128); d.line([[p, 176], [p, 826]], { color: 'rgba(200,225,255,0.22)', w: 1.1, dash: [4, 8] }); }
       a.restore();
-      for (let k = -2; k <= 2; k++) d.text(`chunk ${k > 0 ? '+' : ''}${k}`, 760 + k * 140, 200, { align: 'center', size: 14, color: d.ACC });
-      const cx = 700, cy = shore(700) + 44;
-      for (const [rad, t] of [[60, '45 m · shells, crabs'], [150, '155 m · rocks, near trees'], [250, '300 m · fine ground'], [340, '430 m · far trees']]) { d.circle(cx, cy, rad, { color: 'rgba(225,238,255,0.5)', w: 1.3, dash: [3, 6], a0: Math.PI, a1: Math.PI * 2 }); d.text(t, cx + rad * 0.72, cy - rad * 0.72 - 6, { size: 14, color: d.TXT }); }
-      a.fillStyle = d.TXT; a.beginPath(); a.moveTo(cx, cy - 12); a.lineTo(cx + 10, cy + 8); a.lineTo(cx - 10, cy + 8); a.closePath(); a.fill();
-      d.text('you', cx, cy + 32, { align: 'center', size: 15, color: d.TXT });
-      d.text('SEA', 120, 236, { font: FN.mono(600, 18), color: d.ACC }); d.text('SAND', 120, shore(120) + 40, { font: FN.mono(600, 16), color: d.ACC }); d.text('FOREST', 120, 760, { font: FN.mono(600, 16), color: d.ACC });
-      d.arrow([[800 + 140, 300], [812, shore(812) - 40]], { soft: true, label: 'headland, rolled per 280 m', at: [1010, 300] });
-    }, ['built a few milliseconds per frame', 'chunks behind you are recycled', 'the same seed always makes the same coast', 'park anywhere: the camp can be pitched there']],
+      for (let k = -2; k <= 2; k++) d.text(`${k > 0 ? '+' : ''}${k}`, px(k * 128), 200, { align: 'center', size: 13, color: d.ACC });
+      d.text('chunks', px(0) + 160, 200, { size: 13, color: d.ACC });
+      /* you, at the camp, and how far each kind of thing is built round you (to scale along the coast) */
+      const cx = px(Layout.camp.x), cy = sy(Layout.camp.x) + 18;
+      for (const [rad, t] of [[45, '45 m'], [155, '155 m'], [430, '430 m']]) { const R = rad * PXM; d.circle(cx, cy, R, { color: 'rgba(225,238,255,0.5)', w: 1.3, dash: [3, 6] }); d.text(t, cx + R * 0.74 + 6, cy + R * 0.67 + 16, { size: 13, color: d.TXT }); }
+      a.fillStyle = d.TXT; a.beginPath(); a.moveTo(cx, cy - 9); a.lineTo(cx + 7, cy + 6); a.lineTo(cx - 7, cy + 6); a.closePath(); a.fill();
+      d.text('camp', cx + 12, cy + 6, { size: 15, color: d.TXT });
+      d.text('SEA', 104, 236, { font: FN.mono(600, 18), color: d.ACC }); d.text('SAND', 104, sy(xOf(104)) + 30, { font: FN.mono(600, 16), color: d.ACC }); d.text('FOREST', 104, 780, { font: FN.mono(600, 16), color: d.ACC });
+      /* name a few of them */
+      const lab = (x, y, t, tx, ty) => d.arrow([[tx, ty], [x, y]], { soft: true, label: t, at: [tx, ty - 8] });
+      const big = H.filter(h => !h.minor && Math.abs(h.hx) > 300).sort((p, q) => q.d - p.d)[0], pt = H.filter(h => h.minor && Math.abs(h.hx) > 250)[0];
+      if (big) lab(px(big.hx), sy(big.hx) - 6, 'headland', px(big.hx) + (big.hx > 0 ? -60 : 60), 262);
+      if (pt) lab(px(pt.hx), sy(pt.hx) - 4, 'rocky point', px(pt.hx) + (pt.hx > 0 ? -70 : 70), 300);
+      const near = RF.sort((p, q) => Math.abs(p.x) - Math.abs(q.x))[0];
+      if (near) lab(px(near.x) - 4, sy(near.x) - 30, 'a reef to walk out on', px(near.x) - 150, 250);
+      { let bx = 0, bb = 0; for (let x = -1600; x <= 1600; x += 20) { if (Math.abs(x) < 480) continue; const b = C.shoreZ(x) + C.head(x) - base; if (b > bb) { bb = b; bx = x; } }
+        if (bb > 6) d.text('bay', px(bx), sy(bx) + 24, { align: 'center', size: 14, color: d.ACC }); }
+      /* a scale */
+      d.line([[1130, 806], [1130 + 500 * PXM, 806]], { color: d.TXT, w: 2 }); d.text('500 m', 1130 + 250 * PXM, 798, { align: 'center', size: 13, color: d.TXT });
+    }, ['drawn from the coast itself, as you will find it', 'no stretch is ever the same as another', 'built round you, a few milliseconds a frame', 'park anywhere: the camp can be pitched there']],
     ['Sound', 'Recordings, mixed live and timed to what you see.', d => {
       const src = [['SEA', 'a long seamless loop'], ['WAVES', 'a second take swells in'], ['PAGES', 'real paper turning'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder'], ['VAN', 'engine, pitched by speed']];
       src.forEach(([t, l], i) => d.box(86, 178 + i * 80, 380, 68, t, [l], { ts: 17, ls: 14, lh: 20 }));

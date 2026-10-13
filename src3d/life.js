@@ -129,6 +129,7 @@ void main(){
   float hd = S.z, c = cos(hd), s = sin(hd);
   vec2 off = vec2(aFish.y, aFish.z) + vec2(sin(uTime*0.9 + aFish.w*6.0)*0.35, sin(uTime*0.6 + aFish.w*4.0)*0.3);
   vec2 p = S.xy + vec2(c*off.x - s*off.y, s*off.x + c*off.y);
+  { float hf = waveH(p), gf = shoreDZv(p.x); p += vec2(-gf, 1.0)/sqrt(1.0 + gf*gf)*0.9*hf; }   /* (carried by the swell, as its fish is) */
   float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0), fy = -0.2 - 0.32*fract(aFish.w*3.3), bed = bedAt(p);
   vec3 L = normalize(uKeyDirT);
   vec2 at = throwTo(p, fy, bed, L);
@@ -176,6 +177,9 @@ void main(){
   p.z += sin(ph - aT*2.6)*bend*0.07*sc;
   float cy = cos(yaw), sy = sin(yaw);
   vec3 w = vec3(pc.x + cy*p.x - sy*p.z, -0.2 - 0.32*fract(aFish.w*3.3) + p.y, pc.y + sy*p.x + cy*p.z);
+  /* the swell passing over carries each fish with it: up and down with the surface, shoreward under a crest and back
+     again under the trough (the water itself goes round like that as a wave goes by) */
+  { float hf = waveH(pc), gf = shoreDZv(pc.x); vec2 lf = vec2(-gf, 1.0)/sqrt(1.0 + gf*gf); w.y += 0.72*hf; w.xz += lf*0.9*hf; }
   vN = vec3(cy*n.x - sy*n.z, n.y, sy*n.x + cy*n.z); vC = color; vW = w;
   float hs = waveH(w.xz);
   vDepth = max(0.0, hs - w.y);
@@ -350,7 +354,7 @@ void main(){
     if (world) world.decorate(d => {
       const di = d.c, rs = rng(6061 + di * 101), camp = d.camp, items = [], want = Math.round(420 * world.CW / 226 * (camp ? 1 : 0.7));
       for (let i = 0, n = 0; i < want * 5 && n < want; i++) {
-        const x = d.x0 + rs() * world.CW, sz = Layout.shoreZ(x);
+        const x = d.x0 + rs() * world.CW, sz = Layout.shoreMeanZ(x);
         /* most lie along the line the high water leaves, a few scattered up the beach */
         const z = sz + (rs() < 0.7 ? 1.7 + (rs() - 0.5) * 1.6 : 1 + rs() * 5.5);
         if (z > Layout.vegZ(x) - 0.4 || (camp && !clearOf(x, z)) || world.massif(x, z) > 0.0) continue;
@@ -525,7 +529,9 @@ void main(){
         const bed = depthAt(Tu.x, Tu.z), swim = Tu.ray ? -Math.max(0.25, bed - 0.2) : -Math.min(0.75, Math.max(0.34, bed * 0.55)), y = swim + (-0.07 * Tu.len - swim) * at;
         Tu.g.visible = Tu.k > 0.01; Tu.uFade.value = Tu.k;
         if (Tu.g.visible) {
-          Tu.g.position.set(Tu.x, y, Tu.z); Tu.g.rotation.set(0, -Tu.h, (Tu.ray ? 0.05 : 0.07) * Math.sin(Tu.ph * 0.5) + (Tu.ray ? 0 : 0.12 * Math.sin(Math.PI * at)), 'YXZ');
+          /* (and the swell passing over lifts it and carries it a little way in and back, the more the nearer the top) */
+          const hw = Engine.waveAt ? Engine.waveAt(Tu.x, Tu.z) : 0, kw = 0.45 + 0.55 * at, gw = Layout.shoreDZ(Tu.x), nw = Math.hypot(gw, 1);
+          Tu.g.position.set(Tu.x - gw / nw * 0.8 * hw * kw, y + hw * kw, Tu.z + 0.8 * hw * kw / nw); Tu.g.rotation.set(0, -Tu.h, (Tu.ray ? 0.05 : 0.07) * Math.sin(Tu.ph * 0.5) + (Tu.ray ? 0 : 0.12 * Math.sin(Math.PI * at)), 'YXZ');
           Tu.g.scale.setScalar(Tu.ray ? Tu.len / 1.3 : Tu.len);
           Tu.g.userData.anim && Tu.g.userData.anim(Tu.ray ? Tu.ph * 1.1 : Tu.ph * 0.75);
         }

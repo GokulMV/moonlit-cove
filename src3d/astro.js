@@ -133,5 +133,38 @@ const Astro = (() => {
     return { tz: zone, lat: REGION_LAT[region] ?? 25, lng: Math.max(-179, Math.min(179, off / 4)), exact: false };
   }
 
-  return { sun, moon, illumination, phaseName, sunRise, sunSet, moonRise, moonSet, nextFullMoon, locate, rad };
+  /* ── the planets the eye can see: where they stand among the stars, and how bright. Keplerian elements for approximate
+     positions (JPL, E. M. Standish; good to an arcminute or so between 1800 and 2050), as d3-celestial carries them:
+     [a (AU), e, I, L, ϖ, Ω (degrees)] at J2000 and their rates per century ── */
+  const PLANETS = {
+    mercury: { el: [0.38709927, 0.20563593, 7.00497902, 252.2503235, 77.45779628, 48.33076593], d: [3.7e-7, 0.00001906, -0.00594749, 149472.67411175, 0.16047689, -0.12534081], col: [1.0, 0.9, 0.78] },
+    venus: { el: [0.72333566, 0.00677672, 3.39467605, 181.9790995, 131.60246718, 76.67984255], d: [0.0000039, -0.00004107, -0.0007889, 58517.81538729, 0.00268329, -0.27769418], col: [1.0, 0.97, 0.88] },
+    mars: { el: [1.52371034, 0.0933941, 1.84969142, -4.55343205, -23.94362959, 49.55953891], d: [0.00001847, 0.00007882, -0.00813131, 19140.30268499, 0.44441088, -0.29257343], col: [1.0, 0.62, 0.38] },
+    jupiter: { el: [5.202887, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909], d: [-0.00011607, -0.00013253, -0.00183714, 3034.74612775, 0.21252668, 0.20469106], col: [1.0, 0.95, 0.84] },
+    saturn: { el: [9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448], d: [-0.0012506, -0.00050991, 0.00193609, 1222.49362201, -0.41897216, -0.28867794], col: [1.0, 0.92, 0.72] }
+  };
+  const EARTH = { el: [1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0], d: [0.00000562, -0.00004392, -0.01294668, 35999.37244981, 0.32327364, 0] };
+  /* where a body is round the sun at T centuries from J2000 (ecliptic, AU) */
+  function helio(P, T) {
+    const [a, e, I, L, w, N] = P.el.map((v, i) => v + P.d[i] * T), M = ((L - w) % 360) * rad, om = (w - N) * rad, Nr = N * rad, Ir = I * rad;
+    let E = M + e * sin(M); for (let k = 0; k < 6; k++) E -= (E - e * sin(E) - M) / (1 - e * cos(E));
+    const xp = a * (cos(E) - e), yp = a * Math.sqrt(1 - e * e) * sin(E), co = cos(om), so = sin(om), cN = cos(Nr), sN = sin(Nr), cI = cos(Ir), sI = sin(Ir);
+    return [(co * cN - so * sN * cI) * xp + (-so * cN - co * sN * cI) * yp, (co * sN + so * cN * cI) * xp + (-so * sN + co * cN * cI) * yp, (so * sI) * xp + (co * sI) * yp];
+  }
+  /* each planet's RA and Dec (J2000, radians) and its magnitude, at ms */
+  function planets(ms) {
+    const T = toDays(ms) / 36525, Ea = helio(EARTH, T), out = [];
+    for (const [name, P] of Object.entries(PLANETS)) {
+      const h = helio(P, T), g = [h[0] - Ea[0], h[1] - Ea[1], h[2] - Ea[2]];
+      const X = g[0], Y = g[1] * cos(E) - g[2] * sin(E), Z = g[1] * sin(E) + g[2] * cos(E);
+      const r = Math.hypot(...h), D = Math.hypot(X, Y, Z), R = Math.hypot(...Ea), i = acos(Math.max(-1, Math.min(1, (r * r + D * D - R * R) / (2 * r * D)))) / rad, L5 = 5 * Math.log10(r * D);
+      const mag = name === 'mercury' ? -0.42 + L5 + 0.038 * i - 0.000273 * i * i + 0.000002 * i * i * i : name === 'venus' ? -4.4 + L5 + 0.0009 * i + 0.000239 * i * i - 0.00000065 * i * i * i
+        : name === 'mars' ? -1.52 + L5 + 0.016 * i : name === 'jupiter' ? -9.4 + L5 + 0.005 * i : -8.88 + L5 + 0.044 * i;
+      out.push({ name, ra: atan2(Y, X), dec: asin(Z / D), mag, col: P.col, dist: D });
+    }
+    return out;
+  }
+  /* local sidereal time (radians) at ms, at longitude lng (degrees east) */
+  const lst = (ms, lng) => sidereal(toDays(ms), rad * -lng);
+  return { sun, moon, illumination, phaseName, sunRise, sunSet, moonRise, moonSet, nextFullMoon, locate, planets, lst, rad };
 })();

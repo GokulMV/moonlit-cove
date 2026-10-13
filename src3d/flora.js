@@ -183,7 +183,7 @@ void main(){
       });
       /* the flowers: morning glory on the sand above the high water, daisies and frangipani in the grass */
       for (let i = 0, n = 0; i < 1400 && n < 220; i++) {
-        const k = r() < 0.4 ? 1 : r() < 0.72 ? 0 : 2, x = ch.x0 + r() * (ch.x1 - ch.x0), vz = Layout.vegZ(x), sz = Layout.shoreZ(x);
+        const k = r() < 0.4 ? 1 : r() < 0.72 ? 0 : 2, x = ch.x0 + r() * (ch.x1 - ch.x0), vz = Layout.vegZ(x), sz = Layout.shoreMeanZ(x);
         const z = k === 1 ? vz - 0.3 - r() * Math.max(1, (vz - sz) * 0.3) : vz - 1.2 + Math.pow(r(), 1.5) * 7;
         if (world.massif(x, z) > 0.2 || !awayFromCamp(x, z)) continue;
         /* (in patches, as they grow: several near each other) */

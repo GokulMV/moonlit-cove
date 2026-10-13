@@ -50,6 +50,35 @@ const Sky = (() => {
   }
   const dirOf = (phi, a) => [Math.sin(phi) * Math.cos(a), Math.sin(a), -Math.cos(phi) * Math.cos(a)];
 
+  /* ── the tide, from the real moon and sun. Each raises the sea's equilibrium tide (Laplace's form of it): two bulges a
+     day that come round as the earth turns under them, and a daily inequality when the body stands north or south of the
+     equator; the sun's is 0.46 of the moon's (and the moon's grows as it comes nearer). The sea answers about two hours
+     after the body crosses the meridian. Spring tides come when the two pull together, at new and full moon; neaps at the
+     quarters. eta is the height, about ±1 at springs; dz is how far up the beach (m) that brings the water's edge:
+     shallow sand runs a long way out below the mean, the beach face is steeper above it ── */
+  const tideEta = (sun, moon, lat) => {
+    const phi = lat * D, c2 = Math.cos(phi) ** 2, s2 = Math.sin(2 * phi), LAG = 0.55;
+    const body = (H, dec, k) => { const h = H - LAG; return k * (c2 * Math.cos(dec) ** 2 * Math.cos(2 * h) + s2 * Math.sin(2 * dec) * Math.cos(h)); };
+    return (body(moon.H, moon.dec, Math.pow(385001 / moon.dist, 3)) + body(sun.H, sun.dec, 0.46)) / (1.46 * Math.max(0.35, c2));
+  };
+  const tideDZ = eta => 2.6 * Math.max(-1.1, Math.min(1.0, eta)) - 1.8;
+  const etaAt = (ms, loc) => tideEta(Astro.sun(ms, loc.lat, loc.lng), Astro.moon(ms, loc.lat, loc.lng), loc.lat);
+  /* (the recent high water and the next turns of the tide, worked out again only every few minutes of sky time) */
+  let tideMemo = { k: NaN };
+  function tideOf(ms, loc, sun, moon) {
+    const eta = tideEta(sun, moon, loc.lat), dz = tideDZ(eta), k = Math.round(ms / 180e3) + loc.lat * 1e6;
+    if (k !== tideMemo.k) {
+      let hi = -1e9; for (let i = 1; i <= 14; i++) hi = Math.max(hi, tideDZ(etaAt(ms - i * 15 * 60e3, loc)));
+      /* the next high and low water: the next turn of the tide either way, in ten-minute steps over the next fourteen hours */
+      let next = { high: null, low: null }, prev = etaAt(ms, loc), slope = etaAt(ms + 10 * 60e3, loc) - prev;
+      for (let i = 1, e0 = prev; i <= 84 && (!next.high || !next.low); i++) { const e1 = etaAt(ms + (i + 1) * 10 * 60e3, loc), e = etaAt(ms + i * 10 * 60e3, loc);
+        if (!next.high && e >= e0 && e >= e1) next.high = ms + i * 10 * 60e3; if (!next.low && e <= e0 && e <= e1) next.low = ms + i * 10 * 60e3; e0 = e; }
+      tideMemo = { k, hi, next, slope };
+    }
+    const rising = tideMemo.slope > 0;
+    return { eta, dz, hi: Math.max(tideMemo.hi, dz), rising, next: tideMemo.next, spring: Math.abs(eta) };
+  }
+
   function compute(ms, loc) {
     LAT = loc.lat;
     const sun = Astro.sun(ms, loc.lat, loc.lng), moon = Astro.moon(ms, loc.lat, loc.lng), il = Astro.illumination(ms);
@@ -68,9 +97,18 @@ const Sky = (() => {
     hor = hor.map((v, i) => v + moonI * [0.13, 0.16, 0.25][i]);
 
     const pS = place(sun, true), pM = place(moon, false);
+    /* the moon where it really is in the sky tonight, among the real stars (stars.js): from its hour angle and declination
+       (the sun's day keeps its own path across the view, above, for the light) */
+    const real = b => { const p = loc.lat * D, cd = Math.cos(b.dec), sd = Math.sin(b.dec), cH = Math.cos(b.H), sH = Math.sin(b.H);
+      return [Math.sin(p) * cd * cH - Math.cos(p) * sd, Math.cos(p) * cd * cH + Math.sin(p) * sd, cd * sH]; };
+    const moonV = real(moon), sunR = real(sun);
+    /* the sun as seen from the moon, in the frame its disc is drawn in (x across, y up the disc, z back toward us): which
+       part of it is lit, and which way its bright limb faces, as the real sun and moon stand */
+    const mz = moonV, mxl = Math.hypot(mz[2], mz[0]) || 1, mx = [-mz[2] / mxl, 0, mz[0] / mxl], my = [mx[1] * mz[2] - mx[2] * mz[1], mx[2] * mz[0] - mx[0] * mz[2], mx[0] * mz[1] - mx[1] * mz[0]];
+    const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sunM = [dot3(sunR, mx), dot3(sunR, my), -dot3(sunR, mz)];
 
     const useSun = sAlt > -1.5;
-    const keyPhi = useSun ? pS.phi : pM.phi;
+    const keyPhi = useSun ? pS.phi : Math.atan2(moonV[0], -moonV[2]);
     const keyAlt = useSun ? Math.max(sun.alt, 3 * D) : Math.max(moon.alt, 16 * D);
     const keyCol = (useSun ? sunCol : moonCol).map(v => v * (useSun ? sunI : moonI));
     const keyDir = dirOf(keyPhi, Math.min(keyAlt, 62 * D));
@@ -95,12 +133,13 @@ const Sky = (() => {
 
     return {
       sun, moon, illum: il, sAlt, mAlt, zen, hor, glow, haze: hor,
-      sunDirV: pS.dir, moonDirV: pM.dir, moonDisc, sunDisc, moonGlit, sunGlit, stars, cloudLit,
+      sunDirV: pS.dir, moonDirV: moonV, sunReal: sunR, sunM, moonDisc, sunDisc, moonGlit, sunGlit, stars, cloudLit,
       moonPhaseC: 2 * il.fraction - 1, moonPhaseSign: il.phase < 0.5 ? 1 : -1,
       amb, groundAmb, keyDir, keyCol, shadowK, exposure,
       day: sm(0, 15, sAlt), night: 1 - sm(-6, 8, sAlt), lightsAuto: sAlt < -3 ? 1 : 0,
-      moonProgress: pM.prog, sunProgress: pS.prog
+      moonProgress: pM.prog, sunProgress: pS.prog,
+      tide: tideOf(ms, loc, sun, moon)
     };
   }
-  return { compute };
+  return { compute, tideEta, tideDZ };
 })();

@@ -7,38 +7,31 @@ const GLSL = (() => {
      many as there are: these are only how far a shader looks along a row (more than anyone clicks in a minute) */
   const MAXUW = 128, MAXRIP = 128;
   const f = n => (Math.round(n * 1e5) / 1e5).toFixed(5);
-  const SH = Layout.SH, VG = Layout.VG, WIN = Layout.WIN, NH = Layout.NGL;
-  /* the shoreline in GLSL: the same curve as Layout's, drawn from uniforms the engine keeps up to date as the camera
-     moves (Layout.coastGL): the headlands nearest the camera, and the waves' phases at a reference x near it, so
-     everything is measured from there and the GPU's single floats stay exact however far along the coast it is.
-     The coast itself goes into a shader once, whichever pieces include it; names gives each piece its own entry
-     points (sx, the piece's old suffix, is no longer needed). */
-  const g9 = n => n.toPrecision(9);
+  /* the shoreline in GLSL: the very same curve as Layout's, read from a strip of numbers along the coast round the
+     camera that the engine keeps up to date (Mats.coastFill): the shore's z, its slope and the forest edge's z, every
+     half metre for two kilometres either way (row 0) and every four metres for sixteen (row 1), each row a ring the
+     camera's x wraps round, so moving along only works out the new end. Between two samples the values are joined in a
+     straight line (the coast doesn't bend that sharply). The coast itself goes into a shader once, whichever pieces
+     include it; names gives each piece its own entry points (sx, the piece's old suffix, is no longer needed).
+     uTideZ is how far up the beach the tide has the water just now (Layout.tide): waterZ is where the sea meets the sand,
+     shoreZ where it would at the mean of the tide */
   const COAST = `
 #ifndef COAST_FN
 #define COAST_FN
-uniform vec4 uHeadL[${NH}];   /* headlands in order along the coast: point (from uCoast.x), half-width, how far it juts out, 1/half-width */
-uniform vec4 uCoast;         /* reference x, its distance along from the camp's bay, the shore's and the forest edge's base z */
-uniform vec4 uCoastP, uCoastQ;   /* the waves' phases at the reference */
-/* (a headland's shape reaches six half-widths; past the first one beyond reach, the rest are too: they are 110 m apart or more) */
-float coastHead(float xl){ float h = 0.0;
-  for (int i = 0; i < ${NH}; i++){ vec4 H = uHeadL[i]; float u = (xl - H.x)*H.w; if (u < -6.0) break; if (u < 6.0) h += H.z*exp(-u*u); }
-  return h; }
-float coastHeadD(float xl){ float r = 0.0;
-  for (int i = 0; i < ${NH}; i++){ vec4 H = uHeadL[i]; float u = (xl - H.x)*H.w; if (u < -6.0) break; if (u < 6.0) r -= 2.0*H.z*u*H.w*exp(-u*u); }
-  return r; }
-/* the slow waves, which leave the camp's bay alone */
-float coastWin(float xl){ return smoothstep(${g9(WIN.r0)}, ${g9(WIN.r1)}, abs(xl + uCoast.y)); }
-float coastWinD(float xl){ float a = xl + uCoast.y, t = clamp((abs(a) - ${g9(WIN.r0)})/${g9(WIN.r1 - WIN.r0)}, 0.0, 1.0); return sign(a)*6.0*t*(1.0 - t)/${g9(WIN.r1 - WIN.r0)}; }
-float coastSlow(float xl){ return ${g9(SH.a3)}*sin(xl*${g9(SH.f3)} + uCoastQ.y) + ${g9(SH.a4)}*sin(xl*${g9(SH.f4)} + uCoastQ.z) + ${g9(SH.a5)}*sin(xl*${g9(SH.f5)} + uCoastQ.w); }
-float coastSlowD(float xl){ return ${g9(SH.a3 * SH.f3)}*cos(xl*${g9(SH.f3)} + uCoastQ.y) + ${g9(SH.a4 * SH.f4)}*cos(xl*${g9(SH.f4)} + uCoastQ.z) + ${g9(SH.a5 * SH.f5)}*cos(xl*${g9(SH.f5)} + uCoastQ.w); }
-float coastZ(float x){ float xl = x - uCoast.x;
-  return uCoast.z + ${g9(SH.a1)}*sin(xl*${g9(SH.f1)} + uCoastP.x) + ${g9(SH.a2)}*sin(xl*${g9(SH.f2)} + uCoastP.y) + ${g9(SH.tl)}*sin(xl*${g9(SH.kt)} + uCoastP.z) + coastWin(xl)*coastSlow(xl) - coastHead(xl); }
-float coastDZ(float x){ float xl = x - uCoast.x;
-  return ${g9(SH.a1 * SH.f1)}*cos(xl*${g9(SH.f1)} + uCoastP.x) + ${g9(SH.a2 * SH.f2)}*cos(xl*${g9(SH.f2)} + uCoastP.y) + ${g9(SH.tilt)}*cos(xl*${g9(SH.kt)} + uCoastP.z)
-       + coastWinD(xl)*coastSlow(xl) + coastWin(xl)*coastSlowD(xl) - coastHeadD(xl); }
-float coastVeg(float x){ float xl = x - uCoast.x;
-  return uCoast.w + ${g9(VG.a1)}*sin(xl*${g9(VG.f1)} + uCoastP.w) + ${g9(VG.a2)}*sin(xl*${g9(VG.f2)} + uCoastQ.x) + ${g9(VG.tl)}*sin(xl*${g9(SH.kt)} + uCoastP.z) + ${g9(VG.x)}*coastWin(xl)*coastSlow(xl) - 0.55*coastHead(xl); }
+uniform highp sampler2D uCoastT;   /* (x step: 0.5 m in row 0, 4 m in row 1) z of the shore · its slope · z of the forest edge */
+uniform vec4 uCoastW;              /* the x the fine row holds (from, to), and the coarse */
+uniform float uTideZ;
+vec3 coastAt(float x){
+  float row = 0.0, st = 0.5;
+  if (x < uCoastW.x || x > uCoastW.y){ row = 1.0; st = 4.0; x = clamp(x, uCoastW.z, uCoastW.w); }
+  float u = x/st, i0 = floor(u), f = u - i0;
+  ivec2 a = ivec2(int(mod(i0, 4096.0)), int(row)), b = ivec2(int(mod(i0 + 1.0, 4096.0)), int(row));
+  return mix(texelFetch(uCoastT, a, 0).xyz, texelFetch(uCoastT, b, 0).xyz, f);
+}
+float coastZ(float x){ return coastAt(x).x + uTideZ; }
+float coastDZ(float x){ return coastAt(x).y; }
+float coastVeg(float x){ return coastAt(x).z; }
+float coastMean(float x){ return coastAt(x).x; }
 #endif
 `;
   function shoreGL(sx, names) {
@@ -293,6 +286,9 @@ vec4 cloudLayer(vec3 d, vec3 Ld, vec3 haze, float jit){
 ${COMMON}
 ${SKY_FN}
 uniform float uStars, uTime, uPhaseC, uPhaseSign, uCloud, uMoonR, uSunR, uEnv; uniform vec3 uCloudLit;
+uniform mat3 uEqT;          /* the world's directions → the sky's own (equatorial), for the Milky Way (stars.js turns the stars) */
+uniform sampler2D uMW; uniform float uMWK;
+uniform vec3 uSunM;         /* the sun as seen from the moon, in the frame its disc is drawn in (sky.js) */
 uniform float uCirrus, uAlto, uCumulus, uStratus, uStorm, uFlash; uniform vec4 uBolt; uniform vec2 uWind;
 uniform sampler2D uNoise;
 uniform float uCloudT;      /* the clouds' own clock: they drift on the wind and their shapes keep changing */
@@ -311,19 +307,13 @@ void main(){
   /* (all of it worked out for every pixel, below the horizon too, so the textures' own filtering, which looks at the
      pixels next door, always finds them doing the same: a branch at the horizon left it guessing along that line) */
   {
-    /* stars */
-    if (uStars > 0.001){
-      vec2 sc = vec2(atan(d.x, -d.z), asin(clamp(d.y, -1.0, 1.0)))*57.2958*1.7;
-      vec2 cell = floor(sc), fr = fract(sc);
-      float h = hash12(cell);
-      if (h > 0.855){
-        vec2 sp = vec2(hash12(cell + 3.7), hash12(cell + 9.1))*0.76 + 0.12;
-        float dd = length(fr - sp);
-        float b = pow((h - 0.855)/0.145, 2.2);
-        float tw = 0.7 + 0.3*sin(uTime*(1.3 + 3.0*hash12(cell + 2.2)) + h*40.0);
-        vec3 sc2 = mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.9, 0.75), hash12(cell + 5.5));
-        c += sc2*smoothstep(0.085, 0.0, dd)*(0.02 + b*0.16)*tw*uStars*smoothstep(0.0, 0.035, d.y);
-      }
+    /* the Milky Way, where it really lies in tonight's sky (the stars themselves are stars.js's points): its traced glow,
+       dimmed low down by the air it is seen through */
+    if (uStars > 0.001 && uMWK > 0.0 && d.y > -0.01){
+      vec3 e = uEqT*d; float ra = atan(e.y, e.x), dc = asin(clamp(e.z, -1.0, 1.0));
+      float mw = textureLod(uMW, vec2(fract(ra/6.2831853 + 1.0), 0.5 + dc/3.1415927), 0.0).r;
+      float am = 1.0/(max(d.y, 0.0) + 0.05);
+      c += vec3(0.78, 0.82, 1.0)*mw*mw*uMWK*uStars*exp(-0.28*(am - 1.0))*smoothstep(-0.01, 0.06, d.y);
     }
     /* clouds: high cirrus wisps painted on the sky, and in front of them real layers of cloud marched through and lit
        by the sun or the moon: a thin sheet of altocumulus, and below it the cumulus (a grey deck in rain, towers in a
@@ -378,7 +368,7 @@ void main(){
       float cov = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
       if (cov > 0.0){
         vec3 nn = vec3(q, sqrt(max(1.0 - r*r, 0.0)));
-        vec3 sd = vec3(uPhaseSign*sqrt(max(1.0 - uPhaseC*uPhaseC, 0.0)), 0.0, uPhaseC);
+        vec3 sd = dot(uSunM, uSunM) > 0.5 ? normalize(uSunM) : vec3(uPhaseSign*sqrt(max(1.0 - uPhaseC*uPhaseC, 0.0)), 0.0, uPhaseC);
         float lit = smoothstep(-0.05, 0.09, dot(nn, sd));
         float m1 = textureLod(uNoise, q*0.21 + vec2(0.31, 0.62), 0.0).r, m2 = textureLod(uNoise, q*0.55 + vec2(0.13, 0.27), 0.0).a;
         float alb = 0.98 - 0.3*smoothstep(0.42, 0.68, m1) - 0.1*smoothstep(0.45, 0.8, m2);
@@ -488,16 +478,28 @@ uniform highp sampler2D uSurgeT; uniform int uNUw;
 vec4 uwAt(int k){ return texelFetch(uSurgeT, ivec2(k, 0), 0); }
 #define WC 1.55
 #define CU 4.2
-${shoreGL('v', { head: 'headv', headD: 'headDv', z: 'shoreZv', dz: 'shoreDZv' })}float swell(float s, float tau, float amp, float spd, float sb){
+${shoreGL('v', { head: 'headv', headD: 'headDv', z: 'shoreZv', dz: 'shoreDZv' })}/* one swell's height at s (metres out from the water's edge), tau after it set off, amp how big, spd how fast, breaking at
+   sb. Coming in over the shallows it grows taller (shoaling) and its front steepens; at sb its crest pitches forward and
+   crashes; what runs on is a bore of broken water, a step that keeps much of the breaker's height at first and loses it
+   steadily as it runs up into the shallows, its front steep all the way to the sand. lean (added to) is how far forward
+   its crest is thrown, toward the beach, as it goes over */
+float swellL(float s, float tau, float amp, float spd, float sb, inout float lean){
   float x = s + tau*spd;
   float shoal = 1.0 + 0.8*smoothstep(sb + 14.0, sb, s);
-  float broken = smoothstep(sb + 0.5, sb - 2.5 - 0.2*sb, s);
-  float lf = 0.9 + 0.035*max(s, 0.0), lb = 2.3 + 0.07*max(s, 0.0);
+  float broken = smoothstep(sb + 0.2, sb - 1.6 - 0.1*sb, s);                 /* (the plunge: over in a metre or two) */
+  float pb = clamp((sb - s)/max(sb, 1.0), 0.0, 1.0), bore = mix(0.66, 0.24, pb);
+  float steep = smoothstep(sb + 8.0, sb + 0.5, s)*(1.0 - broken);           /* the face drawing up before it breaks */
+  float lf = (0.9 + 0.035*max(s, 0.0))*mix(1.0, 0.48, max(steep, 0.7*broken)), lb = 2.3 + 0.07*max(s, 0.0);
   float prof = x < 0.0 ? exp(-x*x/(lf*lf)) : exp(-x*x/(lb*lb));
   /* clicked swells: the biggest stacks grow less than linearly, so they stay waves rather than walls */
   float k = spd > 2.0 ? 0.27/(1.0 + 0.08*max(amp - 1.5, 0.0)) : 0.16;
-  return amp*k*shoal*mix(1.0, 0.36, broken)*prof*smoothstep(-0.3, 1.4, s);
+  float h = amp*k*shoal*mix(1.0, bore, broken)*prof*smoothstep(-0.3, 1.4, s);
+  /* the crest thrown forward as it goes over: most at its top, only as it breaks (bigger swells plunge, small ones spill) */
+  float pitch = smoothstep(sb + 4.0, sb + 0.3, s)*(1.0 - smoothstep(sb - 0.3, sb - 1.8, s))*smoothstep(0.35, 1.1, amp);
+  lean += 0.55*h*pitch*prof;
+  return h;
 }
+float swell(float s, float tau, float amp, float spd, float sb){ float l = 0.0; return swellL(s, tau, amp, spd, sb, l); }
 float userAmp(vec4 U, float a, float t){
   float sc = max(U.w - (t - (U.x - U.w/CU))*CU, 0.0);
   float hw = 9.0 + 0.8*(U.w - sc);
@@ -508,7 +510,9 @@ float userAmp(vec4 U, float a, float t){
 }
 /* where a clicked swell breaks: further out the bigger it is, varying gently along the beach so it peels */
 float userSb(float amp, float nA, vec4 U){ return min((3.0 + 4.6*amp)*(0.88 + 0.24*nA), max(4.0, 0.5*U.w*(0.9 + 0.2*nA))); }
-float waveH(vec2 p){
+/* the sea's height at p, and (lean) how far its crests there are thrown toward the beach as they break */
+float waveHL(vec2 p, out float lean){
+  lean = 0.0;
   float g = shoreDZv(p.x), s = (shoreZv(p.x) - p.y)/sqrt(1.0 + g*g), a = p.x, t = uWaveT;
   if (s < -0.5) return 0.0;
   float nA = 0.5 + 0.24*sin(a*0.19 + 1.3) + 0.18*sin(a*0.071 + 0.4) + 0.12*sin(a*0.53 + 2.0);   /* where along the beach the swell breaks sooner or later */
@@ -516,16 +520,17 @@ float waveH(vec2 p){
   for (int j = 0; j < 6; j++){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w);
-    h += swell(s, tau, W.y, WC, 3.0 + 7.0*nA*W.y);
+    h += swellL(s, tau, W.y, WC, 3.0 + 7.0*nA*W.y, lean);
   }
   for (int k = 0; k < ${MAXUW}; k++){
     if (k >= uNUw) break;
     vec4 U = uwAt(k); if (U.y <= 0.0) continue;
     float amp = userAmp(U, a, t); if (amp < 0.01) continue;
-    h += swell(s, t - U.x, amp, CU, userSb(amp, nA, U));
+    h += swellL(s, t - U.x, amp, CU, userSb(amp, nA, U), lean);
   }
   return h;
-}`;
+}
+float waveH(vec2 p){ float l; return waveHL(p, l); }`;
   const GROUND_VS = `
 ${WAVEH}
 uniform vec4 uNearRect;
@@ -536,9 +541,11 @@ void main(){
   #ifdef NEAR
     float fade = smoothstep(uNearRect.x, uNearRect.x + 18.0, wp.x)*smoothstep(uNearRect.z, uNearRect.z - 18.0, wp.x)*smoothstep(uNearRect.y, uNearRect.y + 16.0, wp.z);
     if (fade > 0.0){
-      float e = 0.22, h = waveH(wp.xz), hx = waveH(wp.xz + vec2(e, 0.0)), hz = waveH(wp.xz + vec2(0.0, e));
+      float e = 0.22, lean, h = waveHL(wp.xz, lean), hx = waveH(wp.xz + vec2(e, 0.0)), hz = waveH(wp.xz + vec2(0.0, e));
       vNg = normalize(vec3(-(hx - h)/e*fade, 1.0, -(hz - h)/e*fade));
-      wp.y += h*fade; vH = h*fade;
+      /* (a breaking crest thrown forward, toward the beach: along the shore's normal, landward) */
+      float gs = shoreDZv(wp.x); vec2 land = vec2(-gs, 1.0)/sqrt(1.0 + gs*gs);
+      wp.y += h*fade; wp.xz += land*lean*fade; vH = h*fade;
     }
   #endif
   vW = wp.xyz;
@@ -596,6 +603,7 @@ uniform int uNRip;          /* click splashes (row 1 of uSurgeT: x, z, start tim
 uniform float uUwMax;       /* the biggest clicked swell about (how far up the sand to look for its swash) */
 uniform vec4 uNearRect;
 uniform float uMist, uWet, uRough;
+uniform float uTideHi;       /* how far up the beach the last high water reached (m, as uTideZ is now) */
 uniform vec3 uShC;          /* where the key light's shadow map is centred (x, z) and how far it reaches */
 uniform int uDbgG;
 /* rain on water: rings from drops landing on a jittered grid */
@@ -636,7 +644,7 @@ vec3 skyRefl(vec3 d){
 
 /* gloss: a film of water still on the sand; mark: the pale line a wave leaves where it stopped; sf: how much of the
    foam is the swash's froth (bubbles left lying) rather than the open water's */
-struct Wv { float foam; float lip; float cover; float depth; float wet; float slope; float gloss; float mark; float sf; };
+struct Wv { float foam; float lip; float cover; float depth; float wet; float slope; float gloss; float mark; float sf; float face; };
 /* how far up the sand the swash runs, along the beach: long sweeps, and the scallops of beach cusps every ten or
    fifteen metres (the same numbers are in engine.js, which decides what the bigger waves reach) */
 float runK(float nB, float a){ return 0.72 + 0.4*nB + 0.16*sin(a*0.43 + 0.8) + 0.1*sin(a*0.79 + 2.3); }
@@ -672,6 +680,10 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
     /* a crest breaks harder in some stretches than others: peaks and quieter shoulders along it */
     float patchy = smoothstep(0.18, 0.72, tN(vec2(p.x*0.16, p.y*0.05) + vec2(k3*2.3, 0.0), 6.0).r);
     w.foam = max(w.foam, smoothstep(sb + 4.0, sb - 0.2, s)*exp(-x*x/0.09)*amp*0.85*(0.2 + 0.8*patchy));
+    /* going over: the whole front of the wave turns white as its crest pitches down it and crashes (a big swell plunges
+       right across; a small one only spills at its top) */
+    float over = smoothstep(sb + 1.8, sb + 0.1, s)*(1.0 - smoothstep(sb - 0.6, sb - 2.2, s));
+    w.face = max(w.face, over*exp(-(x + 0.3)*(x + 0.3)/(0.12 + 0.1*min(amp, 2.5)))*smoothstep(0.3, 1.0, amp)*(0.72 + 0.28*patchy));
     /* a big swell feathers white along its crest as it steepens toward the break */
     float crest = exp(-(x + 0.2)*(x + 0.2)/(0.05 + 0.02*amp));
     w.foam = max(w.foam, crest*smoothstep(0.9, 3.0, amp)*(spd > 2.0 ? 0.3 + 0.6*smoothstep(sb + 12.0, sb + 0.3, s) : smoothstep(sb + 9.0, sb + 0.3, s))*0.85);
@@ -682,8 +694,10 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
       float onset = smoothstep(sb + 0.15, sb - 0.7, s);
       float pch = smoothstep(0.3, 0.78, tN(vec2(p.x*0.45, p.y*1.6) + vec2(k3, 0.0), 7.0).r);
       float sect = 0.35 + 0.65*smoothstep(0.2, 0.7, tN(vec2(p.x*0.11 + k3*1.9, 0.37), 5.0).g);   /* whitewater thicker where it broke hardest */
-      w.foam = max(w.foam, (exp(-dlt/0.9)*0.9 + exp(-dlt/2.2)*0.16*(0.25 + pch))*onset*min(amp, 2.5)*sect);
-      w.lip = max(w.lip, exp(-dlt*dlt/0.02)*onset*min(amp, 2.0)*sect);
+      /* the broken water: a thick white roll at the front of the bore, a churning carpet of foam behind it that thins
+         into lace over the next few seconds */
+      w.foam = max(w.foam, (exp(-dlt/1.1) + exp(-dlt/3.4)*0.4*(0.3 + pch))*onset*min(amp*1.1, 1.8)*(0.45 + 0.55*sect));
+      w.lip = max(w.lip, exp(-dlt*dlt/0.05)*onset*min(amp, 2.0)*(0.5 + 0.5*sect));
     }
   }
   /* (above the furthest any of this wave's tongues could reach there's nothing to work out) */
@@ -731,7 +745,7 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
   }
 }
 Wv waves(float s, float a, float t, vec2 p){
-  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   float nA = 0.5 + 0.24*sin(a*0.19 + 1.3) + 0.18*sin(a*0.071 + 0.4) + 0.12*sin(a*0.53 + 2.0);   /* where along the beach the swell breaks sooner or later */
   float nB = 0.5 + 0.3*sin(a*0.23 + 2.1) + 0.2*sin(a*0.097 + 1.7);
   /* rills down the beach face, narrow and running straight down the slope, where the backwash drains last */
@@ -805,7 +819,7 @@ void main(){
   float shK = length(p - uShC.xy) < uShC.z ? mix(1.0, shadowAt(wp), uShadowK) : 1.0;
   bool glit = dot(moonG + sunG, vec3(1.0)) > 1e-6;
 
-  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   /* the swash runs a few metres up the sand, further under a storm's swells and much further under a big clicked one:
      look for it as far as the biggest wave about could reach, or it would stop short along a line */
   float sUp = 4.0;
@@ -876,6 +890,10 @@ void main(){
     float veg = smoothstep(-0.4, 1.4, p.y - vegZ(p.x) + (nm.r - 0.5)*1.6);
     float trample = rel.g;
     float dryness = smoothstep(-0.2, -3.5, s);
+    /* the sand the falling tide has left since the last high water: still damp, darkest by the water, drying toward the
+       line the high water reached (the seaweed and the shells along it are laid there) */
+    float tband = max(uTideHi - uTideZ, 0.0), tideWet = 0.0;
+    if (tband > 0.05 && s < 0.3){ float up = -s; tideWet = (1.0 - smoothstep(0.0, tband + 0.3, up))*(0.55 + 0.45*(1.0 - smoothstep(0.0, 1.2, up))); dryness *= 1.0 - tideWet; }
     float ripMask = smoothstep(0.42, 0.7, nb.a)*(1.0 - trample)*(1.0 - veg)*dryness;
     rg += (su.rg*2.0 - 1.0)*0.2 + (sb.rg*2.0 - 1.0)*(0.05 + 0.2*trample) + vec2(0.96, 0.28)*(sr.b*2.0 - 1.0)*0.16*ripMask;
     vec3 N = normalize(vec3(-rg.x, 1.0, -rg.y));
@@ -884,7 +902,7 @@ void main(){
     alb = mix(alb, vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g), veg);
     /* the high-water line: a faint pale seam of fine sand and burst bubbles, drier than the sand below it */
     float mark = w.mark*(1.0 - veg)*(1.0 - w.cover)*(1.0 - 0.7*uWet);
-    float wet = max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg))*(1.0 - veg*0.4)*(1.0 - 0.5*mark);
+    float wet = max(max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg)), tideWet*0.42)*(1.0 - veg*0.4)*(1.0 - 0.5*mark);
     /* fresh from the water the sand is glassy, a film that sinks in within seconds; damp sand is only dark */
     float gloss = max(max(w.gloss, w.cover), uWet*0.55)*(1.0 - veg)*(1.0 - mark);
     vec3 a = alb*mix(1.0, 0.46, wet);
@@ -974,6 +992,13 @@ void main(){
     col = mix(col, foamLit, foamV*0.94);
   }
 
+  /* the face of a breaking wave, white as its crest comes down it: a smooth sheet of white water (a lace pattern would only
+     smear down a face this steep), mottled along the crest */
+  if ((uDbgG & 16) == 0 && w.face > 0.01){
+    float nf = tN(vec2(p.x*0.6, p.y*0.08) + vec2(t*0.05, 0.0), 4.0).r;
+    vec3 faceLit = vec3(0.9, 0.93, 0.95)*(uAmb*1.3 + keyC*max(Lk.y, 0.2) + art*0.6);
+    col = mix(col, faceLit*(0.88 + 0.18*nf), clamp(w.face, 0.0, 1.0)*0.85);
+  }
   /* air between here and the horizon: far water fades toward the sky just over it, but never all the way */
   col = mix(col, uHor*0.95, (1.0 - exp(-max(dist - 60.0, 0.0)/(2600.0/max(uMist, 0.3))))*0.88);
   col = mix(col, uHor*0.9, (1.0 - exp(-dist/400.0))*0.07*uMist);

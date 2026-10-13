@@ -66,15 +66,15 @@ const World = (() => {
   let foot = 0;   /* how much of the last massif() point was a headland's body (left aside, to save an array a call) */
   function massif(x, z) {
     let best = -9, fp = 0;
-    for (let i = Math.floor((x - MR) / Co.CELL), n = Math.floor((x + MR) / Co.CELL); i <= n; i++) {
-      const h = Co.cell(i); if (!h) continue;
-      const hx = h.hx, w = h.w, u = x - hx; if (Math.abs(u) > w * 3.4) continue;
+    const HL = Co.near(x - MR, x + MR);
+    for (let i = 0; i < HL.length; i++) {
+      const h = HL[i], hx = h.hx, w = h.w, u = x - hx; if (Math.abs(u) > w * 3.4) continue;
       const s = z - ztOf(h); if (s < -9) continue;
       const bend = 2.6 * Math.sin(s * 0.06 + hx * 0.1), hw = w * (0.36 + 0.7 * sm(0, 32, s)), a = (u - bend) / hw, e = Math.exp(-a * a * 1.3);
       const body = e * sm(-3.5, 4.0, s) * sm(0.02, 0.12, e), st = h.st;
       let H;
       if (body > 0) {
-        H = (5.5 + 7.5 * sm(2, 44, s)) * h.ht * body * (0.7 + 0.6 * fbm(x * 0.05 + hx, 2.0, z * 0.05, 3));
+        H = (5.5 + 7.5 * sm(2, 44, s)) * h.ht * (h.minor ? 0.62 : 1) * body * (0.7 + 0.6 * fbm(x * 0.05 + hx, 2.0, z * 0.05, 3));
         const k = (H + 0.9 * (fbm(x * 0.13, 7.0, z * 0.13, 2) - 0.5)) / st, f = k - Math.floor(k);
         H = H * 0.35 + 0.65 * (Math.floor(k) + sm(0.25, 0.75, f)) * st;
         H += (fbm(x * 0.33, 5.0, z * 0.33, 2) - 0.5) * 1.4 * sm(0.3, 2.5, H);
@@ -100,11 +100,54 @@ const World = (() => {
     const rib = 1 - Math.abs(2 * vnX(x, z, 1 / 55, 87) - 1);           /* spurs and the gullies between them */
     return crest * prof * (0.84 + 0.22 * rib + 0.14 * (fbmX(x, z, 1 / 160, 91, 3) - 0.5)) - 3;
   }
-  const land = (x, z) => Math.max(hill(x, z), massif(x, z), range(x, z));
+  /* ── reefs (Layout.Coast.reefs): a ledge of rock from the sand out into the sea. Its line is sampled every metre or so:
+     where it runs, how high its top stands above the sea (rising out of the sand at the beach end, lower toward the far
+     end, where the waves break over it), how wide its top is. Across, the top is fairly flat (a walk along it), then
+     its shoulders round off and its flanks fall steeply into the water ── */
+  const reefLines = new Map();
+  function reefLine(R) {
+    let L = reefLines.get(R.id); if (L) return L;
+    const g = Co.shoreDZ(R.x), n = Math.hypot(g, 1), dx = g / n, dz = -1 / n, ca = Math.cos(R.ang), sa = Math.sin(R.ang);
+    const ox = dx * ca - dz * sa, oz = dx * sa + dz * ca, px = -oz, pz = ox, z0 = Co.shoreZ(R.x) + 1.4, N = Math.ceil(R.len / 0.9);
+    L = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, b = R.bend * Math.sin(Math.PI * t), q = R.id * 0.731;
+      /* (in slabs: the top steps up and down from one block of rock to the next, and dips low here and there, where the
+         waves wash right over it) */
+      const slab = vn(Math.floor(t * R.len / 2.3) * 1.37 + q, 5.5, 1.1), dip = Math.pow(vn(t * R.len / 9 + q, 2.7, 6.1), 3);
+      const h = (R.h0 * (1 - 0.45 * t) + 0.22 * (slab - 0.5) + 0.12 * (vn(t * 7 + q, 1.3, 2.1) - 0.5) - 0.5 * dip * R.h0) * sm(0, 0.15, t) - 0.12 * sm(0.82, 1, t);
+      const w = R.w * (0.5 + 0.5 * sm(0, 0.14, t)) * (0.7 + 0.6 * vn(t * 6 + q, 4.2, 0.7)) * (0.9 + 0.2 * slab) * (1 - 0.15 * t);
+      L.push({ x: R.x + ox * R.len * t + px * b, z: z0 + oz * R.len * t + pz * b, h, w, t });
+    }
+    let x0 = 1e9, x1 = -1e9, zA = 1e9, zB = -1e9; for (const p of L) { x0 = Math.min(x0, p.x - 3 * p.w); x1 = Math.max(x1, p.x + 3 * p.w); zA = Math.min(zA, p.z - 3 * p.w); zB = Math.max(zB, p.z + 3 * p.w); }
+    Object.assign(L, { R, ox, oz, px, pz, box: [x0, x1, zA, zB] });
+    if (reefLines.size > 64) reefLines.delete(reefLines.keys().next().value);
+    reefLines.set(R.id, L); return L;
+  }
+  /* the rock's height across it, v the distance from its middle line in half-widths */
+  const reefProf = (h, v) => { const a = Math.abs(v); return a <= 0.7 ? h : a <= 1 ? h - 0.32 * ((a - 0.7) / 0.3) ** 2 : h - 0.32 - (a - 1) * (h + 1.5) / 0.9; };
+  /* the reef under a point (coast coordinates): how high its rock stands there (−9 off it), and whether it is the walkable
+     top (in reefOn) */
+  let reefOn = false;
+  function reefH(x, z) {
+    reefOn = false; let best = -9;
+    const RL = Co.reefsNear(x);
+    for (let r = 0; r < RL.length; r++) {
+      const L = reefLine(RL[r]), B = L.box; if (x < B[0] || x > B[1] || z < B[2] || z > B[3]) continue;
+      for (let i = 0; i < L.length - 1; i++) {
+        const A = L[i], C = L[i + 1], ex = C.x - A.x, ez = C.z - A.z, ll = ex * ex + ez * ez, u = Math.max(0, Math.min(1, ((x - A.x) * ex + (z - A.z) * ez) / ll));
+        const qx = A.x + ex * u, qz = A.z + ez * u, d2 = (x - qx) ** 2 + (z - qz) ** 2, w = A.w + (C.w - A.w) * u; if (d2 > 4 * w * w) continue;
+        const v = Math.sqrt(d2) / w, hh = reefProf(A.h + (C.h - A.h) * u, v) + 0.05 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5);
+        if (hh > best) { best = hh; reefOn = v < 0.92 && (i > 0 || u > 0.3); }
+      }
+    }
+    return best;
+  }
+  const land = (x, z) => Math.max(hill(x, z), massif(x, z), range(x, z), reefH(x, z));
   const slope = (x, z, e = 0.8) => Math.hypot(land(x + e, z) - land(x - e, z), land(x, z + e) - land(x, z - e)) / (2 * e);
   /* near a headland, the sand at its foot up to here is kept clear for the van */
   function nearHead(x, k = 2.6) {
-    for (let i = Math.floor((x - k * Co.WMAX) / Co.CELL), n = Math.floor((x + k * Co.WMAX) / Co.CELL); i <= n; i++) { const h = Co.cell(i); if (h && Math.abs(x - h.hx) < h.w * k) return true; }
+    const HL = Co.near(x, x); for (let i = 0; i < HL.length; i++) { const h = HL[i]; if (Math.abs(x - h.hx) < h.w * k) return true; }
     return false;
   }
   const corrTop = x => Co.shoreZ(x) + 6.6;
@@ -190,8 +233,8 @@ const World = (() => {
   function* scrubPlan(h) { const got = scrubPlans.get(h.i); if (got) return got; const out = yield* headScrub(h); scrubPlans.set(h.i, out); return out; }
   function* headRocks(h, r, out) {
     const add = (x, y, z, s, kind, extra) => { const p = Object.assign({ x, y, z, s, kind, p: Math.floor(r() * 64), ry: r() * TAU, tx: (r() - 0.5) * 0.3, tz: (r() - 0.5) * 0.3, sy: 1 }, extra); if (out) out.push(p); };
-    const hx = h.hx, w = h.w, zt = ztOf(h), sz0 = Co.shoreZ(hx);
-    for (let i = 0, n = 0; i < 2500 && n < 36; i++) {
+    const hx = h.hx, w = h.w, zt = ztOf(h), sz0 = Co.shoreZ(hx), kN = Math.min(1, w / 16);   /* (a small rocky point has fewer of everything) */
+    for (let i = 0, n = 0; i < 2500 && n < Math.round(36 * kN); i++) {
       if (late()) yield;
       const x = hx + (r() - 0.5) * w * 4.2, z = zt - 6 + r() * 48, m = massif(x, z), fp = foot;
       if (m < 0.25 || m > 5 * h.ht || fp > 0.75 || r() > Math.exp(-Math.max(0, z - zt) / 15)) continue;
@@ -199,7 +242,7 @@ const World = (() => {
       add(x, Math.max(0, m) - 0.42 * s, z, s, 'big'); n++;
     }
     /* boulders where the rock meets the sand */
-    for (let i = 0, n = 0; i < 4000 && n < 60; i++) {
+    for (let i = 0, n = 0; i < 4000 && n < Math.round(60 * kN); i++) {
       if (late()) yield;
       const x = hx + (r() - 0.5) * w * 4.6, z = zt - 6 + r() * 30, m = massif(x, z), fp = foot;
       if (m > 0.9 || fp < 0.004) continue;
@@ -209,7 +252,7 @@ const World = (() => {
       add(x, -0.12 * s + Math.max(0, m) * 0.6, z, s, s > 1.35 ? 'big' : 'small'); n++;
     }
     /* boulders in the surf off the point, beyond the sand the van can reach */
-    for (let i = 0, n = 0; i < 3000 && n < 34; i++) {
+    for (let i = 0, n = 0; i < 3000 && n < Math.round(34 * kN); i++) {
       if (late()) yield;
       const x = hx + (r() - 0.5) * w * 2.8, sz = Co.shoreZ(x), z = sz - 3.6 - Math.pow(r(), 1.4) * 15;
       const near = Math.exp(-(((x - hx) / w) ** 2)); if (r() > 0.25 + 0.75 * near) continue;
@@ -260,18 +303,21 @@ const World = (() => {
 ${GLSL.WAVEH}
 /* seconds since the last crest reached this point, and how big it was */
 vec2 lastHit(float x, float z){
-  float g = shoreDZv(x), s = max((shoreZv(x) - z)/sqrt(1.0 + g*g), 0.0), t = uWaveT, tr = 99.0, A = 0.0;
+  float g = shoreDZv(x), s0 = (shoreZv(x) - z)/sqrt(1.0 + g*g), s = max(s0, 0.0), t = uWaveT, tr = 99.0, A = 0.0;
   for (int j = 0; j < 6; j++){ vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float d = t - (W.x + 0.9*sin(x*0.11 + W.z) + x*0.03*W.w - s/WC); if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
   for (int k = 0; k < ${GLSL.MAXUW}; k++){ if (k >= uNUw) break; vec4 U = uwAt(k); if (U.y <= 0.0) continue;
     float T0 = U.x - s/CU, d = t - T0, a = userAmp(U, x, T0);
     if (d > -0.05 && d < 4.0 && a > 0.04){ tr = d; A = max(A, 1.0 + 2.4*a); } }
-  return vec2(tr, A);
-}`;
+  /* (a rock the tide has left high and dry takes no waves) */
+  return vec2(tr, A*smoothstep(-0.3, 0.6, s0));
+}
+/* how much of a rock stands in the water just now (the tide comes and goes round it) */
+float inSea(float x, float z){ float g = shoreDZv(x); return smoothstep(-0.3, 0.8, (shoreZv(x) - z)/sqrt(1.0 + g*g)); }`;
   const FOAM_VS = `
 ${SURF_T}
-varying vec2 vUv; varying vec3 vW; varying vec2 vHit;
-void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), c = modelMatrix*instanceMatrix[3];
+varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
+void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), c = modelMatrix*instanceMatrix[3]; vSea = inSea(c.x, c.z);
   /* (riding on the water as it rises and falls, not at a height of its own, or every crest that passes cuts it off in a
      straight line) */
   w.y = waveH(w.xz) + 0.01; vW = w.xyz; vHit = lastHit(c.x, c.z);
@@ -280,13 +326,14 @@ void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), 
   gl_Position = projectionMatrix*viewMatrix*vec4(w.xyz - v/max(d, 1e-3)*min(d*0.5, 0.06 + 0.0015*d), 1.0); }`;   /* (each ring is centred on its rock) */
   const FOAM_FS = `
 uniform float uTime; uniform vec3 uAmbF, uKeyColT; uniform sampler2D uNoise; uniform vec4 uFog;
-varying vec2 vUv; varying vec3 vW; varying vec2 vHit;
+varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
 void main(){
+  if (vSea < 0.01) discard;
   vec2 q = vUv*2.0 - 1.0; float d = length(q);
   float surge = exp(-max(vHit.x, 0.0)*0.55)*min(vHit.y, 2.0);
   float ring = smoothstep(1.0, 0.7 - 0.25*surge, d)*smoothstep(0.30, 0.55, d);
   float n = texture2D(uNoise, vW.xz*0.33 + vec2(uTime*0.012, -uTime*0.008)).r*0.6 + texture2D(uNoise, vW.xz*1.1 - vec2(uTime*0.02, 0.0)).a*0.4;
-  float a = ring*smoothstep(0.5 - 0.3*surge, 0.68, n)*(0.22 + 0.8*min(surge, 1.0));
+  float a = ring*smoothstep(0.5 - 0.3*surge, 0.68, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
   if (a < 0.01) discard;
   float fd = distance(vW, cameraPosition);
   vec3 c = mix((uAmbF*1.6 + uKeyColT*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.3))));
@@ -585,12 +632,32 @@ void main(){
     }
   }
 
+  /* a reef's rock as a mesh: rows along its line, out to sea; across each, from one flank over the top to the other */
+  function reefGeo(L, o) {
+    const NC = 17, nr = L.length, P = new Float32Array(nr * NC * 3), Cc = new Float32Array(nr * NC * 3), RK = new Float32Array(nr * NC).fill(1), idx = [];
+    for (let i = 0; i < nr; i++) {
+      const p = L[i];
+      for (let j = 0; j < NC; j++) {
+        const v = (j / (NC - 1) * 2 - 1) * 1.95, x = p.x + L.px * v * p.w, z = p.z + L.pz * v * p.w;
+        let y = reefProf(p.h, v) + 0.09 * (vn(x * 1.7, 0.4, z * 1.7) - 0.5) + 0.04 * (vn(x * 5.1, 1.9, z * 5.1) - 0.5) - 0.12 * Math.pow(1 - Math.abs(2 * vn(x * 0.9, 3.3, z * 0.9) - 1), 6);
+        if (i === 0) y = Math.min(y, -0.35);                  /* (its end buried in the sand) */
+        const k = (i * NC + j) * 3; P[k] = x - o.x; P[k + 1] = Math.max(y, -1.7); P[k + 2] = z - o.z;
+        const tone = (0.82 + 0.4 * fbm(x * 0.6, 3.3, z * 0.6, 2)) * (1 + 0.15 * Math.max(0, 0.7 - Math.abs(v)));
+        Cc[k] = 0.15 * tone; Cc[k + 1] = 0.136 * tone; Cc[k + 2] = 0.118 * tone;
+      }
+    }
+    for (let i = 0; i < nr - 1; i++) for (let j = 0; j < NC - 1; j++) { const a = i * NC + j, b = a + 1, c = a + NC, d = c + 1; idx.push(a, b, c, b, d, c); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(P, 3)); g.setAttribute('color', new T.BufferAttribute(Cc, 3)); g.setAttribute('aRock', new T.BufferAttribute(RK, 1));
+    g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere(); return g;
+  }
+
   /* ── the coast, chunk by chunk ── */
   function build(root, U, noiseTex) {
     /* rocks: a few shapes, shared by every chunk, and the same in fewer facets for further off */
     const R = { small: SMALL.map((sh, i) => rockProto(31 + i * 17, sh, 6)), big: BIG.map((sh, i) => rockProto(301 + i * 23, sh, 8)), stack: rockProto(777, [1.2, 1.0, 1.1], 10, { top: 0.6, strata: 11 }) };
     const far = new Map([...R.small.map((p, i) => [p, rockProto(31 + i * 17, SMALL[i], 2)]), ...R.big.map((p, i) => [p, rockProto(301 + i * 23, BIG[i], 3)]), [R.stack, rockProto(777, [1.2, 1.0, 1.1], 3, { top: 0.6, strata: 11 })]]);
     const rockMat = Mats.lit({ vertexColors: true, roughness: 0.86 }, 'rockw'), landMat = Mats.lit({ vertexColors: true, roughness: 0.95 }, 'land'), canMat = Mats.lit({ vertexColors: true, roughness: 0.92 }, 'canopy');
+    const reefMat = Mats.lit({ vertexColors: true, roughness: 0.93 }, 'reef');
     /* foam round rocks in the water and the spray they throw up */
     const surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: { value: noiseTex } }, Mats.coastU);
     const foamM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: FOAM_VS, fragmentShader: FOAM_FS, transparent: true, depthWrite: false });
@@ -668,11 +735,29 @@ void main(){
         if (massif(x, z) > 0) continue;
         const s = 0.22 + r3() * 0.55; add(x, -0.07 * s, z, s, 'small', { p: [0, 2, 4][Math.floor(r3() * 3)] }, r3);
       }
+      /* reefs leaving the beach in this chunk: boulders along their flanks, half in the water, and a heap of them off the
+         far end where the waves break */
+      ch.reefs = [];
+      for (const R of Co.reefs(X0c, X1c)) {
+        if (R.x < X0c || R.x >= X1c) continue;
+        const L = reefLine(R), rr = rng(R.seed);
+        for (let i = 2; i < L.length; i++) {
+          const P = L[i]; if (rr() > 0.8) continue;
+          for (const sd of [-1, 1]) { if (rr() < 0.3) continue;
+            const off = (1.2 + 0.5 * rr()) * P.w, sz = (0.45 + 0.7 * rr()) * (0.8 + 0.5 * P.t);
+            add(P.x + L.px * sd * off + (rr() - 0.5) * 0.5, -0.22 * sz - 0.12, P.z + L.pz * sd * off + (rr() - 0.5) * 0.5, sz, sz > 1.1 ? 'big' : 'small', { reef: 1 }, rr); }
+        }
+        const E = L[L.length - 1];
+        for (let k = 0; k < 7; k++) { const sz = 0.8 + rr() * 1.1, a = rr() * TAU, d = rr() * 2.4; add(E.x + L.ox * (0.6 + d) + Math.cos(a) * d * 0.7, -0.3 * sz, E.z + L.oz * (0.6 + d) + Math.sin(a) * d * 0.7, sz, sz > 1.2 ? 'big' : 'small', { reef: 1 }, rr); }
+        /* (the van can't drive over its end on the sand) */
+        for (let i = 0; i < L.length; i++) { const P = L[i]; if (P.z < Co.shoreZ(P.x) - 2) break; ch.obstacle(P.x - o.x, P.z - o.z, P.w * 1.3, 'reef'); }
+        ch.reefs.push(L);
+      }
       if (ch.claims.length) for (let i = rocks.length - 1; i >= 0; i--) if (claimed(ch, rocks[i].x, rocks[i].z)) rocks.splice(i, 1);
       for (const p of rocks) {
         p.proto = protoOf(R, p);
         const xw = p.x - o.x, zw = p.z - o.z, sh = p.proto.shape;
-        if (p.s > 0.5 || p.kind !== 'small') ch.obstacle(xw, zw, p.s * 0.82 * (sh[0] + sh[2]) / 2, 'rock');
+        if ((p.s > 0.5 || p.kind !== 'small') && !p.reef) ch.obstacle(xw, zw, p.s * 0.82 * (sh[0] + sh[2]) / 2, 'rock');
         if (p.z < Co.shoreZ(p.x) + 0.5 && p.s > 0.4) ch.wet.push({ x: xw, z: zw, top: Math.max(0.3, p.y + p.s * sh[1] * p.sy * 0.9), rad: p.s * 0.9 * (sh[0] + sh[2]) / 2, id: ch.c * 1000 + ch.wet.length });
       }
       yield;
@@ -683,6 +768,12 @@ void main(){
         list.forEach((p, i) => { e.set(p.tx, p.ry, p.tz); q.setFromEuler(e); sc.set(p.s, p.s * p.sy, p.s); pos.set(p.x - o.x, p.y, p.z - o.z); m4.compose(pos, q, sc); inst.setMatrixAt(i, m4); });
         inst.castShadow = inst.receiveShadow = true; inst.computeBoundingSphere(); g.rk.add(inst);
         const fi = new T.InstancedMesh(far.get(proto).geo, rockMat, 0); fi.instanceMatrix = inst.instanceMatrix; fi.count = list.length; fi.computeBoundingSphere(); g.rkFar.add(fi);
+        if (late()) yield;
+      }
+      /* the reefs' own rock: a ledge along each line, drawn as the headlands' bare rock is (and wet, and weedy at the water) */
+      for (const L of ch.reefs) {
+        const geo = ch.keep(reefGeo(L, o)), m = new T.Mesh(geo, reefMat); m.castShadow = m.receiveShadow = true; g.rk.add(m);
+        const mf = new T.Mesh(geo, reefMat); mf.receiveShadow = true; g.rkFar.add(mf);
         if (late()) yield;
       }
       const W = ch.wet;
@@ -856,6 +947,10 @@ void main(){
     const W = (f, x, z) => f(x + o.x, z + o.z);
     return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
+      /* the top of a reef under a world point, where it can be walked on (−9 off it) */
+      reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },
+      /* the reefs near a world x, each as its line: [x, z, top height, half-width] every metre or so, out from the beach */
+      reefLines: x => Co.reefsNear(x + o.x).map(R => reefLine(R).map(p => [p.x - o.x, p.z - o.z, p.h, p.w])),
       get counts() { return counts(); }, get chunks() { return live.slice(); }, chunkAt: x => chunks.get(Math.floor((x + o.x - X0) / CW)) || null,
       resetWorst: () => { stat.worst = 0; } };
   }

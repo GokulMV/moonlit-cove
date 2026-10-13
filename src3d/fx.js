@@ -149,19 +149,17 @@ void main(){ vec4 t = texture2D(uPuff, vUv); gl_FragColor = vec4(mix(uLo, uHi, s
     shuffle(mh);
     refs.moths = points(mh.length, i => mh[i], MOTH_VS, { uTime: { value: 0 }, uScale: { value: 1000 }, uI: { value: 1 }, uCol: { value: new T.Vector3(1.0, 0.86, 0.62) }, uCore: { value: 0.3 } });
     scene.add(refs.moths);
-    /* butterflies */
+    /* butterflies round the camp by day: the real thing (models/life/butterfly.js), a little bigger than life so they
+       read from the chairs, each beating its wings at its own pace and now and then gliding on them */
     refs.butterflies = [];
     const homesB = [[-3.0, 1.2, 3.4], [2.6, 1.0, 3.6], [-9.0, 1.4, 3.6], [0.4, 0.9, -1.2], [8.0, 1.1, 3.0], [-6.5, 1.6, 5.6],
                     [12.5, 1.3, 4.2], [-13.5, 1.2, 4.6], [5.0, 1.5, 6.4], [-1.5, 1.1, 7.0], [15.5, 1.0, 1.8], [-17.0, 1.4, 2.5]];
+    const KINDS = [0, 1, 2, 3, 0, 2, 1, 3, 0, 1, 2, 0];
     homesB.forEach((hm, i) => {
-      const tex = Mats.tex(Paint.butterfly(i));
-      const mat = new T.MeshBasicMaterial({ map: tex, alphaTest: 0.4, side: T.DoubleSide, transparent: false });
-      const g = new T.Group(); scene.add(g);
-      const wing = s => { const geo = new T.PlaneGeometry(0.1, 0.16); geo.translate(s * 0.05, 0, 0);
-        const uv = geo.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setX(k, s > 0 ? 0.5 + uv.getX(k) * 0.5 : uv.getX(k) * 0.5);
-        const m = new T.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; const piv = new T.Group(); piv.add(m); g.add(piv); return piv; };
-      refs.butterflies.push({ g, L: wing(-1), R: wing(1), home: new T.Vector3(...hm), ph: r() * TAU, sp: 0.7 + r() * 0.5, mat });
+      const g = Models.make('life/butterfly', { kind: KINDS[i] }); g.scale.setScalar(1.7); g.visible = false; scene.add(g);
+      refs.butterflies.push({ g, home: new T.Vector3(...hm), ph: r() * TAU, sp: 0.7 + r() * 0.5, hz: 5.5 + r() * 3.5, beat: r() * TAU, gl: r() * TAU, glK: 0 });
     });
+    refs.lastT = null;
     return refs;
   }
 
@@ -186,15 +184,22 @@ void main(){ vec4 t = texture2D(uPuff, vUv); gl_FragColor = vec4(mix(uLo, uHi, s
     refs.smoke.material.uniforms.uA.value = 0.28 * st.smoke;
     refs.steamMug.material.uniforms.uA.value = 0.7 * st.steam; refs.steamPot.material.uniforms.uA.value = 0.6 * st.steam;
     { const u = refs.douse.material.uniforms; u.uTime.value = t; u.uA.value = 0.85 * (st.douse || 0); u.uLo.value.copy(st.steamLo).multiplyScalar(1.6); u.uHi.value.copy(st.steamHi).multiplyScalar(1.3); refs.douse.visible = (st.douse || 0) > 0.01; }
-    for (const b of refs.butterflies) {
+    const dtB = refs.lastT === null ? 0 : Math.max(0, Math.min(0.1, t - refs.lastT)); refs.lastT = t;
+    refs.butterflies.forEach((b, bi) => {
+      const on = st.butterflies > 0.02 && bi < Math.round(refs.butterflies.length * dn); b.g.visible = on; if (!on) return;
       const k = t * b.sp + b.ph;
-      const p = new T.Vector3(Math.sin(k * 0.37) * 2.2 + Math.sin(k * 1.3) * 0.3, 0.45 * Math.sin(k * 0.9) + 0.15 * Math.sin(k * 3.1), Math.cos(k * 0.29) * 1.7);
-      const q = new T.Vector3(Math.cos(k * 0.37) * 0.81 + Math.cos(k * 1.3) * 0.39, 0, -Math.sin(k * 0.29) * 0.49);
-      b.g.position.copy(b.home).add(p); b.g.rotation.y = Math.atan2(q.x, q.z);
-      const flap = 0.25 + 1.0 * Math.abs(Math.sin(t * 14 * b.sp + b.ph));
-      b.L.rotation.z = flap; b.R.rotation.z = -flap;
-      b.g.visible = st.butterflies > 0.02 && refs.butterflies.indexOf(b) < Math.round(refs.butterflies.length * dn); b.mat.color.setRGB(st.bfly[0], st.bfly[1], st.bfly[2]);
-    }
+      /* now and then a second or so of gliding on open wings, more often when it is drifting down */
+      const glW = Math.sin(t * 0.47 * b.sp + b.gl) + 0.35 * Math.sin(t * 1.9 + b.gl * 3);
+      b.glK += ((glW > 0.95 ? 1 : 0) - b.glK) * Math.min(1, dtB * 6);
+      const gliding = b.glK > 0.5;
+      b.beat += TAU * b.hz * dtB * (gliding ? 0.15 : 1);
+      const lift = gliding ? 0 : 0.028 * Math.sin(b.beat - 1.2);      /* (it rises a little with every downstroke) */
+      b.g.position.set(b.home.x + Math.sin(k * 0.37) * 2.2 + Math.sin(k * 1.3) * 0.3, b.home.y + 0.45 * Math.sin(k * 0.9) + 0.15 * Math.sin(k * 3.1) + lift, b.home.z + Math.cos(k * 0.29) * 1.7);
+      const vx = Math.cos(k * 0.37) * 0.81 + Math.cos(k * 1.3) * 0.39, vz = -Math.sin(k * 0.29) * 0.49;
+      /* (the model's head is toward +x: turned to the way it is going, nose up a touch, rocking with the beat) */
+      b.g.rotation.set(0, Math.atan2(-vz, vx), 0.16 + (gliding ? -0.05 : 0.07 * Math.sin(b.beat)));
+      b.g.userData.anim(t, true, b.beat, gliding);
+    });
   }
   return { build, update };
 })();

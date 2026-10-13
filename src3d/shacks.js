@@ -381,7 +381,7 @@ const Shacks = (() => {
         const kindR = h(1), kind = kindR < 0.45 ? 'shack' : kindR < 0.75 ? 'huts' : 'fishing';
         for (let tries = 0; tries < 6 && !out.length; tries++) {
           const x = ch.x0 + 18 + h(2 + tries) * (world.CW - 36);
-          const ok = s => Math.abs(s - Layout.camp.x) > CAMP_CLEAR && Layout.head(s) < 0.6 && Layout.vegZ(s) - Layout.shoreZ(s) > (kind === 'huts' ? 6.5 : 8.6) && !(world.massif(s, Layout.vegZ(s) - 2) > 0.1);
+          const ok = s => Math.abs(s - Layout.camp.x) > CAMP_CLEAR && Layout.head(s) < 0.6 && Layout.vegZ(s) - Layout.shoreMeanZ(s) > (kind === 'huts' ? 6.5 : 8.6) && !(world.massif(s, Layout.vegZ(s) - 2) > 0.1);
           const span = kind === 'huts' ? 12 : 6;
           if (!ok(x) || !ok(x - span) || !ok(x + span)) continue;
           out.push({ kind, x, seed: 1 + Math.floor(h(20) * 1e9) });
@@ -397,7 +397,7 @@ const Shacks = (() => {
     world.place(ch => {
       const claims = [];
       for (const p of plan(ch)) {
-        const vz = Layout.vegZ(p.x), sz = Layout.shoreZ(p.x);
+        const vz = Layout.vegZ(p.x), sz = Layout.shoreMeanZ(p.x);
         if (p.kind === 'shack') { claims.push([p.x, vz - 1.8, 8], [p.x - 6, vz - 2, 4.5], [p.x + 6, vz - 2, 4.5], [p.x, (vz + sz) / 2, 6]); }
         else if (p.kind === 'huts') { for (let k = -3; k <= 3; k++) claims.push([p.x + k * 4.6, vz + 0.6, 3.6]); }
         else claims.push([p.x, vz - 1.2, 4.5], [p.x - 4, vz - 2.5, 4], [p.x, sz + 4.6, 6], [p.x + 4.5, sz + 4.6, 5], [p.x - 4.5, sz + 4.6, 5]);
@@ -409,11 +409,44 @@ const Shacks = (() => {
     world.decorate(ch => {
       for (const p of plan(ch)) {
         const r = rng(p.seed), S = site(ch), ry = ryAt(p.x);
-        const vz = Layout.vegZ(p.x), sz = Layout.shoreZ(p.x);
+        const vz = Layout.vegZ(p.x), sz = Layout.shoreMeanZ(p.x);
         if (p.kind === 'shack') shack(ch, S, p.x, ry, r, sz, vz);
         else if (p.kind === 'huts') hutRow(ch, S, p.x, vz + 0.6, ry, r);
         else fishing(ch, S, p.x, ry, r, sz, vz);
         S.meshes(ch); count++;
+      }
+    }, 'near');
+
+    /* ── sand castles: now and then one on the damp sand above the tide, each built its own way; the nearer the water
+       it stands, the more the waves have taken of it. Never by the camp (it has its own), never on a headland's sand
+       or by a shack ── */
+    const castlePlans = new Map(); let castlesVer = -1;
+    function castlePlan(ch) {
+      if (castlesVer !== Layout.coastVer) { castlePlans.clear(); castlesVer = Layout.coastVer; }
+      if (castlePlans.has(ch.c)) return castlePlans.get(ch.c);
+      const C = Layout.Coast, h = k => C.hash(ch.c, 600 + k), out = [], n = (h(0) < 0.45 ? 1 : 0) + (h(1) < 0.12 ? 1 : 0);
+      const sites = plan(ch);
+      for (let i = 0; i < n; i++) for (let tries = 0; tries < 6; tries++) {
+        const x = ch.x0 + 8 + h(2 + i * 9 + tries) * (world.CW - 16);
+        if (Math.abs(x - Layout.camp.x) < 45 || Layout.head(x) > 0.5 || sites.some(p => Math.abs(p.x - x) < 20) || out.some(p => Math.abs(p.x - x) < 12)) continue;
+        const sz = Layout.shoreMeanZ(x), vz = Layout.vegZ(x); if (vz - sz < 8.5) continue;
+        const up = 1.5 + h(30 + i * 3 + tries) * 2.7, z = sz + up;
+        if (world.massif(x, z) > 0 || world.massif(x, z - 1.5) > 0) continue;
+        out.push({ x, z, rot: h(40 + i) * TAU, seed: 1 + Math.floor(h(50 + i) * 1e6), wear: up < 2.3 ? 0.62 + 0.38 * (2.3 - up) / 0.8 : 0.5 * h(60 + i), toys: h(70 + i) < 0.22 });
+        break;
+      }
+      castlePlans.set(ch.c, out);
+      if (castlePlans.size > 400) castlePlans.delete(castlePlans.keys().next().value);
+      return out;
+    }
+    world.place(ch => { const claims = []; for (const p of castlePlan(ch)) { claims.push([p.x, p.z, 1.6]); ch.obstacle(p.x, p.z, 0.65, 'castle'); } return claims; });
+    let castles = 0;
+    world.decorate(ch => {
+      for (const p of castlePlan(ch)) {
+        const g = Models.make('beach/sandcastle', { seed: p.seed, wear: p.wear, toys: p.toys, lite: true });
+        g.position.set(p.x, 0, p.z); g.rotation.y = p.rot; g.updateMatrixWorld(true);
+        g.traverse(m => { if (m.isMesh) ch.keep(m.geometry); });
+        ch.near.add(g); castles++;
       }
     }, 'near');
 
@@ -427,7 +460,8 @@ const Shacks = (() => {
     }
     /* (for the test bench: the sites laid out so far, along the coast) */
     const sites = () => [...plans.values()].flat().map(p => ({ kind: p.kind, x: p.x, z: Layout.vegZ(p.x) }));
-    return { update, sites, get count() { return count; }, M };
+    const castleSites = () => [...castlePlans.values()].flat().map(p => ({ x: p.x, z: p.z, wear: p.wear }));
+    return { update, sites, castleSites, get castles() { return castles; }, get count() { return count; }, M };
   }
   return { build };
 })();

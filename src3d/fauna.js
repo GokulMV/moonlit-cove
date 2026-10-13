@@ -231,11 +231,13 @@ ${ORIENT}
 ${WING}
 attribute vec4 iH, iK;   /* home (x, y, z, seed) · which one */
 uniform float uTime, uN;
-/* quick, jinking flight: slow loops with fast swerves on top */
+/* quick, jinking flight: slow loops with fast swerves on top, every bat its own (the paces and the sizes of its loops
+   drawn from its seed, so no two fly the same figure) */
 vec3 path(float t, float s){
-  return vec3(5.5*sin(t*0.37 + s*6.1) + 2.6*sin(t*1.13 + s*2.3) + 0.9*sin(t*3.7 + s*9.4),
-              0.8*sin(t*0.71 + s*4.7) + 0.35*sin(t*2.9 + s*1.9),
-              3.5*sin(t*0.43 + s*3.3) + 1.8*sin(t*1.31 + s*7.7) + 0.8*sin(t*4.1 + s*5.2));
+  vec3 f = 0.72 + 0.56*fract(vec3(s*13.7, s*7.9, s*3.3)), a = 0.75 + 0.5*fract(vec3(s*5.1, s*11.3, s*2.9));
+  return vec3(5.5*a.x*sin(t*0.37*f.x + s*6.1) + 2.6*a.y*sin(t*1.13*f.y + s*2.3) + 0.9*a.z*sin(t*3.7*f.z + s*9.4),
+              0.8*a.z*sin(t*0.71*f.y + s*4.7) + 0.35*sin(t*2.9*f.x + s*1.9),
+              3.5*a.y*sin(t*0.43*f.z + s*3.3) + 1.8*a.x*sin(t*1.31*f.x + s*7.7) + 0.8*a.z*sin(t*4.1*f.y + s*5.2));
 }
 void main(){
   float s = iH.w, t = uTime + s*50.0;
@@ -728,8 +730,9 @@ void main(){
       }
     }
     /* (where bat i is: BAT_VS's own jinking path) */
-    const batPath = (t, s) => [5.5 * Math.sin(t * 0.37 + s * 6.1) + 2.6 * Math.sin(t * 1.13 + s * 2.3) + 0.9 * Math.sin(t * 3.7 + s * 9.4), 0.8 * Math.sin(t * 0.71 + s * 4.7) + 0.35 * Math.sin(t * 2.9 + s * 1.9),
-      3.5 * Math.sin(t * 0.43 + s * 3.3) + 1.8 * Math.sin(t * 1.31 + s * 7.7) + 0.8 * Math.sin(t * 4.1 + s * 5.2)];
+    const batPath = (t, s) => { const fx = 0.72 + 0.56 * fr(s * 13.7), fy = 0.72 + 0.56 * fr(s * 7.9), fz = 0.72 + 0.56 * fr(s * 3.3), ax = 0.75 + 0.5 * fr(s * 5.1), ay = 0.75 + 0.5 * fr(s * 11.3), az = 0.75 + 0.5 * fr(s * 2.9);
+      return [5.5 * ax * Math.sin(t * 0.37 * fx + s * 6.1) + 2.6 * ay * Math.sin(t * 1.13 * fy + s * 2.3) + 0.9 * az * Math.sin(t * 3.7 * fz + s * 9.4), 0.8 * az * Math.sin(t * 0.71 * fy + s * 4.7) + 0.35 * Math.sin(t * 2.9 * fx + s * 1.9),
+        3.5 * ay * Math.sin(t * 0.43 * fz + s * 3.3) + 1.8 * ax * Math.sin(t * 1.31 * fx + s * 7.7) + 0.8 * az * Math.sin(t * 4.1 * fy + s * 5.2)]; };
     function batPickables(list) {
       const A = bats.A, n = bats.H.mesh.material.uniforms.uN.value;
       for (let i = 0; i < bats.H.g.instanceCount; i++) {
@@ -880,22 +883,40 @@ void main(){
     })();
 
     /* ── sandpipers: little flocks at the water's edge, running down the wet sand as a wave draws back and up ahead of the
-       next, pecking while they stand; they fly off low along the beach when something comes near ── */
+       next, each at its own pace and a beat behind or ahead of the rest, pecking while they stand. When something comes
+       near they go up one after another, beating hard and climbing, swing out over the water in a loose, ever-shifting
+       flock that banks as one, glide in bursts, and come back in to land further along, flaring their wings and running
+       a few steps as they touch down ── */
     const pipers = (() => {
       const SIZE = [7, 5, 6], NF = 3, PER = 7, LEGH = 0.085, H = herd(piperGeo(), NF * PER, mat(BIRD_VS, BIRD_FS, PIPER_D), [['iP', 4], ['iQ', 4], ['iC', 4], ['iR', 4]]), A = H.A;
-      const F = SIZE.map(n => ({ n, mode: 'off', x: 0, dir: 1, tx: 0 }));
-      const B = Array.from({ length: NF * PER }, () => ({ x: 0, r: 0.4, y: 0, yaw: 0, run: 0, runA: 0, m: 0.3, ox: 0, ph: 0, amp: 0, fold: 1, legs: 1, pitch: 0, pk: 0, seed: rnd() }));
+      const F = SIZE.map(n => ({ n, mode: 'off', x: 0, dir: 1, tx: 0, x0: 0, ax: 0, av: 0, t0: 0, out: 3, alt: 1.2, r0: 0.6, rL: 0.6, far: false }));
+      const B = Array.from({ length: NF * PER }, () => ({ x: 0, r: 0.4, y: 0, yaw: 0, run: 0, runA: 0, m: 0.3, ox: 0, ph: rnd() * TAU, amp: 0, fold: 1, legs: 1, pitch: 0, roll: 0, pk: 0, seed: rnd(),
+        lag: 0.1 + 0.5 * rnd(), vmax: 1.7 + 1.3 * rnd(), walk: 0.35 + 0.35 * rnd(), hold: 0, hz: 12 + 3 * rnd(), k: 4 + 2.5 * rnd(),
+        dl: 0, fa: 0, fr: 0, fy: 0, ga: 0, gr: 0, vx: 0, vr: 0, vy: 0, up: false, wx: 0, wz: 0 }));
       function spawn(fi, cx, near) {
         for (let k = 0; k < 12; k++) {
           const x = near ? cx + (rnd() - 0.5) * 90 : cx + side() * (50 + rnd() * 40), sz = Layout.shoreZ(x);
           if (!sandAt(x, sz + 1.2) || Layout.vegZ(x) - sz < 3) continue;
           Object.assign(F[fi], { mode: 'feed', x, dir: rnd() < 0.5 ? 1 : -1 });
-          for (let i = fi * PER; i < (fi + 1) * PER; i++) { const b = B[i]; b.ox = (rnd() - 0.5) * 5; b.x = x + b.ox; b.m = 0.15 + rnd() * 0.5; b.r = b.m; b.y = 0; b.yaw = rnd() * TAU; b.fold = 1; b.legs = 1; b.amp = 0; }
+          for (let i = fi * PER; i < (fi + 1) * PER; i++) { const b = B[i]; b.ox = (rnd() - 0.5) * 5; b.x = x + b.ox; b.m = 0.15 + rnd() * 0.5; b.r = b.m; b.y = 0; b.yaw = rnd() * TAU; b.fold = 1; b.legs = 1; b.amp = 0; b.up = false; }
           return true;
         }
         return false;
       }
-      const away = (f, fromX, far) => { f.mode = 'fly'; f.dir = Math.sign(f.x - fromX) || 1; f.tx = f.x + f.dir * (far ? 140 : 35 + rnd() * 30); };
+      /* up and away from fromX: the flock's line out over the water and back in to land, and each bird's own place in it */
+      function away(f, fi, fromX, far, t, swash, wt) {
+        const dir = Math.sign(f.x - fromX) || 1, S = far ? 140 : 30 + rnd() * 35;
+        Object.assign(f, { mode: 'fly', dir, x0: f.x, ax: f.x, av: 0, tx: f.x + dir * S, t0: t, out: 2.5 + rnd() * 5, alt: 1.0 + rnd() * 0.9, far });
+        let rs = 0, n = 0; for (let k = 0; k < f.n; k++) { rs += B[fi * PER + k].r; n++; } f.r0 = n ? rs / n : 0.6;
+        f.rL = Math.max(0.3, swash(f.tx, wt) + 0.5);
+        for (let k = 0; k < PER; k++) {
+          const b = B[fi * PER + k];
+          /* (the nearest go first; the rest follow within a third of a second or so) */
+          b.dl = 0.05 + 0.32 * rnd() + 0.03 * Math.abs(b.x - fromX) / 10;
+          b.fa = (rnd() - 0.5) * 2.6; b.fr = (rnd() - 0.5) * 1.7; b.fy = (rnd() - 0.5) * 0.45;
+          b.ga = b.x - f.x0; b.gr = b.r - f.r0; b.vx = b.vr = b.vy = 0; b.up = false; b.hold = 0;
+        }
+      }
       return {
         n: 0,
         update(t, dt, wt, cam, nf, near, swash, cut) {
@@ -904,45 +925,89 @@ void main(){
             const f = F[fi], want = fi < nf;
             if (cut && !want) f.mode = 'off';
             if (f.mode === 'off' && want) spawn(fi, cam.x, near);
-            else if (!want && f.mode === 'feed') away(f, cam.x, true);
+            else if (!want && f.mode === 'feed') away(f, fi, cam.x, true, t, swash, wt);
+            let p = 0, ya = 0, ra = 0, landed = 0;
             if (f.mode === 'feed') {
               f.x += f.dir * 0.1 * dt; if (rnd() < dt * 0.03) f.dir = -f.dir;
-              const w = threat(f.x, Layout.shoreZ(f.x) + 1, 9, 6); if (w) away(f, w === 1 ? th.vx : th.cx, false);
-              if (Math.abs(f.x - cam.x) > 110) f.mode = 'off';
-            } else if (f.mode === 'fly') {
-              f.x += f.dir * 9 * dt;
-              if ((f.tx - f.x) * f.dir <= 0 || Math.abs(f.x - cam.x) > 130) f.mode = want && Math.abs(f.x - cam.x) < 110 ? 'feed' : 'off';
+              const w = threat(f.x, Layout.shoreZ(f.x) + 1, 9, 6); if (w) away(f, fi, w === 1 ? th.vx : th.cx, false, t, swash, wt);
+              else if (f.alarm !== undefined) away(f, fi, f.alarm, false, t, swash, wt);
+              f.alarm = undefined;
+              if (f.mode === 'feed' && Math.abs(f.x - cam.x) > 110) f.mode = 'off';
+            }
+            if (f.mode === 'fly') {
+              /* the flock's middle: quick to get going, slowing to land at the end */
+              const rem = (f.tx - f.ax) * f.dir, tau = t - f.t0;
+              const vT = Math.min(9.5 * Math.min(1, tau / 0.7 + 0.15), Math.sqrt(2 * 3.2 * Math.max(0, rem)));
+              f.av += (vT - f.av) * Math.min(1, dt * 5); f.ax += f.dir * Math.min(f.av * dt, Math.max(0, rem));
+              p = cl((f.ax - f.x0) / (f.tx - f.x0), 0, 1);
+              ya = f.alt * Math.pow(Math.sin(Math.PI * Math.min(1, p * 1.08)), 0.55);
+              ra = f.r0 + (f.rL - f.r0) * p - f.out * Math.pow(Math.sin(Math.PI * p), 0.8);
+              f.x = f.ax;
+              if (Math.abs(f.x - cam.x) > 130) f.mode = 'off';
             }
             for (let k = 0; k < PER; k++) {
               const i = fi * PER + k, b = B[i], q = i * 4, on = f.mode !== 'off' && k < f.n && !b.held;
               if (on) {
                 const g = Layout.shoreDZ(b.x), sq = Math.sqrt(1 + g * g);
                 if (f.mode === 'feed') {
-                  /* keep a little way up from the water's edge, wherever the swash has got to */
-                  const dx = cl(f.x + b.ox - b.x, -0.5 * dt, 0.5 * dt), dr = cl(swash(b.x, wt) + b.m - b.r, -2.4 * dt, 2.4 * dt), v = Math.hypot(dx, dr) / Math.max(dt, 1e-4);
+                  /* keep a little way up from the water's edge, wherever the swash has got to: each one reacts a moment
+                     sooner or later than the next, runs at its own speed, and now and then stands its ground a while */
+                  const want = swash(b.x, wt - b.lag) + b.m, need = want - b.r;
+                  if (b.hold > 0) b.hold -= dt; else if (rnd() < dt * 0.35) b.hold = 0.3 + rnd() * 0.8;
+                  const run = b.hold > 0 && need < 0.12 ? 0 : need;
+                  const dx = cl(f.x + b.ox - b.x, -b.walk * dt, b.walk * dt), dr = cl(run, -b.vmax * dt, b.vmax * dt), v = Math.hypot(dx, dr) / Math.max(dt, 1e-4);
                   b.x += dx; b.r += dr;
                   b.runA += (Math.min(1, v / 1.2) - b.runA) * Math.min(1, dt * 10); b.run += v * dt / 0.035;
                   if (v > 0.25) b.yaw += cl(turn(b.yaw, Math.atan2(-(dr * sq + g * dx), dx)), -12 * dt, 12 * dt);
-                  b.pk += v < 0.15 ? dt : 0; b.pitch = v < 0.15 ? -0.55 * Math.pow(Math.max(0, Math.sin(b.pk * 5 + b.seed * 9)), 3) : 0;
-                  b.y = Math.max(0, b.y - dt * 2); b.fold = Math.min(1, b.fold + dt * 4); b.legs = Math.min(1, b.legs + dt * 4); b.amp = Math.max(0, b.amp - dt * 4);
+                  b.pk += v < 0.15 ? dt : 0; b.pitch = v < 0.15 ? -0.55 * Math.pow(Math.max(0, Math.sin(b.pk * (4.2 + 1.6 * b.seed) + b.seed * 9)), 3) : 0;
+                  b.y = Math.max(0, b.y - dt * 2); b.fold = Math.min(1, b.fold + dt * 4); b.legs = Math.min(1, b.legs + dt * 4); b.amp = Math.max(0, b.amp - dt * 4); b.roll *= 0.9;
                 } else {
-                  /* low over the swash, along the beach */
-                  b.x += f.dir * 9 * dt; b.r += (-0.6 + b.ox * 0.15 - b.r) * Math.min(1, dt * 2);
-                  b.y += (((f.tx - b.x) * f.dir > 6 ? 0.9 + 0.4 * b.seed : 0) - b.y) * Math.min(1, dt * 3);
-                  b.fold = Math.max(0, b.fold - dt * 6); b.legs = Math.max(0, b.legs - dt * 5); b.amp = 1; b.ph += TAU * 11 * dt; b.runA = 0; b.pitch = 0;
-                  b.yaw += cl(turn(b.yaw, Math.atan2(-g * f.dir, f.dir)), -8 * dt, 8 * dt);
+                  const tau = t - f.t0 - b.dl;
+                  if (tau < 0) {
+                    /* alarmed, not yet gone: stands up straight, stops feeding */
+                    b.pitch += (0.12 - b.pitch) * Math.min(1, dt * 10); b.runA *= 0.9;
+                  } else {
+                    if (!b.up) { b.up = true; b.vy = 1.8 + 0.6 * rnd(); }      /* (a little spring off the sand) */
+                    /* where it wants to be: its own place in the flock, wandering, from where it stood at the start */
+                    const mixK = Math.min(1, tau / 1.1), wob = t * (0.9 + 0.4 * b.seed) + b.seed * 20;
+                    const ta = f.ax + f.dir * (b.ga + (b.fa * (1 + 0.25 * Math.sin(wob)) - b.ga) * mixK);
+                    const tr = ra + b.gr + (b.fr * (1 + 0.3 * Math.sin(wob * 1.3 + 1)) - b.gr) * mixK;
+                    const ty = Math.max(0, ya + b.fy * (ya / f.alt) * (1 + 0.4 * Math.sin(wob * 0.8)));
+                    const kk = b.k, k2 = kk * kk;
+                    b.vx += (k2 * (ta - b.x) - 2 * kk * b.vx) * dt; b.vr += (k2 * (tr - b.r) - 2 * kk * b.vr) * dt; b.vy += (k2 * (ty - b.y) - 2 * kk * b.vy) * dt - (b.y > 0.02 ? 0 : 0);
+                    b.x += b.vx * dt; b.r += b.vr * dt; b.y = Math.max(0, b.y + b.vy * dt);
+                    const sp = Math.hypot(b.vx, b.vr * sq), low = b.y < 0.25 && p > 0.7;
+                    /* the wings: hard beats going up, bursts of gliding as it comes down, a flare to land */
+                    const glide = p > 0.4 && p < 0.86 && Math.sin(t * (1.7 + 0.6 * b.seed) + b.seed * 11) > 0.35;
+                    const ampT = low ? (b.y > 0.03 ? 0.7 : 0) : glide ? 0.1 : 1;
+                    b.amp += (ampT - b.amp) * Math.min(1, dt * 7); b.ph += TAU * b.hz * dt * (0.35 + 0.65 * Math.min(1, b.amp * 1.4));
+                    b.fold += ((b.y < 0.02 && p > 0.9 ? 1 : 0) - b.fold) * Math.min(1, dt * (b.fold > 0.5 ? 4 : 9));
+                    b.legs += ((b.y < 0.3 && p > 0.6 ? 1 : 0) - b.legs) * Math.min(1, dt * 6);
+                    /* heading along its way through the air, banked into the turns, nose up climbing and in the flare */
+                    if (sp > 0.4) { const yT = Math.atan2(-(b.vr * sq + g * b.vx), b.vx), d = turn(b.yaw, yT), mv = cl(d, -9 * dt, 9 * dt); b.yaw += mv;
+                      b.roll += (cl(-(dt > 0 ? mv / dt : 0) * sp / 9.8, -0.85, 0.85) - b.roll) * Math.min(1, dt * 5); }
+                    b.pitch += (cl(Math.atan2(b.vy, Math.max(sp, 1)) * 0.8 + (low ? 0.45 : 0), -0.4, 0.7) - b.pitch) * Math.min(1, dt * 6);
+                    b.runA = b.y < 0.02 && p > 0.9 ? Math.min(1, sp / 1.2) : 0; b.run += sp * dt / 0.035;
+                    if (p >= 1 && b.y < 0.01 && sp < 0.3) landed++;
+                  }
                 }
-                A.iP[q] = b.x; A.iP[q + 1] = b.y + LEGH * b.legs; A.iP[q + 2] = Layout.shoreZ(b.x) + b.r * sq; A.iP[q + 3] = b.yaw;
-                A.iQ[q] = b.pitch; A.iQ[q + 1] = 0; A.iQ[q + 2] = b.ph; A.iQ[q + 3] = b.amp;
+                const wz = Layout.shoreZ(b.x) + b.r * sq;
+                A.iP[q] = b.x; A.iP[q + 1] = b.y + LEGH * b.legs; A.iP[q + 2] = wz; A.iP[q + 3] = b.yaw;
+                A.iQ[q] = b.pitch; A.iQ[q + 1] = b.roll; A.iQ[q + 2] = b.ph; A.iQ[q + 3] = b.amp;
                 A.iC[q] = b.fold; A.iC[q + 1] = b.legs; A.iR[q] = b.run; A.iR[q + 1] = b.runA;
                 top = i + 1; live++;
               }
               A.iC[q + 2] = on ? 1 : 0;
             }
+            /* all down: feeding again where they came in, each keeping the place it landed in */
+            if (f.mode === 'fly' && landed >= f.n) {
+              if (f.far || !want) f.mode = 'off';
+              else { f.mode = 'feed'; f.x = f.tx; for (let k = 0; k < PER; k++) { const b = B[fi * PER + k]; b.ox = cl(b.x - f.x, -3, 3); b.m = cl(b.r - swash(b.x, wt), 0.15, 0.7); b.up = false; } }
+            }
           }
           this.n = live; H.draw(top);
         },
-        shift(dx) { for (const f of F) { f.x += dx; f.tx += dx; } for (const b of B) b.x += dx; },
+        shift(dx) { for (const f of F) { f.x += dx; f.tx += dx; f.x0 += dx; f.ax += dx; } for (const b of B) b.x += dx; },
         /* for picking up (inspect.js): one of a flock out feeding; tossed back, it and the rest of them are off along the
            beach */
         pickables(list) {
@@ -952,7 +1017,7 @@ void main(){
               const b = B[fi * PER + k]; if (b.held) continue;
               const g = Layout.shoreDZ(b.x), x = b.x, z = Layout.shoreZ(b.x) + b.r * Math.sqrt(1 + g * g);
               list.push({ kind: 'sandpiper', x, y: b.y + 0.06, z, r: 0.12, yaw: b.yaw, size: 1, reach: 35,
-                take() { b.held = true; }, give(how) { b.held = false; if (how !== 'back') away(f, th.cx, false); } });
+                take() { b.held = true; }, give(how) { b.held = false; if (how !== 'back' && f.mode === 'feed') f.alarm = th.cx; } });
             }
           });
         },

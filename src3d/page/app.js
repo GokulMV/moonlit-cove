@@ -18,7 +18,7 @@
 
   const st = {
     t: 4, last: 0, motion: store.get('motion', reduced ? 0.45 : 0.7), soft: store.get('soft2', 0.22),
-    timeMode: store.get('timeMode', 'live'), hour: store.get('hour', 23), full: store.get('full', true), flow: 1, offset: 0,
+    timeMode: store.get('timeMode', 'live'), hour: store.get('hour', 23), full: store.get('full2', false), flow: 1, offset: 0,
     lightsMode: store.get('lightsMode', 'auto'), L: { string: 0, lantern: 0, van: 0, fairy: 0 },
     chapter: null, from: null, to: null, camT: 1, cur: null,
     rs: 1, fms: [], S: null, entered: false, hintGone: false, wrecked: false, toastTimer: 0
@@ -83,7 +83,7 @@
     document.body.classList.toggle('reading', !!c);
     d.classList.toggle('menu-mode', false);
     if (c) { $('dEyebrow').textContent = c.eyebrow; $('dTitle').textContent = c.title; $('dBody').innerHTML = docText(c.id); d.hidden = false; d.scrollTop = 0; goView(c.cam); }
-    else { d.hidden = true; goView('wide'); }
+    else { d.hidden = true; if (Engine.bottle.phase !== 'putback') goView('wide'); }   /* (the camera waits while the letter is put back in its bottle) */
   }
   $('dClose').addEventListener('click', () => openChapter(null));
   addEventListener('keydown', e => {
@@ -176,16 +176,25 @@
     if (cfg.kind === 'paper') {
       const o = cfg.origin;
       if (o === 'bottle') {
-        /* the bottle goes back to its place (straight from your hands if the letter never came out); a letter being read
-           rolls up and goes back into it there, and the cork hops back in after it */
-        Engine.bottle.abort();
-        if (Engine.paper.mode !== 'hidden') { const h = Engine.bottle.letterRest(); Engine.paper.setOrigin(h.p, h.q, h.s); Engine.paper.close(() => Engine.bottle.letterBack()); }
+        /* a letter being read goes back the way it came out: the bottle is picked up again, the letter rolls up and goes in
+           at its neck, the cork is fetched off the sand and twisted back in, and the bottle is put down where it lay (the
+           camera waits for it before it goes). If the letter never came out, the bottle goes straight back to its place */
+        let pb = null;
+        if (Engine.paper.mode !== 'hidden' && !reduced && Engine.bottle.phase === 'down') {
+          pb = Engine.bottle.putBack(() => { if (!rd.on && !st.chapter && st.to !== V.wide) goView('wide'); });
+          if (pb) { Engine.paper.setOrigin(pb.p, pb.q, pb.s); Engine.paper.close(() => Engine.bottle.letterIn()); rd.putting = true; }
+        }
+        if (!pb) {
+          Engine.bottle.abort();
+          if (Engine.paper.mode !== 'hidden') { const h = Engine.bottle.letterRest(); Engine.paper.setOrigin(h.p, h.q, h.s); Engine.paper.close(() => Engine.bottle.letterBack()); }
+        }
       } else if (Engine.paper.mode === 'hidden') Engine.prop(o, true);
       else Engine.paper.close(() => Engine.prop(o, true));
     }
     rd.id = null; rd.cfg = null;
     document.body.classList.remove('reading-book'); $('reader').hidden = true;
-    if (!goingElsewhere) { st.chapter = null; dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false')); Content.chapters.forEach(x => x.spot.classList.remove('on', 'dim')); goView('wide'); }
+    const waitBottle = rd.putting; rd.putting = false;
+    if (!goingElsewhere) { st.chapter = null; dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false')); Content.chapters.forEach(x => x.spot.classList.remove('on', 'dim')); if (!waitBottle) goView('wide'); }
   }
   /* books read by spread (two facing pages) on wide screens, by single page on phones */
   const spreadOf = s => Math.floor(s / 2);
@@ -273,7 +282,12 @@
   function updateSky(ms, S) {
     if (performance.now() - skyTick < 500) return; skyTick = performance.now();
     const d = new Date(ms), il = S.illum, hm = `${two(d.getHours())}:${two(d.getMinutes())}`, phase = Astro.phaseName(il.phase);
-    $('skyPhase').textContent = `${phase} · ${Math.round(il.fraction * 100)}%`;
+    /* the tide, from the moon: which way it is going, or high or low water if it is about to turn */
+    const T = S.tide, soon = m2 => m2 && m2 - ms < 35 * 60e3, hmOf = m2 => { const q = new Date(m2); return `${two(q.getHours())}:${two(q.getMinutes())}`; };
+    const tideTxt = soon(T.next.high) ? 'high tide' : soon(T.next.low) ? 'low tide' : T.rising ? 'tide coming in' : 'tide going out';
+    $('skyPhase').textContent = `${phase} · ${Math.round(il.fraction * 100)}% · ${tideTxt}`;
+    { const sp = Math.abs(Math.cos(il.phase * Math.PI * 4)), kind = sp > 0.75 ? 'Spring tides: the moon is ' + (il.phase > 0.25 && il.phase < 0.75 ? 'full or nearly' : 'new or nearly') + ', so the sun pulls with it. ' : sp < 0.35 ? 'Neap tides: the moon is at a quarter, the sun pulling across it. ' : '';
+      const el = $('tTide'); if (el) el.textContent = `${kind}Tides follow the moon here: next high water ${T.next.high ? hmOf(T.next.high) : '—'}, next low ${T.next.low ? hmOf(T.next.low) : '—'}.`; }
     const alt = S.mAlt > 0 ? `moon ${Math.round(S.mAlt)}° up` : (S.sAlt > 0 ? `sun ${Math.round(S.sAlt)}° up` : 'moon below horizon');
     $('skyTime').textContent = `${hm} · ${city} · ${alt}`;
     drawMoon(mx, il.phase, il.fraction);
@@ -330,7 +344,7 @@
     store.set('timeMode', st.timeMode); syncTimeUI();
     toast(p === 'now' ? 'Back to live time.' : `Jumped to ${p}.`, false, 1800);
   }));
-  $('tFull').addEventListener('click', () => { st.full = !st.full; fullShift = null; store.set('full', st.full); syncTimeUI(); });
+  $('tFull').addEventListener('click', () => { st.full = !st.full; fullShift = null; store.set('full2', st.full); syncTimeUI(); });
   $('lSoft').value = st.soft; $('lSoft').addEventListener('input', e => { st.soft = +e.target.value; store.set('soft2', st.soft); });
   $('lMotion').value = st.motion; $('lMotion').addEventListener('input', e => { st.motion = +e.target.value; store.set('motion', st.motion); });
   /* how much life there is: insects, fish, animals (birds, bats, crabs, dolphins), shells (0.5 is the cove as it always was; shells start all out) */
@@ -874,6 +888,7 @@
     for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
+    campObs.push([Layout.castle.x, Layout.castle.z, (Layout.castle.radius || 0.9) * 0.82, 'castle']);
     obstacles.push(...campObs);
   }
   /* the obstacles near (x, z), each as [dx, dz, radius, the obstacle] measured from it to the point */
@@ -1100,8 +1115,14 @@
         const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
         if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
       }
-      const zMin = Layout.shoreZ(wk.x) - 1.2, zMax = Layout.vegZ(wk.x) + 2;
-      if (wk.z < zMin) { wk.z = zMin; moved = true; } else if (wk.z > zMax) { wk.z = zMax; moved = true; }
+      /* (out on a reef the sea is no wall: walk along its top as far as it goes; step off its edge and you are kept on it) */
+      const zMin = Layout.shoreZ(wk.x) - 1.2, zMax = Layout.vegZ(wk.x) + 2, onReef = W && W.reefTop(wk.x, wk.z) > -9;
+      if (wk.z < zMin && !onReef) {
+        if (wk.reef && W.reefTop(wk.ox, wk.oz) > -9) { wk.x = wk.ox; wk.z = wk.oz; wk.v *= 0.5; }
+        else wk.z = zMin;
+        moved = true;
+      } else if (wk.z > zMax) { wk.z = zMax; moved = true; }
+      wk.reef = onReef;
       if (W) {
         const m = W.massif(wk.x, wk.z);
         if (m > 0.6) {
@@ -1227,11 +1248,11 @@
       wk.hT += wk.turn * dt;
     }
     /* the pace eases up and down as a body's does; wading slows it */
-    const sz = Layout.shoreZ(wk.x), wade = sstep(sz + 0.2, sz - 1.0, wk.z);
+    const sz = Layout.shoreZ(wk.x), wade = wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
     want *= 1 - 0.45 * wade;
     wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
     wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
-    const ox = wk.x, oz = wk.z;
+    const ox = wk.x, oz = wk.z; wk.ox = ox; wk.oz = oz;
     wk.x -= Math.sin(wk.h) * wk.v * dt; wk.z -= Math.cos(wk.h) * wk.v * dt;
     walkCollide();
     const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
@@ -1284,7 +1305,7 @@
   function footstep(wade) {
     wk.foot = -wk.foot;
     const s = wk.foot * 0.095, x = wk.x + Math.cos(wk.h) * s, z = wk.z - Math.sin(wk.h) * s;
-    if (wade < 0.35 && Engine.marks) {
+    if (wade < 0.35 && Engine.marks && !wk.reef) {
       Engine.marks.foot(x, z, wk.h - wk.foot * 0.09, wk.foot < 0, sandWet(x, z), st.t);
       wk.prints++;
     } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
@@ -2412,6 +2433,6 @@
   }
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
-  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto };
+  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto, stepWalk };
   Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard, sketch, openSketch, closeSketch, tbox, openToolbox, closeToolbox });
 })();

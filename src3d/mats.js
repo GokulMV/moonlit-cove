@@ -17,10 +17,35 @@ const Mats = (() => {
        where it is centred (x, z) and how far it reaches, whether it is ready; its size */
     uLeafShM: { value: null }, uLeafShX: { value: new THREE.Matrix4() }, uLeafShA: { value: V4() }, uLeafShS: { value: new THREE.Vector2(2048, 2048) }
   };
-  /* the shoreline the shaders draw (glsl.js), kept up to date by the engine as the camera moves along the coast;
-     shaders built without U take these on their own */
-  const coastU = { uHeadL: { value: Array.from({ length: Layout.NGL }, () => V4(0, 1, 0, 0)) }, uCoast: { value: V4() }, uCoastP: { value: V4() }, uCoastQ: { value: V4() } };
+  /* the shoreline the shaders draw (glsl.js COAST): a strip of numbers along the coast round the camera, the shore's z,
+     its slope and the forest edge's z (Layout's own), every half metre for two kilometres either way (row 0) and every
+     four metres for sixteen (row 1). Each row is a ring: sample i sits at x = i·step, in column i mod N, so as the camera
+     moves only the samples coming into reach are worked out, a few thousand a frame at most. Shaders built without U take
+     these uniforms on their own; uTideZ is how far up the beach the tide has the water (Layout.tide) */
+  const CT = { N: 4096, step: [0.5, 4] }, ctData = new Float32Array(CT.N * 2 * 4);
+  const ctTex = new THREE.DataTexture(ctData, CT.N, 2, THREE.RGBAFormat, THREE.FloatType);
+  ctTex.magFilter = ctTex.minFilter = THREE.NearestFilter; ctTex.generateMipmaps = false; ctTex.needsUpdate = true;
+  const coastU = { uCoastT: { value: ctTex }, uCoastW: { value: V4(-1, 1, -8, 8) }, uTideZ: { value: 0 } };
   Object.assign(U, coastU);
+  const ctFill = [[0, 0], [0, 0]]; let ctVer = -1;
+  function coastFill(camX, budget = 3000) {
+    if (ctVer !== Layout.coastVer) { ctVer = Layout.coastVer; ctFill[0] = [0, 0]; ctFill[1] = [0, 0]; budget = Infinity; }
+    let did = 0;
+    const put = (row, i) => { const x = i * CT.step[row], k = ((((i % CT.N) + CT.N) % CT.N) + row * CT.N) * 4; ctData[k] = Layout.shoreMeanZ(x); ctData[k + 1] = Layout.shoreDZ(x); ctData[k + 2] = Layout.vegZ(x); ctData[k + 3] = 0; did++; };
+    for (let row = 0; row < 2; row++) {
+      const st = CT.step[row], c = Math.round(camX / st), half = CT.N / 2 - 4, w0 = c - half, w1 = c + half;
+      let [f0, f1] = ctFill[row];
+      if (f1 <= w0 || f0 >= w1 || f1 <= f0) f0 = f1 = c;      /* (nothing of the old reach is left: start again from the camera) */
+      f0 = Math.max(f0, w0); f1 = Math.min(f1, w1);
+      /* outward from what is there, toward the camera's side first */
+      while ((f0 > w0 || f1 < w1) && did < budget) { if (f1 < w1 && (f1 - c <= c - f0 || f0 <= w0)) put(row, f1++); else if (f0 > w0) put(row, --f0); }
+      ctFill[row] = [f0, f1];
+    }
+    const [a, b] = ctFill[0], [c2, d2] = ctFill[1];
+    U.uCoastW.value.set(a * CT.step[0] + 0.5, (b - 2) * CT.step[0], c2 * CT.step[1] + 4, (d2 - 2) * CT.step[1]);
+    if (did) ctTex.needsUpdate = true;
+    return did;
+  }
   /* aerial perspective, the same as the ground's: far things fade toward the horizon's colour */
   const FOG = `
 uniform vec4 uFog;
@@ -57,8 +82,8 @@ float rkH(vec3 p, float nk, float ck){
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' ? '\nattribute float aRock; varying float vRock;' : ''))
-        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' ? '\n  vRock = aRock;' : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : ''))
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : ''))
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
   vec4 wpp = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -95,7 +120,7 @@ float rkH(vec3 p, float nk, float ck){
     vec3 g = vec3(rkH(vWPos + vec3(e, 0.0, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, e, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, 0.0, e), nk, ck) - h0)/e;
     vec3 gv = mat3(viewMatrix)*(g*smoothstep(70.0, 12.0, rkD2));
     normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
-      if (key === 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', '0.08*vRock')}
+      if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', '0.08*vRock')}
   /* where it is bare rock, the boulders' relief, and the joints between its blocks */
   if (vRock > 0.02){ float rkD2 = distance(vWPos, cameraPosition);
     if (rkD2 < 90.0){ float nk = smoothstep(9.0, 3.0, rkD2), ck = smoothstep(16.0, 4.0, rkD2), cl = smoothstep(110.0, 12.0, rkD2); const float e = 0.008;
@@ -106,7 +131,7 @@ float rkH(vec3 p, float nk, float ck){
       vec3 gv = mat3(viewMatrix)*(g*vRock*smoothstep(90.0, 20.0, rkD2));
       normal = normalize(normal - (gv - dot(gv, normal)*normal)); } }`);
       /* hills and headlands: rock on the steep and seaward parts, leaf litter and scrub elsewhere */
-      if (key === 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   float wetK = 0.0;
   { float n1 = vnz(vWPos*0.9), n2 = vnz(vWPos*3.7 + 2.0), n3 = vnz(vWPos*13.0);
     vec3 rockC = diffuseColor.rgb*(0.72 + 0.42*n2 + 0.16*n3 - 0.14*smoothstep(0.6, 0.85, vnz(vWPos*vec3(1.2, 4.0, 1.2))));
@@ -129,11 +154,21 @@ float rkH(vec3 p, float nk, float ck){
     vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3);
     diffuseColor.rgb = mix(vegC, rockC, vRock);
     float sea = smoothstep(5.0, -0.5, vWPos.z - shoreZc(vWPos.x));
-    wetK = smoothstep(1.8, 0.1, vWPos.y)*sea*vRock;
+    wetK = smoothstep(${key === 'reef' ? '0.75, 0.0' : '1.8, 0.1'}, vWPos.y)*sea*vRock;
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), smoothstep(0.35, 0.0, abs(vWPos.y - 0.15))*smoothstep(0.4, 0.7, vnz(vWPos*4.0))*sea*vRock*0.7);
   }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, 0.35, wetK);`);
+  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);`);
+      /* packed sand (the sand castles): its grain, a few tenths of a millimetre of relief in specks, lighter and darker */
+      if (key === 'sandc') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+  diffuseColor.rgb *= 0.95 + 0.07*vnz(vWPos*61.0) + 0.05*vnz(vWPos*173.0 + 5.0);`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  { float sdD = distance(vWPos, cameraPosition), nk = smoothstep(3.5, 0.8, sdD), mk = smoothstep(16.0, 2.5, sdD); const float e = 0.0035;
+    #define SDH(p) (0.0022*vnz(p*14.0 + 7.0) + 0.0016*vnz(p*41.0) + 0.0007*nk*vnz(p*127.0 + 3.0))
+    float h0 = SDH(vWPos);
+    vec3 g = vec3(SDH(vWPos + vec3(e, 0.0, 0.0)) - h0, SDH(vWPos + vec3(0.0, e, 0.0)) - h0, SDH(vWPos + vec3(0.0, 0.0, e)) - h0)/e;
+    #undef SDH
+    vec3 gv = mat3(viewMatrix)*(g*mk);
+    normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
       /* the forest canopy seen from afar: clumps of leaves, light through the edges */
       if (key === 'canopy') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   { float a = vnz(vWPos*vec3(1.1, 1.6, 1.1)), b = vnz(vWPos*3.3 + 5.0), c = vnz(vWPos*9.0);
@@ -151,7 +186,7 @@ float rkH(vec3 p, float nk, float ck){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' ? ROCK : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};
@@ -254,5 +289,5 @@ void main(){
     });
     return m;
   }
-  return { U, coastU, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
+  return { U, coastU, coastFill, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
 })();
