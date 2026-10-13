@@ -107,28 +107,32 @@ const FloraKit = (() => {
        here and there; the ridges checked across every few centimetres into blocks, crumbling in small flakes that leave a
        pinkish-brown scar. The fissures' walls are warm brown, their bottoms dark; the ridge tops weathered grey, with
        soft-edged crusts of pale lichen and, now and then, the rusty stain of algae */
-    meranti: { w: 512, h: 1024, tile: [0.6, 1.2], seed: 11, depth: 0.018,
+    meranti: { w: 512, h: 1024, tile: [0.6, 1.2], seed: 11, depth: 0.03,
       hgt(u, v, K, o) {
         /* (the network: long narrow plates, cells ten times as tall as they are wide, their edges ragged) */
         const c = K.c, wx = (K.fbm(u * 3, v * 2, 3, 2, 3) - 0.5) * 0.5 + (K.vn(u * 40, v * 40, 40, 40) - 0.5) * 0.12, wy = (K.fbm(u * 3 + 0.5, v * 2 + 0.3, 3, 2, 3) - 0.5) * 0.3;
         K.cellE(u * 10 + wx, v * 2 + wy, 10, 2, 0.06, 0.6, c, 0.95); const e1 = c[0], id = c[2];
         K.cellE(u * 23 + wx * 2, v * 5 + wy * 2, 23, 5, 0.026, 0.24, K.c2, 0.95); const e2 = K.c2[0];
-        const g1 = 1 - sm(0.0, 0.009 + 0.006 * K.vn(u * 7, v * 5, 7, 5), e1), g2 = (1 - sm(0.0, 0.004, e2)) * sm(0.35, 0.6, K.vn(u * 9 + 3, v * 7, 9, 7));
+        /* (V-shaped fissures a centimetre or so either side of the plates' edges, their width wandering) */
+        const g1 = 1 - sm(0.0, 0.011 + 0.008 * K.vn(u * 7, v * 5, 7, 5), e1), g2 = (1 - sm(0.0, 0.0045, e2)) * sm(0.35, 0.6, K.vn(u * 9 + 3, v * 7, 9, 7));
         /* (each plate checked across in places, rough on top, and flaking) */
         const ck = v * 13 + id * 9.1 + 0.45 * (K.vn(u * 30, v * 13, 30, 13) - 0.5), cf = ck - Math.floor(ck);
         const chk = (1 - sm(0.0, 0.05, Math.min(cf, 1 - cf))) * sm(0.55, 0.7, K.vn(id * 97 + Math.floor(ck) * 0.37, 0.5, 512, 512));
-        const fn = K.fbm(u * 30 + 2.2, v * 30, 30, 30, 4), fl = sm(0.6, 0.64, fn) * (1 - g1);
-        const rough = 0.08 * (K.fbm(u * 48, v * 40, 48, 40, 3) - 0.5) + 0.035 * (K.vn(u * 220, v * 300, 220, 300) - 0.5);
-        o[0] = clamp(0.9 - 0.78 * Math.pow(g1, 0.7) - 0.25 * g2 * (1 - g1) + (id - 0.5) * 0.12 * (1 - g1) - 0.1 * chk * (1 - g1) - 0.1 * fl + rough);
-        o[1] = fl; o[2] = patches(u, v, K, 3, 0.22, 1.7); o[3] = patches(u, v, K, 2, 0.06, 5.1);
+        const fn = K.fbm(u * 16 + 2.2, v * 14, 16, 14, 4), fl = sm(0.645, 0.67, fn) * (1 - g1);
+        const rough = 0.09 * (K.fbm(u * 48, v * 40, 48, 40, 3) - 0.5) + 0.04 * (K.vn(u * 220, v * 300, 220, 300) - 0.5);
+        o[0] = clamp(0.88 - 0.72 * Math.pow(g1, 0.75) - 0.22 * g2 * (1 - g1) + (id - 0.5) * 0.16 * (1 - g1) - 0.1 * chk * (1 - g1) - 0.1 * fl + rough);
+        o[1] = fl; o[2] = patches(u, v, K, 3, 0.22, 1.7); o[3] = id;
       },
       col(u, v, P, K) {
-        const h = P.h, top = sm(0.55, 0.85, h), pv = K.fbm(u * 6, v * 3, 6, 3, 3);
-        let col = mix3(mix3([0.05, 0.031, 0.022], [0.12, 0.07, 0.05], sm(0.1, 0.55, h)), mix3([0.115, 0.1, 0.088], [0.18, 0.16, 0.14], pv), top);
-        col = mix3(col, mix3([0.17, 0.1, 0.075], [0.2, 0.125, 0.095], K.vn(u * 60, v * 60, 60, 60)), P.m1 * 0.85);
-        col = mix3(col, mix3([0.24, 0.25, 0.22], [0.3, 0.31, 0.275], K.vn(u * 40, v * 40, 40, 40)), P.m2 * (0.15 + 0.45 * top));
-        col = mix3(col, [0.16, 0.07, 0.025], P.m3 * 0.3 * (0.3 + 0.7 * top));
-        const mo = 0.88 + 0.24 * K.fbm(u * 3 + 9.1, v * 2, 3, 2, 3), ao = Math.max(0.42, 1 - 5 * Math.max(0, P.cav)), ed = 1 + 1.2 * Math.max(0, P.cvx);
+        const h = P.h, top = sm(0.5, 0.8, h), id = P.m3;
+        /* (the fissures' walls warm brown and their bottoms dark but never black; each plate's own grey-brown or pinker
+           brown, mottled) */
+        const plate = mix3(mix3([0.13, 0.112, 0.096], [0.165, 0.128, 0.105], id), [0.19, 0.172, 0.152], K.fbm(u * 5, v * 4, 5, 4, 3) * 0.7);
+        let col = mix3(mix3([0.07, 0.044, 0.031], [0.13, 0.08, 0.056], sm(0.12, 0.5, h)), plate, top);
+        col = mix3(col, mix3([0.17, 0.1, 0.075], [0.2, 0.125, 0.095], K.vn(u * 60, v * 60, 60, 60)), P.m1 * 0.8);
+        col = mix3(col, mix3([0.23, 0.24, 0.21], [0.29, 0.3, 0.265], K.vn(u * 40, v * 40, 40, 40)), P.m2 * (0.15 + 0.45 * top));
+        col = mix3(col, [0.16, 0.07, 0.025], sm(0.72, 0.8, K.fbm(u * 2 + 5.1, v * 2 + 2.2, 2, 2, 5)) * 0.3 * (0.3 + 0.7 * top));
+        const mo = 0.9 + 0.2 * K.fbm(u * 3 + 9.1, v * 2, 3, 2, 3), ao = Math.max(0.58, 1 - 3 * Math.max(0, P.cav)), ed = 1 + 0.8 * Math.max(0, P.cvx);
         return [col.map(q => q * mo * ao * ed), 0.92 - 0.06 * top];
       } },
     /* tualang (Koompassia excelsa): fairly smooth and faintly glossy, purplish grey with a faint green tint; broad soft
@@ -428,7 +432,7 @@ const FloraKit = (() => {
       const x = cx + sxn * th, z = cz + szn * th, along = xi * reach2;
       /* (the bark's grain turned to the plank's sweep: near upright where it leaves the trunk, lying lower toward its tip) */
       const an = mix(1.3, 0.5, sm(0, 1, xi)), Fx = Math.cos(an), Fy = -Math.sin(an);
-      const u = (along * (-Fy) + y * Fx) / tile[0], v = (along * Fx + y * -Fy) / tile[1];
+      const u = (along * (-Fy) + y * Fx) / tile[0] + (side > 0 ? 0.37 : 0), v = (along * Fx + y * -Fy) / tile[1] + (side > 0 ? 0.21 : 0);
       const ao = (0.5 + 0.5 * sm(0, 0.5, xi)) * (0.62 + 0.38 * sm(-0.2, 1.2, y)) * (0.82 + 0.18 * q), soil = 1 - sm(-0.05, 0.3, y);
       let c = [ao, ao, ao]; c = mix3(c, [0.55 * ao, 0.45 * ao, 0.35 * ao], soil * 0.6);
       const mk = (o.moss ?? 0.4) * (1 - sm(0.3, 2.5, y)) * Models.vn(along * 0.8, y * 1.3, 3.3 + a0); c = mix3(c, [0.62 * ao, 0.82 * ao, 0.42 * ao], mk * 0.7);

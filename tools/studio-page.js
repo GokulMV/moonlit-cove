@@ -27,7 +27,9 @@ const Studio = (() => {
   const pm = new T.PMREMGenerator(R), env = pm.fromScene(envScene, 0.02).texture;
   const scene = new T.Scene(); scene.environment = env;
   /* backdrops: the sheet's soft grey-blue; the hero's daylight sky, deep blue overhead to a pale horizon */
-  const grad = stops => { const bg = document.createElement('canvas'); bg.width = 4; bg.height = 512; const x = bg.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 512); stops.forEach(([p, c]) => gr.addColorStop(p, c)); x.fillStyle = gr; x.fillRect(0, 0, 4, 512); const t = new T.CanvasTexture(bg); t.colorSpace = T.SRGBColorSpace; return t; };
+  const grad = stops => { const bg = document.createElement('canvas'); bg.width = 64; bg.height = 1024; const x = bg.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 1024); stops.forEach(([p, c]) => gr.addColorStop(p, c)); x.fillStyle = gr; x.fillRect(0, 0, 64, 1024);
+    /* (dithered, so the sky shows no bands) */ const im = x.getImageData(0, 0, 64, 1024), d = im.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 2.2; d[i] += n; d[i + 1] += n; d[i + 2] += n; } x.putImageData(im, 0, 0);
+    const t = new T.CanvasTexture(bg); t.colorSpace = T.SRGBColorSpace; return t; };
   const bgSheet = grad([[0, '#7f8fa3'], [0.55, '#b9c0c8'], [1, '#8c8478']]), bgSky = grad([[0, '#4f7fb8'], [0.45, '#94b6d6'], [0.8, '#d6e0e6'], [1, '#e3e1da']]);
   scene.background = bgSheet;
   const key = new T.DirectionalLight(0xfff4e6, 2.6), fill = new T.DirectionalLight(0xdce8ff, 0.9), rim = new T.DirectionalLight(0xffffff, 1.4), amb = new T.AmbientLight(0xffffff, 0.15);
@@ -78,9 +80,11 @@ const Studio = (() => {
   groundMesh.rotation.x = -Math.PI / 2; groundMesh.receiveShadow = true; groundMesh.visible = false; scene.add(groundMesh);
   function setGround(kind, rad, cx = 0, cz = 0) {
     if (!kind || kind === 'none') { groundMesh.visible = false; return; }
-    const t = gTex[kind] || (gTex[kind] = groundTex(kind)), tile = kind === 'grid' ? 10 : 6;
-    t.repeat.set(2 * rad / tile, 2 * rad / tile); t.offset.set(-rad / tile + cx / tile, -rad / tile - cz / tile);
-    Object.assign(groundMesh.material, { map: t, roughness: kind === 'water' ? 0.15 : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
+    /* (the forest floor is the real one, FloraLitter's: leaves two or three deep, with its relief) */
+    const lit = kind === 'forest' ? FloraLitter.tex({ N: 1024, tile: 2 }) : null;
+    const t = lit ? lit.map : gTex[kind] || (gTex[kind] = groundTex(kind)), tile = lit ? lit.tile : kind === 'grid' ? 10 : 6;
+    for (const m of lit ? [lit.map, lit.normalMap] : [t]) { m.repeat.set(2 * rad / tile, 2 * rad / tile); m.offset.set(-rad / tile + cx / tile, -rad / tile - cz / tile); }
+    Object.assign(groundMesh.material, { map: t, normalMap: lit ? lit.normalMap : null, roughness: kind === 'water' ? 0.15 : lit ? lit.rough : 0.95, metalness: 0 }); groundMesh.material.needsUpdate = true;
     groundMesh.scale.setScalar(rad); groundMesh.position.set(cx, -0.002, cz); groundMesh.visible = true;
   }
 
