@@ -218,6 +218,49 @@ const FloraBlade = (() => {
         return [c[0], c[1], c[2], cov, 150 + 26 * f * sm(0.02, 0.15, t)];
       });
     } },
+    /* one lobe of a papaya's palmate leaf: from the leaf's middle (the card's foot) a midrib out to a pointed tip, and off
+       it two or three pairs of side lobes, pointed too, each with its vein, the cuts between them deep; the veins pale
+       and sunk */
+    papaya: { W: 256, H: 512, blur: 1.2, bump: 5, paint(a, b, r, o, h, W, H) {
+      const cx = W / 2, hue = o.hue ?? 96, sat = o.sat ?? 0.42, lig = o.light ?? 0.3, Lm = H - 6;
+      const shapes = [];
+      /* (the middle lobe along the midrib, and the side lobes off it) */
+      shapes.push(leaflet([cx, H - 2], [0, -1], [1, 0], Lm, 0, u => W * 0.17 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.75))), 0.9) * (u < 0.1 ? 0.3 + 7 * u : 1), u => W * 0.17 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.75))), 0.9) * (u < 0.1 ? 0.3 + 7 * u : 1), 40));
+      const nS = o.side ?? 3;
+      for (let k = 0; k < nS; k++) for (const sd of [-1, 1]) {
+        const t = 0.3 + 0.2 * k + (r() - 0.5) * 0.04, y0 = H - 2 - t * Lm, an = 0.62 + 0.12 * k + (r() - 0.5) * 0.08, L = W * (0.48 - 0.1 * k) * (0.9 + 0.15 * r());
+        const d = [sd * Math.sin(an), -Math.cos(an)], ac = [-sd * Math.cos(an), -Math.sin(an)];
+        shapes.push(leaflet([cx, y0], d, ac, L, 0.12, u => L * 0.2 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.7))), 0.9), u => L * 0.17 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.pow(u, 0.7))), 0.9), 24));
+      }
+      for (const lf of shapes) { a.fillStyle = hsla(hue + (r() - 0.5) * 4, sat, lig); path(a, lf.poly); a.fill(); h.fillStyle = grey(154); path(h, lf.poly); h.fill(); }
+      /* (the veins: pale, sunk, out along each lobe, with the faint net between) */
+      for (const lf of shapes) { taper(h, lf.C, u => 5 * (1 - 0.8 * u), grey(124)); taper(a, lf.C, u => 3.2 * (1 - 0.8 * u) + 0.5, hsla(hue - 30, 0.35, lig * 1.75, 0.85)); }
+      a.save(); for (const lf of shapes) { path(a, lf.poly); } a.clip(); a.strokeStyle = hsla(hue - 20, 0.3, lig * 1.4, 0.18); a.lineWidth = 0.6;
+      for (let i = 0; i < 160; i++) { const x = r() * W, y = r() * H; a.beginPath(); a.moveTo(x, y); a.lineTo(x + (r() - 0.5) * 14, y + (r() - 0.5) * 14); a.stroke(); } a.restore();
+      if (o.yellow) { a.globalCompositeOperation = 'source-atop'; a.fillStyle = `hsla(48,60%,45%,${o.yellow})`; a.fillRect(0, 0, W, H); a.globalCompositeOperation = 'source-over'; }
+    } },
+    /* a banana's blade: oblong, a broad pale midrib, the side veins close and parallel, nearly square to it, curving
+       toward the tip at the margin; torn along them by the wind into strips (o.torn); old ones yellowing and drying
+       brown from the edges (o.dry) */
+    banana: { W: 512, H: 1024, blur: 0.8, bump: 5, paint(a, b, r, o, h, W, H) {
+      const cx = W / 2, hue = o.hue ?? 92, sat = o.sat ?? 0.5, lig = o.light ?? 0.33, Wm = W / 2 - 4, ph = r() * 9, torn = o.torn ?? 0.3, dry = o.dry ?? 0;
+      const wid = t => (t < 0.06 ? 0.35 + 0.65 * Math.sin(Math.PI / 2 * t / 0.06) : 1) * (t > 0.88 ? Math.sqrt(Math.max(0, 1 - Math.pow((t - 0.88) / 0.12, 2))) : 1) * (1 - 0.06 * t);
+      /* (the tears: for each side, cuts along the veins from the margin in toward the midrib) */
+      const tears = [[], []]; for (const sd of [0, 1]) for (let i = 0, n = Math.round(torn * 46 * (0.6 + 0.8 * r())); i < n; i++) tears[sd].push([0.08 + 0.86 * r(), 0.15 + 0.82 * r() * r() + 0.15 * torn]);
+      pix(a, h, W, H, (x, y) => {
+        const t = 1 - y / H, dx = x - cx, w = wid(t) * Wm * (dx < 0 ? 1 + 0.03 * Math.sin(t * 9 + ph) : 1 - 0.03 * Math.sin(t * 7 + ph)); if (w < 1) return null;
+        const q = Math.abs(dx) / w, cov = w - Math.abs(dx) + 0.5; if (cov <= 0) return null;
+        /* (a vein's line: leaving the midrib nearly square, bending toward the tip near the margin) */
+        const s = t * H + Math.abs(dx) * 0.22 + q * q * q * w * 0.5;
+        for (const [tt, dep] of tears[dx < 0 ? 0 : 1]) { if (q > 1 - dep && Math.abs(s - (tt * H + q * w * 0.22 + q * q * q * w * 0.5)) < 0.7 + 5 * (q - 1 + dep) / dep) return null; }   /* (each tear a gap that widens toward the margin as the strips part) */
+        const vn = Math.pow(Math.abs(Math.cos(Math.PI * s / 4.5)), 6), mw = Math.max(3, W * 0.032 * (1 - 0.6 * t)), mid = sm(mw + 1.5, mw - 0.5, Math.abs(dx));
+        let c = rgb(hue + 4 * t, sat, lig * (0.93 + 0.1 * Math.sin(t * 23 + ph) * 0.3 + 0.05 * vn));
+        c = c.map((v, i) => mix(v, rgb(hue - 22, 0.42, lig * 1.75)[i], mid * 0.9));
+        const de = dry * sm(1 - 0.35 * dry, 1, q + 0.1 * Math.sin(t * 31 + ph)); if (de > 0) c = c.map((v, i) => mix(v, [128, 98, 52][i], clamp(de * 1.4)));
+        if (o.yellow) c = c.map((v, i) => mix(v, rgb(52, 0.55, 0.45)[i], o.yellow));
+        return [c[0], c[1], c[2], cov, 150 + 8 * (1 - q * q) - 30 * mid + 9 * vn];
+      });
+    } },
     /* a pandan's strap: long, narrow, grey-green, folded in an M (a keel up its middle, a pleat to each side), fine veins
        along it, small hooked spines along both edges pointing toward its tip; the tip often dry */
     pandan: { W: 128, H: 1024, blur: 0.8, bump: 6, paint(a, b, r, o, h, W, H) {

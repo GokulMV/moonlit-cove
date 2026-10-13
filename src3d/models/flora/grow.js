@@ -46,15 +46,15 @@ const FloraGrow = (() => {
     /* a rambutan, 10-16 m: smooth grey-brown bark, a spreading dome */
     rambutan: { H: [10, 15], bole: [0.22, 0.3], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 0], h: [1, 1], reach: [1, 1], t0: [0.2, 0.2] },
       crown: { R: [0.42, 0.5], D: [0.52, 0.62], dome: 0.9, fR: [1.8, 2.4], clumps: [6, 8], cR: [0.7, 0.95], limbs: [3, 5], spread: 1.0 },
-      leaf: 'rambL', bark: 'canopy', moss: 0.4, cards: 1.1 },
+      leaf: 'rambL', bark: 'canopy', moss: 0.4, cards: 1.3 },
     /* a durian, 25-40 m: a tall straight trunk, small buttresses, an open, irregular crown on long limbs */
     durian: { H: [25, 36], bole: [0.42, 0.52], dbh: H => 0.026 * H, taper: 0.62, butts: { n: [2, 4], h: [0.6, 1.3], reach: [0.5, 1.2], t0: [0.12, 0.2] },
-      crown: { R: [0.2, 0.26], D: [0.36, 0.46], dome: 0.85, fR: [2.4, 3.2], clumps: [6, 8], cR: [0.9, 1.25], limbs: [4, 6], spread: 1.0 },
-      leaf: 'durianL', bark: 'meranti', moss: 0.5, cards: 0.95 },
+      crown: { R: [0.24, 0.3], D: [0.38, 0.48], dome: 0.85, fR: [2.4, 3.2], clumps: [6, 8], cR: [0.9, 1.25], limbs: [4, 6], spread: 1.0 },
+      leaf: 'durianL', bark: 'meranti', barkTint: [0.66, 0.55, 0.48], moss: 0.5, cards: 1.25 },
     /* a cempedak, 12-20 m: grey bark, a dense crown; its fruit straight off the trunk and the big limbs */
-    cempedak: { H: [12, 18], bole: [0.28, 0.38], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 2], h: [0.5, 0.9], reach: [0.4, 0.8], t0: [0.1, 0.16] },
+    cempedak: { H: [12, 18], bole: [0.28, 0.38], dbh: H => 0.035 * H, taper: 0.62, butts: { n: [0, 0], h: [0.5, 0.9], reach: [0.4, 0.8], t0: [0.1, 0.16] },
       crown: { R: [0.36, 0.42], D: [0.48, 0.58], dome: 0.9, fR: [2.0, 2.6], clumps: [6, 8], cR: [0.8, 1.05], limbs: [3, 5], spread: 1.0 },
-      leaf: 'cempL', bark: 'fig', moss: 0.4, cards: 1.1 } };
+      leaf: 'cempL', bark: 'fig', barkTint: [0.62, 0.57, 0.52], moss: 0.4, cards: 1.25 } };
 
   /* a direction at angle `el` off the axis t, turned `az` round it */
   function aside(t, az, el) {

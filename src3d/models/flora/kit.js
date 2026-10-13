@@ -266,6 +266,44 @@ const FloraKit = (() => {
         const ao = Math.max(0.42, 1 - 4 * Math.max(0, P.cav)), ed = 1 + 1.2 * Math.max(0, P.cvx);
         return [col.map(q => q * ao * ed), 0.86];
       } },
+    /* a papaya's trunk: smooth, grey-green, set all over with big crescent leaf scars in a spiral, each with a raised
+       rim, its floor sunk and darker, the dots of its vessels in it */
+    papaya: { w: 512, h: 512, tile: [0.48, 0.48], seed: 89, depth: 0.006,
+      hgt(u, v, K, o) {
+        const rows = 12, row = v * rows, ri = Math.floor(row), fy = row - ri, per = 4, off = (ri * 0.25 + 0.13 * Math.sin(ri * 2.1)) % 1;
+        const cu = (u * per - off + 8) % 1, dx = (cu - 0.5) * (K.tile0 / per), dy = (fy - 0.45) * (K.tile1 / rows);
+        const e = Math.hypot(dx / 0.017, (dy + 0.004 * Math.cos(dx / 0.017 * 1.5)) / 0.0085), rim = Math.exp(-(((e - 1) / 0.18) ** 2)), floor = sm(1.05, 0.8, e);
+        o[0] = clamp(0.6 + 0.12 * rim - 0.18 * floor + 0.04 * (K.fbm(u * 8, v * 8, 8, 8, 4) - 0.5) + 0.015 * (K.vn(u * 160, v * 160, 160, 160) - 0.5)); o[1] = floor; o[2] = rim; o[3] = patches(u, v, K, 4, 0.15, 2.7);
+      },
+      col(u, v, P, K) {
+        let col = mix3([0.2, 0.23, 0.17], [0.27, 0.3, 0.23], K.fbm(u * 5, v * 5, 5, 5, 3)); col = mix3(col, [0.12, 0.11, 0.085], P.m1 * 0.75); col = mix3(col, [0.32, 0.33, 0.27], P.m2 * 0.35); col = mix3(col, [0.15, 0.17, 0.12], P.m3 * 0.4);
+        const ao = Math.max(0.5, 1 - 4 * Math.max(0, P.cav));
+        return [col.map(q => q * ao), 0.7];
+      } },
+    /* a banana's pseudostem: its leaf sheaths wrapped one in another, fine fibres up them, the edge of each a long line;
+       green, blotched brown-purple, the outermost drying to brown paper and splitting */
+    banana: { w: 256, h: 1024, tile: [0.5, 1.0], seed: 97, depth: 0.004,
+      hgt(u, v, K, o) {
+        const sh = u * 5 + 0.15 * K.fbm(u * 2, v * 3, 2, 3, 3), si = Math.floor(sh), fr = sh - si, edge = sm(0.035, 0.0, fr) + 0.6 * sm(0.94, 1.0, fr);
+        const fib = K.vn(u * 180, v * 6, 180, 6), dry = sm(0.62, 0.7, K.fbm(u * 3 + si * 0.37, v * 2, 3, 2, 4)) * (si % 2 ? 1 : 0.4);
+        o[0] = clamp(0.7 + 0.1 * (fr - 0.5) - 0.12 * edge + 0.05 * (fib - 0.5) + 0.06 * dry * (K.vn(u * 60, v * 12, 60, 12) - 0.5)); o[1] = dry; o[2] = patches(u, v, K, 6, 0.2, 5.3); o[3] = edge;
+      },
+      col(u, v, P, K) {
+        let col = mix3([0.17, 0.26, 0.08], [0.27, 0.34, 0.12], K.fbm(u * 6, v * 2, 6, 2, 3)); col = mix3(col, [0.11, 0.07, 0.05], P.m2 * 0.7); col = mix3(col, [0.3, 0.24, 0.15], P.m1 * 0.9); col = mix3(col, [0.08, 0.1, 0.04], P.m3 * 0.4);
+        return [col.map(q => q * Math.max(0.55, 1 - 4 * Math.max(0, P.cav))), 0.6];
+      } },
+    /* a coconut palm's trunk: grey, ringed close by old leaf scars, split by fine vertical cracks, pale with lichen in
+       patches and dark where the rain runs */
+    coconut: { w: 512, h: 512, tile: [0.6, 0.6], seed: 101, depth: 0.006,
+      hgt(u, v, K, o) {
+        const ring = v * 26 + 0.25 * (K.fbm(u * 4, v * 6, 4, 6, 3) - 0.5), fr = ring - Math.floor(ring), lip = Math.exp(-(((fr - 0.5) / 0.08) ** 2)), gro = Math.exp(-(((fr - 0.62) / 0.06) ** 2));
+        const cr = Math.abs(K.fbm(u * 40 + 3 * K.vn(u * 4, v * 30, 4, 30), v * 3, 40, 3, 3) - 0.5), crack = sm(0.035, 0.0, cr);
+        o[0] = clamp(0.62 + 0.14 * lip - 0.2 * gro - 0.2 * crack + 0.04 * (K.vn(u * 120, v * 120, 120, 120) - 0.5)); o[1] = patches(u, v, K, 4, 0.2, 6.6); o[2] = patches(u, v, K, 3, 0.25, 1.9); o[3] = crack;
+      },
+      col(u, v, P, K) {
+        let col = mix3([0.19, 0.18, 0.165], [0.28, 0.27, 0.25], K.fbm(u * 5, v * 3, 5, 3, 3)); col = mix3(col, [0.36, 0.37, 0.32], P.m1 * 0.4); col = mix3(col, [0.11, 0.1, 0.09], P.m2 * 0.35); col = mix3(col, [0.07, 0.065, 0.06], P.m3 * 0.6);
+        return [col.map(q => q * Math.max(0.5, 1 - 4 * Math.max(0, P.cav))), 0.85];
+      } },
     /* a liana's stem: ropy, its fibres twisting round it in strands of uneven width */
     liana: { w: 256, h: 1024, tile: [0.25, 1.0], seed: 83, depth: 0.007,
       hgt(u, v, K, o) {
@@ -283,7 +321,7 @@ const FloraKit = (() => {
   function bark(kind) {
     if (barkCache.has(kind)) return barkCache.get(kind);
     const B = BARK[kind]; if (!B) throw new Error('FloraKit: no bark called ' + kind);
-    const W = B.w, H = B.h, K = Object.assign(noiseKit(B.seed), { c: new Float32Array(5), c2: new Float32Array(5) });
+    const W = B.w, H = B.h, K = Object.assign(noiseKit(B.seed), { c: new Float32Array(5), c2: new Float32Array(5), tile0: B.tile[0], tile1: B.tile[1] });
     const Hf = new Float32Array(W * H), M = [new Float32Array(W * H), new Float32Array(W * H), new Float32Array(W * H)], o = [0, 0, 0, 0];
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       o[1] = o[2] = o[3] = 0; B.hgt((i + 0.5) / W, (j + 0.5) / H, K, o); const k = j * W + i; Hf[k] = o[0]; M[0][k] = o[1]; M[1][k] = o[2]; M[2][k] = o[3];

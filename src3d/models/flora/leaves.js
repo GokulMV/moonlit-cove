@@ -67,7 +67,7 @@ const FloraLeaf = (() => {
       top: [108, 0.4, 0.19], tj: [6, 0.06, 0.035], under: [95, 0.28, 0.35], underK: 0.08, flush: [348, 0.42, 0.3], flushK: 0.22, yellow: 0.03, dmg: 0.22, twig: [40, 0.3, 0.3], gloss: [0.32, 28, 0.7] },
     /* a rambutan: pinnate, two to four pairs of elliptic leaflets 7-15 cm, dull green above, paler beneath */
     ramb: { back: [1.15, 1.2, 1.0], card: 0.7, L: [0.07, 0.13], W: [0.38, 0.46], shape: 'elliptic', tip: 0.04, veins: [8, 11], va: 1.0, arr: 'pinnate', twigs: [3, 4], per: [3, 5], leaflets: [4, 7],
-      top: [100, 0.34, 0.22], tj: [7, 0.06, 0.04], under: [90, 0.2, 0.38], underK: 0.06, flush: [40, 0.4, 0.38], flushK: 0.12, yellow: 0.04, dmg: 0.3, twig: [30, 0.25, 0.3], gloss: [0.2, 22, 0.85] },
+      top: [98, 0.36, 0.26], tj: [7, 0.06, 0.04], under: [90, 0.2, 0.4], underK: 0.06, flush: [40, 0.4, 0.38], flushK: 0.12, yellow: 0.04, dmg: 0.3, twig: [30, 0.25, 0.3], gloss: [0.2, 22, 0.85] },
     /* a durian: oblong, 10-15 cm, a long point, two-ranked; glossy green above, beneath silvered and golden with scales */
     durian: { back: [1.5, 1.12, 0.55], card: 0.7, L: [0.1, 0.16], W: [0.28, 0.36], shape: 'oblong', tip: 0.08, veins: [10, 14], va: 0.95, arr: 'two', twigs: [3, 4], per: [5, 8],
       top: [100, 0.36, 0.22], tj: [6, 0.06, 0.035], under: [38, 0.45, 0.45], underK: 0.16, flush: [55, 0.4, 0.42], flushK: 0.1, yellow: 0.03, dmg: 0.25, twig: [30, 0.35, 0.3], gloss: [0.28, 26, 0.75] },

@@ -12,7 +12,7 @@
    palm's fronds rising from the mud round its head of nuts.
    Each stands on the origin; o.seed varies it.
    ───────────────────────────────────────────────────────────── */
-(() => {
+const FloraPlant = (() => {
   const T = THREE, TAU = Math.PI * 2, V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (r, a) => a[0] + (a[1] - a[0]) * r(), mix = (a, b, t) => a + (b - a) * t;
   const sm = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -293,4 +293,5 @@
     }
     return assemble(g, bark, 'pandanus', blades, FloraBlade.material('nipa', tex, [0.28, 24, 0.9]), { H: 6 });
   });
+  return { arch, assemble, part, lump, syncarp, crozier };
 })();
