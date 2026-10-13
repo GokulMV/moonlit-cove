@@ -17,7 +17,7 @@
   </header>
   <button class="brand-show glass" id="bBrandShow" type="button" hidden title="Show the name" aria-label="Show the name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
 
-  <button class="full glass" id="bFull" type="button" title="Full screen (Esc to leave)" aria-label="Full screen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fx-in" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="fx-out" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
+  <button class="fsbtn glass" id="bFull" type="button" title="Full screen (Esc to leave)" aria-label="Full screen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fx-in" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="fx-out" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
   <button class="sky glass" id="sky" type="button" aria-label="Sky and time settings">
     <canvas id="moonIcon" width="64" height="64" aria-hidden="true"></canvas>
     <span class="sky-text"><b id="skyPhase">Moon</b><span id="skyTime">--:--</span></span>
@@ -246,7 +246,19 @@
         <label class="rd-vol" for="rdVol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg><input id="rdVol" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="Radio volume"></label>
       </div>
       <p class="rd-msg" id="rdMsg" aria-live="polite"></p>
-      <button class="rd-add" id="rdAdd" type="button" hidden>Add songs from this device</button>
+      <div class="rd-mine" id="rdMine" hidden>
+        <div class="rd-spot" id="rdSpot" hidden></div>
+        <ol class="rd-list" id="rdList" aria-label="Your songs"></ol>
+        <form class="rd-sp" id="rdSpForm" hidden>
+          <input id="rdSpIn" type="text" inputmode="url" enterkeyhint="go" placeholder="Paste a Spotify link or embed code" aria-label="A Spotify link or embed code" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button type="submit">Add</button>
+          <p class="rd-sp-hint">On Spotify: Share, then Copy link, or Embed and Copy. A song, album, playlist or podcast.</p>
+        </form>
+        <div class="rd-adds">
+          <button class="rd-add" id="rdAdd" type="button">Add songs from this device</button>
+          <button class="rd-add" id="rdSpAdd" type="button" aria-expanded="false" aria-controls="rdSpForm">Add from Spotify</button>
+        </div>
+      </div>
       <input id="rdFile" type="file" accept="audio/*" multiple hidden>
     </section>
   </div>

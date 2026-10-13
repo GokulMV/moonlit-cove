@@ -56,7 +56,8 @@ const Content = {
       { what: 'The van’s engine and knocks', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
     ] },
     { group: 'Radio', items: [
-      { what: 'World radio, on the picnic table', who: 'Stations from the Radio Browser community directory. Every stream belongs to its broadcaster and plays straight from them; nothing is recorded or re-hosted here', link: ['radio-browser.info', 'https://www.radio-browser.info'], licence: 'Your own songs play from your device and never leave it' }
+      { what: 'World radio, on the table by the fire', who: 'Stations from the Radio Browser community directory. Every stream belongs to its broadcaster and plays straight from them; nothing is recorded or re-hosted here', link: ['radio-browser.info', 'https://www.radio-browser.info'], licence: 'Your own songs play from your device and never leave it' },
+      { what: 'Spotify in your songs', who: 'A Spotify link pasted into the radio plays in Spotify’s own embedded player, through its iFrame API. It all streams from Spotify, whole songs for listeners signed in to Spotify in that browser and previews otherwise; the links are kept only on your device', link: ['developer.spotify.com/documentation/embeds', 'https://developer.spotify.com/documentation/embeds'], licence: 'Spotify’s Developer Terms' }
     ] },
     { group: 'Code and ideas', items: [
       { what: 'WebGL plumbing', who: 'three.js r160, © 2010–2023 three.js authors', link: ['github.com/mrdoob/three.js', 'https://github.com/mrdoob/three.js'], licence: 'MIT' },

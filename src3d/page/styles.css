@@ -49,15 +49,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); out
 /* sky chip */
 /* full screen: the button under the sky's; in it, nothing over the view but the view, and the way out shows itself
    again when the pointer moves */
-.full { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 74px); right: max(var(--gut), 22px); width: 38px; height: 38px; display: grid; place-items: center; padding: 0; color: var(--dim); pointer-events: auto; border-radius: 50%; transition: opacity .6s, color .2s; }
-.full:hover { color: var(--fg); }
-.full svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.full .fx-out, body.immersive .full .fx-in { display: none; }
-body.immersive .full .fx-out { display: inline; }
-body.immersive .full { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+.fsbtn { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 74px); right: max(var(--gut), 22px); width: 38px; height: 38px; display: grid; place-items: center; padding: 0; color: var(--dim); pointer-events: auto; border-radius: 50%; transition: opacity .6s, color .2s; }
+.fsbtn:hover { color: var(--fg); }
+.fsbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.fsbtn .fx-out, body.immersive .fsbtn .fx-in { display: none; }
+body.immersive .fsbtn .fx-out { display: inline; }
+body.immersive .fsbtn { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+body.immersive.seated .fsbtn { top: calc(env(safe-area-inset-top, 0px) + 74px); }     /* (under the Stand up button) */
 body.immersive #hud .brand, body.immersive #hud .brand-show, body.immersive #hud .sky, body.immersive #hud #spots, body.immersive #hud .dock, body.immersive #hud .hint,
 body.immersive #hud .walkbar, body.immersive #hud .walkhud, body.immersive #hud .bouquet, body.immersive #hud .toast { opacity: 0 !important; pointer-events: none !important; transition: opacity .6s; }
-body.immersive.idle #hud .full { opacity: 0; }
+body.immersive.idle #hud .fsbtn { opacity: 0; }
+body.immersive #hud .seathud > * { transition: opacity .6s; }
+body.immersive.idle #hud .seathud:not(:hover) > * { opacity: 0; pointer-events: none; }
+body.immersive.idle #hud .seathud:hover > * { cursor: auto; }
 body.immersive.idle, body.immersive.idle #scene { cursor: none; }
 .sky { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 20px); right: max(var(--gut), 22px); display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; }
 .sky canvas { width: 32px; height: 32px; }
@@ -488,6 +492,33 @@ body.seat-hint-off .seat-hint { opacity: 0; }
 .rd-msg { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--dim); }
 .rd-msg:empty { display: none; }
 .rd-add { justify-self: start; border: 1px dashed rgba(242, 183, 105, 0.5); background: rgba(242, 183, 105, 0.06); color: var(--amber); padding: 8px 12px; border-radius: 10px; font: 500 13px/1 var(--body); }
+.rd-mine[hidden], .rd-spot[hidden], .rd-sp[hidden] { display: none; }
+.rd-mine { display: grid; gap: 8px; min-width: 0; }
+.rd-adds { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Spotify's own player, sized to what it plays: a song or an episode in a strip, a list a little taller */
+.rd-spot { height: 80px; border-radius: 12px; overflow: hidden; background: rgba(0, 0, 0, 0.28); }
+.rd-spot iframe { display: block; width: 100%; height: 100%; border: 0; border-radius: 12px; }
+.rd-spot:empty::before { content: 'Opening Spotify’s player…'; display: grid; place-items: center; height: 100%; font: 400 11.5px/1 var(--mono); color: var(--faint); }
+.rd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; max-height: 106px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.rd-list:empty { display: none; }
+.rd-list li { display: flex; align-items: center; gap: 2px; border-radius: 9px; }
+.rd-list li[aria-current="true"] { background: rgba(242, 183, 105, 0.12); }
+.rd-list .pick { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border: 0; border-radius: 9px; background: none; color: var(--fg); text-align: left; font: 400 13px/1.3 var(--body); }
+.rd-list .pick:hover { background: rgba(255, 255, 255, 0.05); }
+.rd-list .pick b { min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-list li[aria-current="true"] .pick b { color: var(--amber); }
+.rd-list .pick span { flex: none; margin-left: auto; font: 400 10.5px/1 var(--mono); color: var(--faint); letter-spacing: .03em; }
+.rd-list .x { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--faint); }
+.rd-list .x:hover { color: var(--fg); background: rgba(255, 255, 255, 0.07); }
+.rd-list .x svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.rd-sp { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.rd-sp input { min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(0, 0, 0, 0.28); color: var(--fg); font: 400 13px/1.25 var(--body); }
+.rd-sp input::placeholder { color: var(--faint); }
+.rd-sp input:focus { outline: none; border-color: rgba(242, 183, 105, 0.6); }
+.rd-sp button { padding: 8px 14px; border: 0; border-radius: 10px; background: var(--amber); color: var(--night); font: 600 13px/1 var(--body); }
+.rd-sp-hint { grid-column: 1 / -1; margin: 0; font: 400 11.5px/1.4 var(--body); color: var(--dim); }
+.rd-vol input:disabled { opacity: 0.35; }
+@media (max-height: 760px) { .rd-list { max-height: 68px; } }
 body.seated #hud .dock, body.seated #hud #spots .spot:not(.extra), body.seated #hud .hint, body.seated #hud .walkbar, body.seated #hud .brand, body.seated #hud .brand-show, body.seated #hud .sky { opacity: 0 !important; pointer-events: none !important; }
 body.seated #scene { cursor: grab; }
 body.seated.look-drag #scene { cursor: grabbing; }

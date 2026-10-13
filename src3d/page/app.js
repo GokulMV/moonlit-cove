@@ -377,7 +377,9 @@
   const lockWake = async () => { try { if ('wakeLock' in navigator && !wake && document.visibilityState === 'visible') { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { /* not granted: the screen may dim */ } };
   const unlockWake = () => { try { if (wake) wake.release(); } catch (e) { /* already gone */ } wake = null; };
   const immersive = () => document.body.classList.contains('immersive');
-  const poke = () => { document.body.classList.remove('idle'); clearTimeout(idleT); if (immersive()) idleT = setTimeout(() => document.body.classList.add('idle'), 2500); };
+  /* (still for a few seconds, the button and the cursor step back; never while something is being typed) */
+  const nap = () => { const a = document.activeElement; if (a && a.matches && a.matches('input[type="text"], textarea')) { idleT = setTimeout(nap, 2500); return; } document.body.classList.add('idle'); };
+  const poke = () => { document.body.classList.remove('idle'); clearTimeout(idleT); if (immersive()) idleT = setTimeout(nap, 2500); };
   function setImmersive(on) {
     document.body.classList.toggle('immersive', on); const b = $('bFull');
     b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen'); b.title = on ? 'Leave full screen (Esc)' : 'Full screen (Esc to leave)';
@@ -395,7 +397,7 @@
   $('bFull').addEventListener('click', e => { e.stopPropagation(); toggleFull(); });
   for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (!fsEl() && immersive()) setImmersive(false); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && immersive()) lockWake(); });
-  addEventListener('pointermove', poke, { passive: true }); addEventListener('pointerdown', poke, { passive: true });
+  addEventListener('pointermove', poke, { passive: true }); addEventListener('pointerdown', poke, { passive: true }); addEventListener('keydown', poke, { passive: true });
   /* (where the browser gave no full screen of its own, Esc still leaves) */
   addEventListener('keydown', e => { if (e.key === 'Escape' && immersive() && !fsEl()) setImmersive(false); });
 
@@ -1941,6 +1943,7 @@
      , . change seat; Q E turn the chair */
   addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      if (e.target && e.target.id === 'rdSpIn') { closeSpForm(); $('rdSpAdd').focus(); e.stopPropagation(); e.preventDefault(); return; }
       if (!$('wish').hidden) { closeWish(); e.stopPropagation(); e.preventDefault(); return; }
       if (tbox.view >= 0) { tbViewClose(); e.stopPropagation(); e.preventDefault(); return; }
       if (tbox.on) { closeToolbox(); e.stopPropagation(); e.preventDefault(); return; }
@@ -1960,9 +1963,10 @@
     e.stopPropagation(); e.preventDefault();
   }, true);
 
-  /* ── the radio on the picnic table: stations from the Radio Browser community directory, or the visitor's own
-     songs, played from their device and never uploaded. It is an <audio> of its own, so it plays whether or not
-     the cove's sound is on; the bed of waves and crickets steps back a little while it does ── */
+  /* ── the radio on the table by the fire: stations from the Radio Browser community directory, or the visitor's own
+     songs, played from their device and never uploaded, or from Spotify, by Spotify's own player. It is an <audio> of
+     its own, so it plays whether or not the cove's sound is on; the bed of waves and crickets steps back a little while
+     it does ── */
   const RB = ['de1.api.radio-browser.info', 'nl1.api.radio-browser.info', 'at1.api.radio-browser.info', 'fi1.api.radio-browser.info'];
   const MIME = { MP3: 'audio/mpeg', AAC: 'audio/aac', 'AAC+': 'audio/aac', OGG: 'audio/ogg', OPUS: 'audio/ogg; codecs=opus' };
   /* Safari lets an <audio> start later (once the station list is in) only if it first played inside the tap */
@@ -2051,6 +2055,8 @@
     const Q = radio.songs; if (!Q.length || !radio.on) return;
     if (!auto) { radio.fails = 0; radio.msg = ''; }
     radio.qi = ((i % Q.length) + Q.length) % Q.length; radio.state = 'tuning'; radio.dialT = 0.06 + 0.88 * (radio.qi + 0.5) / Q.length; hiss(false);
+    if (Q[radio.qi].sp) { stopEl(); spPlay(Q[radio.qi]); mediaInfo(null); syncRadioUI(); return; }
+    spStop();
     const s = Q[radio.qi], el = radioEl(); el.src = s.url; el.volume = clamp(radio.vol * (radio.heard ?? 1), 0, 1);
     const p = el.play(); if (p && p.catch) p.catch(err => { if (radio.on && el.getAttribute('src') === s.url && !(err && err.name === 'AbortError')) failed(); });
     mediaInfo(s.name, 'Your songs'); syncRadioUI();
@@ -2060,16 +2066,17 @@
     const el = radioEl(); if (!el.dataset.woken) { el.dataset.woken = '1'; if (!el.getAttribute('src')) { el.src = SILENCE; const p = el.play(); if (p && p.catch) p.catch(() => {}); } }
     if (radio.src === 'songs') {
       if (radio.songs.length) playSong(radio.qi);
-      else { radio.on = false; radio.msg = 'Pick some songs from your device: they play here and never leave it.'; syncRadioUI(); $('rdFile').click(); }
+      else { radio.on = false; radio.msg = NONE; syncRadioUI(); }
       return;
     }
     radio.state = 'tuning'; radio.dialT = Math.random(); hiss(true); syncRadioUI();
     stationList().then(L => { if (!radio.on || radio.src !== 'world') return; const k = L.findIndex(s => s.id === store.get('radioStation', '')); tune(k >= 0 ? k : Math.floor(Math.random() * Math.min(20, L.length))); },
       () => { if (!radio.on || radio.src !== 'world') return; radioOff(true); radio.state = 'error'; radio.msg = 'Couldn’t reach the radio just now. Your own songs still play: switch to Your songs.'; syncRadioUI(); });
   }
+  function stopEl() { const el = radio.el; if (el && el.getAttribute('src')) { el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) { /* nothing to let go of */ } } }
   function radioOff(keepMsg) {
     radio.on = false; radio.state = 'off'; clearTimeout(radio.timer); hiss(false);
-    const el = radio.el; if (el && el.getAttribute('src')) { el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) { /* nothing to let go of */ } }
+    stopEl(); spStop();
     if (!keepMsg) radio.msg = '';
     mediaInfo(null); syncRadioUI();
   }
@@ -2078,10 +2085,10 @@
   function radioClick() { const P = seat.on && Engine.seatPose(seat.i); if (!P || P.near !== 'fire') { sit(seatBy('chair1')); if (!radio.on) radioOn(); } else radioToggle(); }
   function step(d) { if (!radio.on) return; radio.msg = ''; if (radio.src === 'songs') playSong(radio.qi + d); else if (radio.stations) tune(radio.si + d, d); }
   function setSource(s, start = true) {
-    if (s === radio.src) { if (start && s === 'songs' && !radio.songs.length) $('rdFile').click(); return; }
+    if (s === radio.src) { if (start && s === 'songs' && !radio.songs.length) { radio.msg = NONE; syncRadioUI(); } return; }
     const was = radio.on; if (was) radioOff();
     radio.src = s; store.set('radioSrc', s); radio.msg = '';
-    if (start && s === 'songs' && !radio.songs.length) { syncRadioUI(); $('rdFile').click(); return; }
+    if (start && s === 'songs' && !radio.songs.length) { radio.msg = NONE; syncRadioUI(); return; }
     if (was && start) radioOn(); else syncRadioUI();
   }
   /* your songs: picked from this device, played from object URLs in this tab, never sent anywhere */
@@ -2090,8 +2097,167 @@
     if (!fs.length) return;
     const first = radio.songs.length;
     for (const f of fs) radio.songs.push({ name: tidy(f.name.replace(/\.[^.]+$/, ''), 80) || 'A song', url: URL.createObjectURL(f) });
-    setSource('songs', false); radio.on = true; radioCtx(); playSong(first);
+    renderSongs(); setSource('songs', false); radio.on = true; radioCtx(); playSong(first);
   });
+  /* ── Spotify in your songs: a link or an embed code pasted in (Spotify's Share, then Copy link, or Embed), played
+     by Spotify's own player in the radio. Through its iFrame API when that loads, so the radio's power, its dial and
+     the next song follow the player; as a plain player otherwise. Everything streams from Spotify: whole songs for a
+     listener signed in to Spotify in this browser, short previews otherwise. The links are kept on this device ── */
+  const NONE = 'Add songs from this device, or paste a Spotify link.';
+  const SPT = ['track', 'album', 'playlist', 'episode', 'show', 'artist'];
+  const SPN = { track: 'song', album: 'album', playlist: 'playlist', episode: 'episode', show: 'podcast', artist: 'artist' };
+  const spName = t => `A Spotify ${SPN[t] || 'song'}`;
+  const spH = t => (t === 'track' || t === 'episode' ? 80 : 152);
+  const spUri = s => `spotify:${s.sp.type}:${s.sp.id}`;
+  /* a link (open.spotify.com/…, with or without intl-xx/ or embed/ in it), a spotify: URI, or a whole <iframe> embed code */
+  function spotifyRef(text) {
+    let u = String(text || '').trim(); if (!u) return null;
+    const src = u.match(/\bsrc\s*=\s*["']([^"']+)["']/i); if (src) u = src[1];
+    u = u.replace(/&amp;/g, '&');
+    const k = u.match(/^spotify:(?:user:[^:]+:)?(track|album|playlist|episode|show|artist):([A-Za-z0-9]{22})$/);
+    if (k) return { type: k[1], id: k[2] };
+    if (/^(https?:\/\/)?(spotify\.link|spotify\.app\.link)\//i.test(u)) return { short: true };
+    if (/^(open|play)\.spotify\.com\//i.test(u)) u = 'https://' + u;
+    let url; try { url = new URL(u); } catch (e) { return null; }
+    if (!/^(open|play)\.spotify\.com$/i.test(url.hostname)) return null;
+    const p = url.pathname.split('/').filter(Boolean), i = p.findIndex(x => SPT.includes(x));
+    return i >= 0 && /^[A-Za-z0-9]{22}$/.test(p[i + 1] || '') ? { type: p[i], id: p[i + 1] } : null;
+  }
+  const SP = { api: null, loading: null, ctl: null, making: false, plain: false, uri: '', want: '', played: false, last: null, askT: 0, endT: 0, resT: 0 };
+  /* the iFrame API, fetched the first time a Spotify song is played (nothing of Spotify's loads before that) */
+  function spApi() {
+    if (SP.api) return Promise.resolve(SP.api);
+    if (!SP.loading) SP.loading = new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('slow')), 10000);
+      window.onSpotifyIframeApiReady = api => { clearTimeout(t); SP.api = api; res(api); };
+      const sc = document.createElement('script'); sc.src = 'https://open.spotify.com/embed/iframe-api/v1'; sc.async = true;
+      sc.onerror = () => { clearTimeout(t); rej(new Error('blocked')); };
+      document.head.appendChild(sc);
+    });
+    return SP.loading;
+  }
+  function spSize(s) { const h = spH(s.sp.type), box = $('rdSpot'), f = box.querySelector('iframe'); box.style.height = h + 'px'; if (f) { f.setAttribute('width', '100%'); f.setAttribute('height', String(h)); } }
+  function spPlay(s) {
+    const uri = spUri(s); SP.want = uri; SP.played = false; clearTimeout(SP.endT); clearTimeout(SP.resT);
+    /* (a browser that won't let a player start by itself — Safari — leaves it to a press on the player) */
+    clearTimeout(SP.askT); SP.askT = setTimeout(() => { if (SP.want === uri && radio.on && radio.state !== 'playing') { radio.state = 'waiting'; radio.msg = 'Press play on the Spotify player to start it.'; syncRadioUI(); } }, 5000);
+    if (SP.plain) { spPlain(s); return; }
+    const go = c => (c.resume || c.play).call(c);
+    if (SP.ctl) {
+      spSize(s);
+      if (SP.uri === uri) go(SP.ctl);     /* (the same one again: on from where it was, straight from the press) */
+      else { SP.uri = uri; (SP.ctl.loadEntity || SP.ctl.loadUri).call(SP.ctl, uri); SP.resT = setTimeout(() => { if (SP.want === uri && radio.on && SP.ctl) go(SP.ctl); }, 600); }
+      return;
+    }
+    if (SP.making) return;     /* (the player is on its way; it starts whatever is wanted once it is ready) */
+    SP.making = true; spSize(s); $('rdSpot').replaceChildren();
+    const plain = () => { SP.making = false; SP.plain = true; if (SP.want) { const c = radio.songs[radio.qi]; if (c && c.sp) spPlain(c); } else syncRadioUI(); };
+    spApi().then(api => {
+      const host = $('rdSpot'), el = document.createElement('div'); host.replaceChildren(el);
+      const first = radio.songs[radio.qi], u0 = first && first.sp ? spUri(first) : uri; SP.uri = u0;
+      /* (a player that never comes is given up for the plain one) */
+      const late = setTimeout(() => { if (!SP.ctl) plain(); }, 9000);
+      api.createController(el, { uri: u0, width: '100%', height: spH(first && first.sp ? first.sp.type : s.sp.type) }, ctl => {
+        clearTimeout(late); if (SP.plain) { try { ctl.destroy(); } catch (e) { /* gone */ } return; }
+        SP.ctl = ctl; SP.making = false; const f = host.querySelector('iframe'); if (f) f.title = 'Spotify player';
+        const c = radio.songs[radio.qi]; if (c && c.sp) spSize(c); syncRadioUI();
+        ctl.addListener('ready', () => {
+          if (!SP.want || !radio.on) return;
+          if (SP.want === SP.uri) { go(ctl); return; }
+          /* (another was asked for while the player was on its way) */
+          SP.uri = SP.want; (ctl.loadEntity || ctl.loadUri).call(ctl, SP.want); clearTimeout(SP.resT); SP.resT = setTimeout(() => { if (radio.on && SP.want === SP.uri) go(ctl); }, 600);
+        });
+        ctl.addListener('playback_update', e => spUpdate(e && e.data));
+      });
+    }, plain);
+  }
+  /* without the API: Spotify's player as a plain embed, played from its own button */
+  function spPlain(s) {
+    const box = $('rdSpot'), src = `https://open.spotify.com/embed/${s.sp.type}/${s.sp.id}?utm_source=generator&theme=0`;
+    let f = box.querySelector('iframe');
+    if (!f) { f = document.createElement('iframe'); f.title = 'Spotify player'; f.allow = 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture'; f.loading = 'lazy'; box.replaceChildren(f); }
+    if (f.getAttribute('src') !== src) f.src = src;
+    SP.uri = spUri(s); spSize(s); clearTimeout(SP.askT); radio.state = 'waiting'; radio.msg = 'Press play on the Spotify player to start it.'; syncRadioUI();
+  }
+  function spStop() {
+    SP.want = ''; clearTimeout(SP.askT); clearTimeout(SP.endT); clearTimeout(SP.resT);
+    if (SP.ctl) { try { SP.ctl.pause(); } catch (e) { /* not ready yet */ } }
+    else if (SP.plain) { const f = $('rdSpot').querySelector('iframe'); if (f && f.getAttribute('src') !== 'about:blank') { f.src = 'about:blank'; SP.uri = ''; } }
+  }
+  /* what the player says it is doing: playing (from the radio or from its own button) lights the dial and quiets the
+     cove a little; paused on its own button switches the radio off; a song played to its end goes on to the next */
+  function spUpdate(d) {
+    if (!d) return; SP.last = d;
+    const cur = radio.src === 'songs' && radio.songs[radio.qi], mine = !!(cur && cur.sp && spUri(cur) === SP.uri);
+    if (!d.isPaused) {
+      if (!mine) { try { SP.ctl.pause(); } catch (e) { /* gone */ } return; }
+      clearTimeout(SP.endT); clearTimeout(SP.askT); SP.played = true; SP.want = SP.uri;
+      if (!radio.on) { radio.on = true; radioCtx(); }
+      stopEl(); hiss(false);
+      const st0 = radio.state; radio.state = d.isBuffering ? 'tuning' : 'playing';
+      if (radio.state === 'playing' && /Spotify player/.test(radio.msg)) radio.msg = '';
+      if (st0 !== radio.state) syncRadioUI();
+      return;
+    }
+    if (!mine || !SP.played) return;     /* (paused before it ever played: still starting, or waiting for a press) */
+    if (d.duration > 0 && d.position >= d.duration - 1500 && radio.on && radio.songs.length > 1) {
+      clearTimeout(SP.endT); SP.endT = setTimeout(() => { if (SP.last && SP.last.isPaused && radio.on && radio.src === 'songs') playSong(radio.qi + 1, true); }, 2200);
+      return;
+    }
+    if (radio.on) { radio.on = false; radio.state = 'off'; SP.want = ''; mediaInfo(null); syncRadioUI(); }
+  }
+  const saveSpotify = () => store.set('radioSpotify', radio.songs.filter(x => x.sp).slice(-30).map(x => ({ t: x.sp.type, id: x.sp.id, n: x.name })));
+  /* its name, asked of Spotify (the player shows it anyway); kept with the link */
+  function spTitle(s) {
+    fetchT('https://open.spotify.com/oembed?url=' + encodeURIComponent(`https://open.spotify.com/${s.sp.type}/${s.sp.id}`), 6000)
+      .then(r => (r.ok ? r.json() : null)).then(j => { const t = j && tidy(j.title, 80); if (t && radio.songs.includes(s)) { s.name = t; saveSpotify(); renderSongs(); syncRadioUI(); } }).catch(() => {});
+  }
+  function addSpotify(text) {
+    const r = spotifyRef(text);
+    if (!r) { radio.msg = 'That isn’t a Spotify link. On Spotify, choose Share, then Copy link (or Embed, then Copy).'; syncRadioUI(); return false; }
+    if (r.short) { radio.msg = 'A spotify.link short link can’t be opened from here. Open it, then copy the open.spotify.com link it goes to.'; syncRadioUI(); return false; }
+    let i = radio.songs.findIndex(x => x.sp && x.sp.type === r.type && x.sp.id === r.id);
+    if (i < 0) { radio.songs.push({ name: spName(r.type), sp: r }); i = radio.songs.length - 1; saveSpotify(); spTitle(radio.songs[i]); renderSongs(); }
+    setSource('songs', false); radio.on = true; radioCtx(); playSong(i);
+    return true;
+  }
+  /* the list of your songs: one played by a press, any taken off (a song from this device is let go of too) */
+  function renderSongs() {
+    const L = $('rdList'); L.replaceChildren();
+    radio.songs.forEach((x, i) => {
+      const li = document.createElement('li'), b = document.createElement('button'), n = document.createElement('b'), k = document.createElement('span'), del = document.createElement('button');
+      b.type = 'button'; b.className = 'pick'; n.textContent = x.name; k.textContent = x.sp ? 'Spotify' : 'this device'; b.append(n, k);
+      b.addEventListener('click', () => { if (i === radio.qi && radio.on && radio.src === 'songs') return; radio.on = true; radioCtx(); playSong(i); });
+      del.type = 'button'; del.className = 'x'; del.setAttribute('aria-label', `Take “${x.name}” off your songs`); del.title = 'Take it off your songs';
+      del.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      del.addEventListener('click', () => dropSong(i));
+      li.append(b, del); L.append(li);
+    });
+    markSong();
+  }
+  function markSong() { const kids = $('rdList').children; for (let i = 0; i < kids.length; i++) kids[i].setAttribute('aria-current', String(radio.src === 'songs' && i === radio.qi)); }
+  function dropSong(i) {
+    const Q = radio.songs, x = Q[i]; if (!x) return;
+    if (i === radio.qi && radio.on && radio.src === 'songs') radioOff();
+    if (x.sp && SP.uri === spUri(x)) { spStop(); SP.uri = ''; if (SP.plain) $('rdSpot').replaceChildren(); }
+    Q.splice(i, 1); if (x.url) URL.revokeObjectURL(x.url);
+    if (i < radio.qi) radio.qi--; radio.qi = clamp(radio.qi, 0, Math.max(0, Q.length - 1));
+    if (x.sp) saveSpotify();
+    if (!Q.length) radio.msg = NONE;
+    renderSongs(); syncRadioUI();
+  }
+  function closeSpForm() { $('rdSpForm').hidden = true; $('rdSpAdd').setAttribute('aria-expanded', 'false'); }
+  $('rdSpAdd').addEventListener('click', () => {
+    const f = $('rdSpForm'), open = f.hidden; f.hidden = !open; $('rdSpAdd').setAttribute('aria-expanded', String(open));
+    if (open) { $('rdSpIn').value = ''; $('rdSpIn').focus(); }
+  });
+  $('rdSpForm').addEventListener('submit', e => { e.preventDefault(); if (addSpotify($('rdSpIn').value)) { $('rdSpIn').value = ''; closeSpForm(); } });
+  /* (pasted in, it is added there and then) */
+  $('rdSpIn').addEventListener('paste', () => setTimeout(() => { const v = $('rdSpIn').value, r = spotifyRef(v); if (r && !r.short && addSpotify(v)) { $('rdSpIn').value = ''; closeSpForm(); } }, 0));
+  /* the Spotify links kept from before */
+  { const kept = store.get('radioSpotify', []);
+    for (const x of Array.isArray(kept) ? kept : []) if (x && SPT.includes(x.t) && /^[A-Za-z0-9]{22}$/.test(x.id || '')) radio.songs.push({ name: tidy(x.n, 80) || spName(x.t), sp: { type: x.t, id: x.id } });
+    renderSongs(); }
   $('rdPower').addEventListener('click', radioToggle);
   $('rdPrev').addEventListener('click', () => step(-1)); $('rdNext').addEventListener('click', () => step(1));
   $('rdAdd').addEventListener('click', () => $('rdFile').click());
@@ -2100,15 +2266,23 @@
   $('rdVol').addEventListener('input', e => { radio.vol = clamp(+e.target.value, 0, 1); store.set('radioVol', radio.vol); if (radio.el) radio.el.volume = clamp(radio.vol * (radio.heard ?? 1), 0, 1); });
   $('radio').addEventListener('keydown', e => e.stopPropagation());
   function syncRadioUI() {
-    const on = radio.on, songs = radio.src === 'songs', s = songs ? radio.songs[radio.qi] : radio.stations && radio.stations[radio.si], n = radio.songs.length;
-    let name = 'The radio', sub = songs ? (n ? `${n} ${n === 1 ? 'song' : 'songs'} from this device · off` : 'Songs from your device') : 'World radio · off';
-    if (on && !s) { name = 'Tuning in…'; sub = 'World radio'; }
-    else if (on) { name = s.name; sub = songs ? `Your songs · ${radio.qi + 1} of ${n}` : [s.where, s.codec].filter(Boolean).join(' · ') || 'World radio'; if (radio.state === 'tuning') sub = (songs ? 'Starting · ' : 'Tuning · ') + sub; }
+    const on = radio.on, songs = radio.src === 'songs', s = songs ? radio.songs[radio.qi] : radio.stations && radio.stations[radio.si], n = radio.songs.length, sp = !!(songs && s && s.sp);
+    let name = 'The radio', sub = songs ? (n ? `Your songs · ${n} ${n === 1 ? 'song' : 'songs'} · off` : 'From this device or Spotify') : 'World radio · off';
+    if (sp && !on && (SP.ctl || SP.plain)) { name = s.name; sub = `Spotify ${SPN[s.sp.type]} · paused`; }
+    else if (on && !s) { name = 'Tuning in…'; sub = 'World radio'; }
+    else if (on) {
+      name = s.name; sub = sp ? `Spotify ${SPN[s.sp.type]}${n > 1 ? ` · ${radio.qi + 1} of ${n}` : ''}` : songs ? `Your songs · ${radio.qi + 1} of ${n}` : [s.where, s.codec].filter(Boolean).join(' · ') || 'World radio';
+      if (radio.state === 'tuning') sub = (songs ? 'Starting · ' : 'Tuning · ') + sub; else if (radio.state === 'waiting') sub = 'Press play on the player · ' + sub;
+    }
     $('rdPower').setAttribute('aria-pressed', String(on));
     document.querySelectorAll('[data-rsrc]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.rsrc === radio.src)));
     $('rdName').textContent = name; $('rdSub').textContent = sub; $('rdMsg').textContent = radio.msg;
     $('rdPrev').disabled = $('rdNext').disabled = !on || (songs ? n < 2 : !radio.stations);
-    $('rdAdd').hidden = !songs; $('rdAdd').textContent = n ? 'Add more songs' : 'Add songs from this device';
+    $('rdMine').hidden = !songs; $('rdSpot').hidden = !(sp && (SP.ctl || SP.making || (SP.plain && on)));
+    $('rdAdd').textContent = radio.songs.some(x => x.url) ? 'Add more from this device' : 'Add songs from this device';
+    /* (Spotify's player plays at the device's own volume: the radio's knob can't reach it) */
+    $('rdVol').disabled = sp; $('rdVol').parentElement.title = sp ? 'Spotify’s player plays at this device’s own volume' : '';
+    markSong();
   }
   /* the system's media keys and notification follow the radio */
   function mediaInfo(title, artist) {
@@ -2455,7 +2629,7 @@
     wish.look += ((st.chapter === 'wishes' ? 1 : 0) - wish.look) * Math.min(1, dt * 1.5); Engine.setBoardLook(wish.look);
     /* the dial lights while it plays (and flickers while it tunes); the needle swings to the station */
     radio.dial += (radio.dialT - radio.dial) * Math.min(1, dt * 3);
-    const glow = radio.on ? (radio.state === 'playing' ? 1 : 0.55 + 0.25 * Math.sin(performance.now() / 70)) : 0;
+    const glow = radio.on ? (radio.state === 'playing' ? 1 : radio.state === 'waiting' ? 0.4 : 0.55 + 0.25 * Math.sin(performance.now() / 70)) : 0;
     radio.glow += (glow - radio.glow) * Math.min(1, dt * 6);
     Engine.setRadio(radio.glow * 0.8 / Math.max(0.05, (st.S && st.S.exposure) || 1), radio.dial);     /* (a warm glow, not a glare: night exposure is high) */
     /* the radio's loudness from where you are (it has a volume of its own; the bed of sound steps back only as far as the

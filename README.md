@@ -13,7 +13,8 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 - Drive the van down a coast that never repeats, and pitch camp anywhere
 - Let a sky lantern go with a wish, pinned to a board by the fire for everyone to read
 - Draw on the sketchboard and leave it in the toolbox for others to open
-- Sit by the fire and play the radio: world radio, or your own songs
+- Sit by the fire and play the radio: world radio, your own songs, or a Spotify link pasted in
+- Watch it full screen, nothing over it, for as long as you like (Esc to leave)
 
 ## Run it locally
 
@@ -64,3 +65,4 @@ The full list is in the cove itself, under **Credits and licences**.
 - Fonts: Fraunces, Instrument Sans, Caveat and JetBrains Mono (SIL OFL 1.1), via [Fontsource](https://github.com/fontsource/fontsource)
 - Sounds: the [Moodist](https://github.com/remvze/moodist) library (Pixabay Content License and CC0) and Kenney's [Starter Kit Racing](https://github.com/KenneyNL/Starter-Kit-Racing) (CC0)
 - Radio: stations from the [Radio Browser](https://www.radio-browser.info) directory, streamed straight from their broadcasters
+- Spotify links play in Spotify’s own [embedded player](https://developer.spotify.com/documentation/embeds), through its iFrame API
