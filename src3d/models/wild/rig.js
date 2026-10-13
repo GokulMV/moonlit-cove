@@ -512,6 +512,33 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     return { g, mesh, shells, geo };
   }
 
+  /* ── parts drawn see-through (an insect's glassy wings): their own skinned mesh on the same bones, each point's
+     colour [r, g, b, a] — a how solid (the veins dark and opaque, the panes between them clear) ── */
+  function glass(S, parts, B, o = {}) {
+    let nv = 0; for (const p of parts) nv += p.geo.attributes.position.count;
+    const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 4), si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4), idx = [];
+    let base = 0;
+    for (const p of parts) {
+      const g = p.geo, P = g.attributes.position, N = g.attributes.normal, cnt = P.count;
+      for (let i = 0; i < cnt; i++) {
+        const x = P.getX(i), y = P.getY(i), z = P.getZ(i), v = base + i;
+        pos.set([x, y, z], v * 3); nor.set([N.getX(i), N.getY(i), N.getZ(i)], v * 3);
+        const c = typeof p.col === 'function' ? p.col(x, y, z, i) : p.col; col.set([c[0], c[1], c[2], c[3] ?? 0.3], v * 4);
+        const ws = p.bind(x, y, z, i).filter(q => q[1] > 1e-5).sort((a, b) => b[1] - a[1]).slice(0, 4), t = ws.reduce((a, q) => a + q[1], 0) || 1;
+        ws.forEach((q, k) => { si[v * 4 + k] = q[0]; sw[v * 4 + k] = q[1] / t; });
+      }
+      const I = g.index ? g.index.array : Array.from({ length: cnt }, (_, i) => i); for (let k = 0; k < I.length; k++) idx.push(I[k] + base);
+      base += cnt;
+    }
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('normal', new T.BufferAttribute(nor, 3)); geo.setAttribute('color', new T.BufferAttribute(col, 4));
+    geo.setAttribute('skinIndex', new T.BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new T.BufferAttribute(sw, 4)); geo.setIndex(idx);
+    const mat = Mats.litP({ vertexColors: true, transparent: true, side: T.DoubleSide, depthWrite: false, roughness: o.rough ?? 0.12, clearcoat: 0.7, clearcoatRoughness: 0.04 }, 'creature-glass');
+    const mesh = new T.SkinnedMesh(geo, mat); mesh.bind(S.skeleton, B.mesh.bindMatrix);
+    mesh.boundingSphere = B.mesh.boundingSphere; mesh.castShadow = false; mesh.receiveShadow = true; mesh.renderOrder = 2;
+    B.g.add(mesh); return mesh;
+  }
+
   /* ── posing: a pose is every bone's turn (its quaternion, from the rest pose) and how far the root has moved ── */
   const _q = new T.Quaternion(), _q2 = new T.Quaternion(), _e = new T.Euler(), _v = new T.Vector3();
   class Pose {
@@ -677,5 +704,5 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     return g;
   }
 
-  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, eye, lid, chainTo, ccd, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
+  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, glass, eye, lid, chainTo, ccd, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
 })();

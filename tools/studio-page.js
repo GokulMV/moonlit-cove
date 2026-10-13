@@ -133,6 +133,8 @@ const Studio = (() => {
     /* (in the shade of the forest: no sun on it, only the sky's light and a little from one side) */
     R.toneMappingExposure = light === 'shade' ? 0.8 : 1.0;
     if (light === 'shade') { key.intensity = 0.55; key.castShadow = false; fill.intensity = 0.7; amb.intensity = 0.25; }
+    /* (night: a dim blue moon, the sky near black — for the things that glow) */
+    if (light === 'night') { scene.background = new T.Color('#070b14'); scene.fog = null; key.color.setRGB(0.6, 0.7, 1); key.intensity = 0.18; fill.intensity = 0.06; amb.intensity = 0.02; R.toneMappingExposure = 1.0; }
     syncLeaf(dir, new T.Vector3(1, 0.95, 0.86).multiplyScalar(key.intensity / Math.PI), new T.Vector3(0.42, 0.5, 0.62).multiplyScalar(light === 'shade' ? 1.3 : 1));
     return { c, rad, dir };
   }
