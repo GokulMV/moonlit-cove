@@ -36,55 +36,24 @@ const Flora = (() => {
     g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.setAttribute('color', new T.Float32BufferAttribute(C, 3)); g.setAttribute('aH', new T.Float32BufferAttribute(H, 1)); g.setIndex(I);
     g.computeVertexNormals(); return g;
   }
-  /* geometry pieces for flowers, merged into one with vertex colours */
-  function mergeCol(parts) {
-    let n = 0, ni = 0; for (const { g } of parts) { n += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
-    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3), I = new Uint32Array(ni);
-    let o = 0, oi = 0; const v = new T.Vector3(), nm = new T.Matrix3();
-    for (const { g, m, c } of parts) {
-      const pa = g.attributes.position, na = g.attributes.normal; nm.getNormalMatrix(m);
-      for (let i = 0; i < pa.count; i++) {
-        v.fromBufferAttribute(pa, i).applyMatrix4(m); P.set([v.x, v.y, v.z], (o + i) * 3);
-        v.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.set([v.x, v.y, v.z], (o + i) * 3); C.set(c, (o + i) * 3);
-      }
-      if (g.index) for (let i = 0; i < g.index.count; i++) I[oi + i] = g.index.getX(i) + o; else for (let i = 0; i < pa.count; i++) I[oi + i] = o + i;
-      o += pa.count; oi += g.index ? g.index.count : pa.count;
-    }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(P, 3)); g.setAttribute('normal', new T.BufferAttribute(N, 3)); g.setAttribute('color', new T.BufferAttribute(C, 3)); g.setIndex(new T.BufferAttribute(I, 1));
-    g.computeBoundingSphere(); return g;
-  }
-  const M = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromEuler(new T.Euler(rx, ry, rz, 'YXZ')), new T.Vector3(sx, sy, sz));
-  const lin = hex => { const c = new T.Color(hex); return [c.r, c.g, c.b]; };
-  /* a petal: a flattened, pointed disc */
-  const petal = new T.SphereGeometry(1, 8, 4); petal.scale(1, 0.18, 0.5); petal.translate(1, 0, 0);
-  const ball = new T.SphereGeometry(1, 10, 6), stem = new T.CylinderGeometry(0.5, 0.6, 1, 5, 1); stem.translate(0, 0.5, 0);
-  const cup = new T.CylinderGeometry(1, 0.18, 1, 10, 1, true); cup.translate(0, 0.5, 0);
-  const leaf = new T.SphereGeometry(1, 8, 4); leaf.scale(1, 0.12, 0.55); leaf.translate(1, 0, 0);
-  /* a beach daisy: a ring of yellow ray petals round an orange-brown disc, on a short stem with a leaf or two (or, for
-     a bouquet, the flower alone, facing up, at the origin) */
-  function daisyGeo(head) {
-    const y = head ? 0 : 0.24, parts = head ? [] : [{ g: stem, m: M(0, 0, 0, 0, 0, 0, 0.012, 0.24, 0.012), c: lin('#3b5f27') }];
-    if (!head) for (let i = 0; i < 2; i++) parts.push({ g: leaf, m: M(0, 0.05 + i * 0.07, 0, 0, i * 2.6, 0.5, 0.06, 1, 0.06), c: lin('#36592a') });
-    for (let i = 0; i < 11; i++) parts.push({ g: petal, m: M(0, y, 0, 0, i / 11 * TAU, 0.18, 0.045, 0.045, 0.045), c: lin(i % 2 ? '#f2c629' : '#f7d13c') });
-    parts.push({ g: ball, m: M(0, y + 0.005, 0, 0, 0, 0, 0.022, 0.012, 0.022), c: lin('#a8621c') });
-    return mergeCol(parts);
-  }
-  /* beach morning glory: a pink trumpet, darker in its throat, low over its leaves (or the trumpet alone, opening up) */
+  /* a model (models/life/) as one geometry with its colours, scaled by k */
+  const fromModel = (name, o, k = 1) => {
+    const g = Models.make(name, o); g.scale.setScalar(k); g.updateMatrixWorld(true);
+    const parts = []; g.traverse(m => { if (m.isMesh) parts.push({ geo: m.geometry, m: m.matrixWorld.clone(), c: m.geometry.attributes.color ? [1, 1, 1] : m.material.color.toArray() }); });
+    return Models.mergeC(parts);
+  };
+  /* beach morning glory creeping over the sand (models/life/flowers.js: a runner, its goat's-foot leaves held up on their
+     stalks, a pink trumpet and a bud), built light; or the trumpet alone, opening up. (Laid at 1.5–2.1 times, as the
+     others are: built smaller to come out its own size) */
   function gloryGeo(head) {
-    if (head) return mergeCol([{ g: cup, m: M(0, 0, 0, 0, 0, 0, 0.055, 0.075, 0.055), c: lin('#d94f9c') }, { g: ball, m: M(0, 0.07, 0, 0, 0, 0, 0.016, 0.006, 0.016), c: lin('#7a1f52') }]);
-    const parts = [{ g: stem, m: M(0, 0, 0, 0.5, 0, 0, 0.008, 0.12, 0.008), c: lin('#4c6430') }];
-    for (let i = 0; i < 3; i++) parts.push({ g: leaf, m: M(0, 0.015, 0, 0, i * 2.1 + 0.4, -0.15, 0.085, 1, 0.08), c: lin(i % 2 ? '#2f5524' : '#355e29') });
-    parts.push({ g: cup, m: M(0, 0.07, 0.04, 0.55, 0, 0, 0.055, 0.075, 0.055), c: lin('#d94f9c') });
-    parts.push({ g: ball, m: M(0, 0.102, 0.08, 0, 0, 0, 0.016, 0.006, 0.016), c: lin('#7a1f52') });
-    return mergeCol(parts);
+    return head ? fromModel('life/gloryvine', { lite: true, head: true }) : fromModel('life/gloryvine', { lite: true, seed: 3 }, KG[1] / 1.8);
   }
-  /* frangipani fallen in the grass: five white petals, yellow at the heart, lying face up */
-  function frangiGeo() {
-    const parts = [];
-    for (let i = 0; i < 5; i++) parts.push({ g: petal, m: M(0, 0.012, 0, 0.12, i / 5 * TAU, 0.08, 0.05, 0.05, 0.06), c: lin(i % 2 ? '#fbf6ec' : '#f6efe2') });
-    parts.push({ g: ball, m: M(0, 0.016, 0, 0, 0, 0, 0.016, 0.006, 0.016), c: lin('#f2c23a') });
-    return mergeCol(parts);
-  }
+  /* a beach daisy: its yellow rays round a domed disc, on a stem with two leaves (or the flower alone, facing up); and a
+     frangipani flower fallen in the grass, face up. (KG: each as big as its model, times the 1.5–2.1 they are laid at,
+     over 1.8: the daisy a little bigger than life, to stand out of the grass) */
+  const KG = [1.5, 1, 1.2];
+  function daisyGeo(head) { return head ? fromModel('life/daisy', { lite: true, head: true }) : fromModel('life/daisy', { lite: true }, KG[0] / 1.8); }
+  function frangiGeo() { return fromModel('life/frangi', { lite: true }, KG[2] / 1.8); }
   /* a jar of them, for the picnic table: a glass jar of water, the stems fanned out of it, each flower at its stem's end */
   let headG = null;
   function jar(list, flowerM) {
@@ -103,7 +72,7 @@ const Flora = (() => {
     }
     return g;
   }
-  const KINDS = [{ id: 'daisy', name: 'beach daisy', many: 'beach daisies', geo: daisyGeo, head: 0.245 }, { id: 'glory', name: 'morning glory', many: 'morning glories', geo: gloryGeo, head: 0.1 }, { id: 'frangi', name: 'frangipani', many: 'frangipani', geo: frangiGeo, head: 0.015 }];
+  const KINDS = [{ id: 'daisy', name: 'beach daisy', many: 'beach daisies', geo: daisyGeo, head: 0.11 * 1.5 / 1.8 }, { id: 'glory', name: 'morning glory', many: 'morning glories', geo: gloryGeo, head: 0.04 }, { id: 'frangi', name: 'frangipani', many: 'frangipani', geo: frangiGeo, head: 0.01 }];
 
   /* ── grass: swaying in the breeze, more toward its tips; lit like the foliage; shrinking away to nothing as it nears
      the edge of the ground it is laid on, so a chunk's grass never pops in or out ── */
@@ -155,7 +124,7 @@ void main(){
   function build(root, world) {
     const tufts = [11, 23, 37].map(tuftGeo);
     const grassM = new T.ShaderMaterial({ uniforms: Object.assign({}, Mats.U, { uCamF: { value: new T.Vector3() } }), vertexShader: GRASS_VS, fragmentShader: GRASS_FS, side: T.DoubleSide });
-    const flowerG = KINDS.map(k => k.geo()), flowerM = Mats.lit({ vertexColors: true, roughness: 0.6 });
+    const flowerG = KINDS.map(k => k.geo()), flowerM = Mats.lit({ vertexColors: true, roughness: 0.6, side: T.DoubleSide });
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3();
     /* what has been picked, by chunk and flower ("c:i"), kept a few hours in this browser so a picked flower stays picked */
     const KEY = 'cove.picked', picked = new Set();
@@ -182,14 +151,14 @@ void main(){
         im.computeBoundingSphere(); im.frustumCulled = true; ch.tiny.add(im);
       });
       /* the flowers: morning glory on the sand above the high water, daisies and frangipani in the grass */
-      for (let i = 0, n = 0; i < 1400 && n < 220; i++) {
+      for (let i = 0, n = 0; i < 1400 && n < 240; i++) {
         const k = r() < 0.4 ? 1 : r() < 0.72 ? 0 : 2, x = ch.x0 + r() * (ch.x1 - ch.x0), vz = Layout.vegZ(x), sz = Layout.shoreMeanZ(x);
         const z = k === 1 ? vz - 0.3 - r() * Math.max(1, (vz - sz) * 0.3) : vz - 1.2 + Math.pow(r(), 1.5) * 7;
         if (world.massif(x, z) > 0.2 || !awayFromCamp(x, z)) continue;
         /* (in patches, as they grow: several near each other) */
-        const nn = 2 + Math.floor(r() * 5);
-        for (let j = 0; j < nn && n < 220; j++, n++) {
-          const xx = x + (r() - 0.5) * 1.8, zz = z + (r() - 0.5) * 1.2, idx = items.length, id = c + ':' + idx;
+        const nn = k === 1 ? 4 + Math.floor(r() * 6) : 2 + Math.floor(r() * 5), spread = k === 1 ? 1.3 : 1.8;     /* (the vine in a mat of runners) */
+        for (let j = 0; j < nn && n < 240; j++, n++) {
+          const xx = x + (r() - 0.5) * spread, zz = z + (r() - 0.5) * spread * 0.66, idx = items.length, id = c + ':' + idx;
           items.push({ k, x: xx, y: Math.max(0, world.land(xx, zz)), z: zz, ry: r() * TAU, s: 1.5 + r() * 0.6, id, gone: picked.has(id) });
         }
       }
@@ -239,14 +208,14 @@ void main(){
     }
     /* the flowers near the camera, for picking up and holding (inspect.js): hidden while held; kept for the bouquet, it
        is picked; thrown back, it lies in the grass where it fell (inspect.js keeps that one) and this one stays gone */
-    const KIND_OF = ['daisy', 'glory', 'frangi'], REAL = [0.11, 0.05, 0.045];
+    const KIND_OF = ['daisy', 'glory', 'frangi'];
     function setFlower(it, s) { const L = live.get(+it.id.split(':')[0]), im = L && L.meshes[it.mk]; if (!im) return; e.set(0, it.ry, 0); q.setFromEuler(e); sc.setScalar(s); pos.set(it.x, it.y, it.z); m4.compose(pos, q, sc); im.setMatrixAt(it.mi, m4); im.instanceMatrix.needsUpdate = true; }
     function pickables(list, cam) {
       for (const [, L] of live) for (const it of L.items) {
         if (it.gone || it.held) continue;
         const dx = it.x - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 900) continue;
         const head = KINDS[it.k].head * it.s;
-        list.push({ kind: KIND_OF[it.k], x: it.x, y: it.y + head * 0.6, z: it.z, r: Math.max(0.06, head * 0.45), yaw: it.ry, size: it.s * (it.k === 0 ? 0.245 : it.k === 1 ? 0.1 : 0.06) / REAL[it.k], flower: it,
+        list.push({ kind: KIND_OF[it.k], x: it.x, y: it.y + head * 0.6, z: it.z, r: Math.max(0.06, head * 0.45), yaw: it.ry, size: it.s * KG[it.k] / 1.8, flower: it,
           take() { it.held = true; setFlower(it, 0); },
           give(how) { it.held = false; if (how === 'back') setFlower(it, it.s); else { it.gone = true; picked.add(it.id); keep(); } } });
       }
