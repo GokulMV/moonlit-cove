@@ -1042,7 +1042,7 @@ void main(){
         float mk = clamp(sq.k2.z/max(1.0 - sq.k1.z, 1e-3), 0.0, 1.0); mudK = mk*ns;
         alb = mix(alb, mix(shing, mud, mk), ns);
       } }` : ''}
-    alb = mix(alb, vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g), veg);
+    alb = mix(alb, ${Layout.isle ? `mix(vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g), vec3(0.095, 0.083, 0.063)*(0.82 + 0.3*nb.r), mudK)` : `vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g)`}, veg);   /* (round the island, in the mangroves, their mud, not a green verge) */
     /* the high-water line: a faint pale seam of fine sand and burst bubbles, drier than the sand below it */
     float mark = w.mark*(1.0 - veg)*(1.0 - w.cover)*(1.0 - 0.7*uWet);
     float wet = max(max(max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg)), tideWet*0.42), mudK*0.8*smoothstep(-18.0, -0.5, s))*(1.0 - veg*0.4)*(1.0 - 0.5*mark);

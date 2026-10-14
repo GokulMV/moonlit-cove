@@ -17,6 +17,8 @@ await page.goto('file://' + path.join(root, 'dist/page-local.html') + query);
 await page.waitForFunction(() => typeof Engine !== 'undefined' && Engine.world && window.__cove && window.__cove.st && window.__cove.st.S, null, { timeout: 400000, polling: 1000 });
 const { profile } = await cdp.send('Profiler.stop');
 console.log('loaded in', ((Date.now() - t0) / 1000).toFixed(1), 's');
+console.log('renderer:', JSON.stringify(await page.evaluate(() => { const R = Engine.renderer; if (!R) return null; return { programs: R.info.programs.length, geometries: R.info.memory.geometries, textures: R.info.memory.textures,
+  bytes: R.info.programs.map(p => p.name || '').reduce((m, n) => (m[n] = (m[n] || 0) + 1, m), {}) }; })));
 /* self time per node, then summed per function (name + line); total time by walking the call tree */
 const byId = new Map(profile.nodes.map(n => [n.id, n])), dt = new Map();
 for (let i = 0; i < profile.samples.length; i++) dt.set(profile.samples[i], (dt.get(profile.samples[i]) || 0) + (profile.timeDeltas[i] || 0));

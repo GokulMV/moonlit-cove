@@ -58,7 +58,7 @@ const IsleWorld = (() => {
       /* (and in the mangroves, their mud: SQ is the shore rockAt just looked up) */
       const md = SQ.mangrove * (1 - sm(SQ.W + 16, SQ.W + 42, -I.sdf(x, z)));
       let gr = (0.095 + (0.024 * 0.75 - 0.095) * cv) * a, gg = (0.108 + (0.042 * 0.75 - 0.108) * cv) * a, gb = (0.052 + (0.017 * 0.75 - 0.052) * cv) * a;
-      { const mk = sm(0.08, 0.45, md); gr += (0.05 * a - gr) * mk; gg += (0.045 * a - gg) * mk; gb += (0.034 * a - gb) * mk; }
+      { const mk = sm(0.02, 0.2, md); gr += (0.05 * a - gr) * mk; gg += (0.045 * a - gg) * mk; gb += (0.034 * a - gb) * mk; }
       /* (and a trail's tread, trodden earth) */
       const pv = trails ? trails.tread(x, z) : 0; gr += (0.075 * a - gr) * pv * 0.8; gg += (0.05 * a - gg) * pv * 0.8; gb += (0.03 * a - gb) * pv * 0.8;
       o.c[0] = gr + (0.108 * b - gr) * rk; o.c[1] = gg + (0.1 * b - gg) * rk; o.c[2] = gb + (0.09 * b - gb) * rk; o.rk = rk; o.cv = cv; o.md = md; o.pv = pv;
