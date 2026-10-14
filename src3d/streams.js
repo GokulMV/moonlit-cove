@@ -43,7 +43,7 @@ const IsleStreams = (() => {
       for (let i = 0; i < n; i++) {
         /* (and out on the beach it winds more tightly, as a stream does over sand) */
         const j = Math.min(n - 1, i + 1), k = Math.max(0, i - 1), tx = C[j][0] - C[k][0], tz = C[j][1] - C[k][1], tl = Math.hypot(tx, tz) || 1, bc = sm(-30, -4, I.sdf(C[i][0], C[i][1]));
-        const w = 3.5 * Math.sin(u / 37 + q) + 2.0 * Math.sin(u / 13 + 2 * q) + bc * (2.4 * Math.sin(u / 7.5 + 3 * q) + 1.1 * Math.sin(u / 3.9 + q));
+        const w = 3.5 * Math.sin(u / 37 + q) + 2.0 * Math.sin(u / 13 + 2 * q) + bc * (1.8 * Math.sin(u / 3.2 + 3 * q) + 0.6 * Math.sin(u / 1.5 + q));
         X[i] = C[i][0] - tz / tl * w; Z[i] = C[i][1] + tx / tl * w; if (i) u += Math.hypot(X[i] - X[i - 1], Z[i] - Z[i - 1]);
       }
       /* (the water's level: the valley floor's, a hand under it, falling all the way to the sea) */
@@ -149,8 +149,7 @@ void main(){
   float edge = 1.0 - abs(ac), rag = n2(vW.xz*0.35)*0.6 + n2(vW.xz*1.3 + 3.0)*0.4;
   float th = mix(0.04, 0.42 + 0.3*rag*(1.0 - 0.6*fl) - 0.25*fl, bk), ew = fwidth(edge) + 0.015;
   float wat = smoothstep(th - ew, th + ew, edge);
-  /* (on the sand, now and then a bar to one side of its main channel, the water parting round it) */
-  if (bk > 0.0) { float br = n2(vec2(along*0.045, ac*0.6 + 0.37)) + 0.25*fl - 0.5*bk + 0.2*(1.0 - smoothstep(0.0, 0.25, abs(ac))), bw = fwidth(br) + 0.01; wat *= smoothstep(-bw, bw, br); }
+
   /* (and on the sand past it, the wet margin, dark with the seep, fading out to the strip's own edge) */
   float wetA = smoothstep(0.0, max(th, 0.05), edge)*(1.0 - wat)*0.3*bk;
   if (wat < 0.004 && wetA < 0.004) discard;
@@ -184,7 +183,7 @@ void main(){
   vec2 bp = vW.xz + N.xz*dp*0.6; float st1 = n2(bp*0.29), st2 = n2(bp*0.83 + 1.7), st3 = n2(bp*2.1 + 4.0);
   float stones = smoothstep(0.4, 0.58, st1*0.55 + st2*0.3 + st3*0.15);
   vec3 bed = mix(vec3(0.11, 0.085, 0.055)*(0.8 + 0.4*st3), mix(vec3(0.25, 0.23, 0.19), vec3(0.32, 0.28, 0.22), st2)*(0.75 + 0.35*st3), stones);
-  bed = mix(bed, vec3(0.29, 0.245, 0.175)*(0.9 + 0.2*st2), bch);
+  bed = mix(bed, vec3(0.38, 0.31, 0.22)*(0.9 + 0.2*st2), bch);
   /* (the light: the sky's, and the sun's where it comes down through the canopy, in flecks) */
   float fleck = smoothstep(0.62, 0.74, n2(vW.xz*0.045 + 0.3)*0.65 + n2(vW.xz*0.19)*0.35), sun = mix(fleck, 1.0, clamp(vSo*1.25 - 0.25, 0.0, 1.0));
   vec3 light = uAmbF*0.85 + uKeyColT*max(uKeyDirT.y, 0.0)*0.95*sun;

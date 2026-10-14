@@ -790,7 +790,7 @@ const Engine = (() => {
       skyMat.uniforms.uHzMist = gU.uMist; envSkyMat.uniforms.uHzMist = gU.uMist;
     }
     /* (and its animals, round the eye) */
-    if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [], creek: world.trails ? world.trails.trails.find(t => t.id === 'creek') : null }); Object.assign(api, { isFauna }); }
+    if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [], creek: world.trails ? world.trails.trails.find(t => t.id === 'creek') : null, trees: world.forest ? (x, z, r, k) => world.forest.standing(x, z, r, k) : null }); Object.assign(api, { isFauna }); }
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);

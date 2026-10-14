@@ -15,8 +15,9 @@ try {
   await until(page, () => window.__cove && window.__cove.st && window.__cove.st.entered, null, 150000);
   await page.evaluate(() => window.__cove.startDrive());
   ok(await page.evaluate(() => window.__cove.car.on), 'the van is being driven');
-  for (const [name, turn] of [['out', 0], ['back', Math.PI]]) {
-    await page.evaluate(t => { const c = window.__cove.car; c.h += t; c.v = 0; }, turn);
+  for (const [name, dir] of [['north', -1], ['south', 1]]) {
+    /* (on open sand a few metres up from the water, pointing along the beach one way or the other) */
+    await page.evaluate(d => { const c = window.__cove.car, x = 8 * d, along = Math.atan2(-Layout.shoreDZ(x), 1); c.x = x; c.z = Layout.shoreZ(x) + Math.min(4, (Layout.vegZ(x) - Layout.shoreZ(x)) * 0.35); c.h = d > 0 ? along : along + Math.PI; c.v = 0; c.wheels = null; }, dir);
     await page.keyboard.down('w'); await fast(true);
     const P = [await C()];
     for (let s = 0; s < secs; s += 3) { await page.waitForTimeout(3000); P.push(await C()); }

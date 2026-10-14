@@ -39,7 +39,7 @@ const IsleFauna = (() => {
     kingfisher: { model: 'wild/kingfisher', n: 1, hab: 'perch', move: 'percher', idle: ['perch', 'bob', 'scan', 'bob', 'preen'], near: 11, s: [1, 1] },
     /* (at dusk the flying foxes leave the island's trees for the fruit on the mainland, a long loose stream of them
        across the sky; at dawn they come back) */
-    flyingfox: { model: 'wild/flyingfox', n: 12, hab: 'sky', move: 'commuter', fly: 'fly', glide: 'glide', v: 9.5, alt: [45, 95], s: [0.9, 1.1] }
+    flyingfox: { model: 'wild/flyingfox', n: 16, hab: 'sky', move: 'commuter', fly: 'fly', glide: 'glide', v: 9.5, alt: [45, 95], s: [0.9, 1.1] }
   };
   /* how near the eye a kind is out (m), and how far its spots are looked for */
   const OUT = 95, SKY = 600;
@@ -108,13 +108,18 @@ const IsleFauna = (() => {
        night, as they do on the island's creeks ── */
     const flies = [];
     if (o.creek && typeof Models !== 'undefined') {
-      const c = o.creek;
+      const c = o.creek, used = [];
       for (let k = 0; k < 4; k++) {
-        const i = Math.floor((0.15 + 0.22 * k) * (c.n - 1)), j = Math.min(c.n - 1, i + 2), tx = c.X[j] - c.X[i], tz = c.Z[j] - c.Z[i], tl = Math.hypot(tx, tz) || 1, sd = k % 2 ? 1 : -1, d = 7 + 4 * hash(k, 41);
-        const x = c.X[i] - tz / tl * d * sd, z = c.Z[i] + tx / tl * d * sd;
-        let g = null; try { g = Models.make('wild/fireflies', { seed: 11 + k, n: 380, r: 2.6, h: 1.5, y: 0 }); } catch (e) { console.warn('IsleFauna: fireflies', e); }
+        /* (the tree: a Sonneratia or a Rhizophora a few metres off the boardwalk, as the forest has it standing there, its
+           crown's middle a third of the way down from its top) */
+        const i = Math.floor((0.15 + 0.22 * k) * (c.n - 1)), x0 = c.X[i], z0 = c.Z[i];
+        const T0 = o.trees ? o.trees(x0, z0, 16, ['sonneratia', 'rhizophora', 'avicennia']).find(t => t.d > 4 && !used.includes(t)) : null;
+        if (o.trees && !T0) continue;
+        if (T0) used.push(T0);
+        const x = T0 ? T0.x : x0 + 7, z = T0 ? T0.z : z0, H = T0 ? T0.H : 7, R = Math.max(1.6, H * 0.28);
+        let g = null; try { g = Models.make('wild/fireflies', { seed: 11 + k, n: 380, r: R, h: H * 0.16, y: 0 }); } catch (e) { console.warn('IsleFauna: fireflies', e); }
         if (!g) continue;
-        g.position.set(x, Math.max(land(x, z), 0) + 4.2 + 1.5 * hash(k, 42), z); g.visible = false; group.add(g); flies.push(g);
+        g.position.set(x, (T0 ? T0.y + 0.15 : Math.max(land(x, z), 0)) + H * 0.68, z); g.visible = false; group.add(g); flies.push(g);
       }
     }
     /* ── one animal: where it is, which way it faces, what it is doing and for how long ── */
@@ -170,7 +175,7 @@ const IsleFauna = (() => {
         for (const k of ['hornbill', 'kite']) if (!out.some(a => a.k === k) && performance.now() > buildDue) { spawn(k, { x: cx, z: cz }, 0, t); buildDue = performance.now() + 400; break; }
         /* (the flying foxes, in the twilight: a stream of them out over the camp toward the mainland, east (-z), or back) */
         const bats = out.filter(a => a.k === 'flyingfox');
-        if (dusk && !bats.length && performance.now() > buildDue) { const dir = setting ? -1 : 1; for (let j = 0; j < KINDS.flyingfox.n; j++) { const a = spawn('flyingfox', { x: cx, z: cz }, j, t); if (a) { a.dir = dir; a.off = (hash(j, 31) - 0.5) * 90; a.lag = j * 7 + hash(j, 32) * 5; } } buildDue = performance.now() + 400; }
+        if (dusk && !bats.length && performance.now() > buildDue) { const dir = setting ? -1 : 1; for (let j = 0; j < KINDS.flyingfox.n; j++) { const a = spawn('flyingfox', { x: cx, z: cz }, j, t); if (a) { a.dir = dir; a.off = (hash(j, 31) - 0.5) * 90; a.lag = j * 12.5 + hash(j, 32) * 6; } } buildDue = performance.now() + 400; }
         else if (!dusk && bats.length) for (const a of bats) { give('flyingfox', a.g); out.splice(out.indexOf(a), 1); }
       }
       for (const a of out.slice()) { step(a, dt, t, cam); if (a.gone) { if (a.k === 'kingfisher') { spooked.set(a.sp, t + 60); snag.visible = false; } give(a.k, a.g); out.splice(out.indexOf(a), 1); } }

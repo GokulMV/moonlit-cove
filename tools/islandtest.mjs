@@ -83,7 +83,7 @@ try {
     return { pb: near('proboscis'), kf: near('kingfisher'), cr: cr ? { x: cr.X[i], z: cr.Z[i], fx: fl ? fl.position.x : cr.X[i] + 8, fy: fl ? fl.position.y : 4.5, fz: fl ? fl.position.z : cr.Z[i] + 3 } : null }; });
   if (an) {
     if (an.pb) { const p = an.pb; V.proboscis = [[p.x + p.nx * 4 - p.tx * 17, 2.2, p.z + p.nz * 4 - p.tz * 17], [p.x, 0.8, p.z], 30, 6, 60, null, 'proboscis']; }
-    if (an.kf) { const p = an.kf; V.kingfisher = [[p.x - p.nx * 2 - p.tx * 13, 1.8, p.z - p.nz * 2 - p.tz * 13], [p.x, 1.6, p.z], 25, 10, 60, null, 'kingfisher']; }
+    if (an.kf) { const p = an.kf; V.kingfisher = [[p.x + p.nx * 12 - p.tx * 4, 1.5, p.z + p.nz * 12 - p.tz * 4], [p.x, 1.6, p.z], 25, 10, 60, null, 'kingfisher']; }
     V.bats = [[0, 2.5, 8], [0, 45, -50], 75, 14, 60, 18.2];
     if (an.cr) V.fireflies = [[an.cr.x, 2.9, an.cr.z], [an.cr.fx, an.cr.fy, an.cr.fz], 60, 10, 60, 21];
   }

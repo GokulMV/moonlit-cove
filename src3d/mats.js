@@ -234,7 +234,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
   ${key === 'land' ? `{ vec3 gv = mat3(viewMatrix)*(cnGrad*(1.0 - vRock)${Layout.isle ? '*(1.0 - flN)' : ''}); normal = normalize(normal - (gv - dot(gv, normal)*normal)); }` : ''}`);
       /* hills and headlands: rock on the steep and seaward parts, leaf litter and scrub elsewhere */
       if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  float wetK = 0.0, flN = 0.0;
+  float wetK = 0.0, flN = 0.0, mudPud = 0.0;
   { float n1 = vnz(vWPos*0.9), n2 = vnz(vWPos*3.7 + 2.0), n3 = vnz(vWPos*13.0);
     vec3 rockC = diffuseColor.rgb*(0.72 + 0.42*n2 + 0.16*n3 - 0.14*smoothstep(0.6, 0.85, vnz(vWPos*vec3(1.2, 4.0, 1.2))));
     float lich = smoothstep(0.64, 0.8, vnz(vWPos*1.7 + 9.0))*smoothstep(2.0, 4.0, vWPos.y);
@@ -261,7 +261,9 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     }
     /* (under the trees and on the hills the ground is thick with shrubs and saplings, crown against crown, shade in
        between: from above it is no lawn) */
-    ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}
+    ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}${key === 'land' && Layout.isle ? `
+    /* (but not on the mangroves' mud: bare, nothing growing on it but the trees) */
+    { float mudF = smoothstep(0.08, 0.45, vMud); cnTint = mix(cnTint, vec3(0.66), mudF); cnGrad *= 1.0 - mudF; }` : ''}
     vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;${key === 'land' && Layout.isle ? `
     /* (round the island, near the eye, the ground as it is underfoot: under the trees the forest's floor, its fallen
        leaves brown and grey, a seedling's green here and there, the light through the canopy in flecks; out in the open,
@@ -281,6 +283,16 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
         vegC = mix(vegC, mix(grass, litter, smoothstep(0.1, 0.5, vCov))*shade, flN);
         /* (in the mangroves, their mud: grey-brown, wet, the leaves fallen on it, the light coming through in flecks) */
         vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.45 + 0.8*fleck, smoothstep(0.1, 0.55, vCov));
+        /* (up close, the crabs' burrows in it, each a dark hole and round it the pellets of mud they have dug out, paler as
+           they dry; and its hollows holding the last of the tide's water, dark and still, the sky in them) */
+        { float mk = smoothstep(0.08, 0.45, vMud), nk = (1.0 - smoothstep(0.012, 0.05, length(fwidth(vWPos.xz))))*mk;
+          if (nk > 0.0){
+            vec2 q = vWPos.xz/0.32, g = floor(q), f = q - g, h = ltH2(g + 3.1); float dd = length(f - 0.2 - 0.6*h)*0.32, on = step(h.y, 0.26);
+            float hole = on*(1.0 - smoothstep(0.009, 0.016, dd)), ring = on*smoothstep(0.016, 0.024, dd)*(1.0 - smoothstep(0.024, 0.06 + 0.02*h.x, dd))*step(0.45, ltH2(floor(vWPos.xz*90.0)).x);
+            mudC = mix(mudC, vec3(0.01, 0.008, 0.006), hole*nk); mudC = mix(mudC, mudC*1.45 + vec3(0.01, 0.008, 0.004), ring*0.7*nk);
+          }
+          mudPud = mk*smoothstep(0.64, 0.7, vnz(vWPos*0.33 + 2.0)*0.7 + vnz(vWPos*1.4)*0.3);
+          mudC = mix(mudC, mudC*0.55, mudPud); }
         vegC = mix(vegC, mudC, smoothstep(0.08, 0.45, vMud)*flN);
         /* (a trail's tread: red-brown earth trodden bare, roots across it, the forest's shade on it) */
         vec3 earth = mix(vec3(0.24, 0.125, 0.065), vec3(0.19, 0.115, 0.07), l2)*(0.82 + 0.22*l3 + 0.1*l4)*mix(1.0, 0.5 + 0.7*fleck, smoothstep(0.1, 0.55, vCov));
@@ -294,7 +306,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), smoothstep(0.35, 0.0, abs(vWPos.y - 0.15))*smoothstep(0.4, 0.7, vnz(vWPos*4.0))*sea*vRock*0.7);
   }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);${key === 'land' && Layout.isle ? '\n  roughnessFactor *= mix(1.0, 0.6, smoothstep(0.08, 0.45, vMud)*flN);' : ''}`);
+  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);${key === 'land' && Layout.isle ? '\n  roughnessFactor *= mix(1.0, 0.6, smoothstep(0.08, 0.45, vMud)*flN)*mix(1.0, 0.12, mudPud*flN);' : ''}`);
       /* packed sand (the sand castles): its grain, a few tenths of a millimetre of relief in specks, lighter and darker */
       if (key === 'sandc') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   diffuseColor.rgb *= 0.95 + 0.07*vnz(vWPos*61.0) + 0.05*vnz(vWPos*173.0 + 5.0);`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

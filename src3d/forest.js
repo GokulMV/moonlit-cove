@@ -94,7 +94,7 @@ const IsleForest = (() => {
         const t0 = performance.now(), obj = Models.make(KINDS[k].model, Object.assign({ seed }, KINDS[k].opts)); obj.updateMatrixWorld(true);
         const parts = []; obj.traverse(m => { if (m.isMesh && !m.isInstancedMesh && m.geometry && m.geometry.attributes.position.count) parts.push({ geo: m.geometry, mat: m.material, depth: m.customDepthMaterial || null, M: m.matrixWorld.clone(), cast: m.castShadow,
           leaf: !!(m.material && m.material.isShaderMaterial && m.material.uniforms && m.material.uniforms.nmap) }); });
-        const p = { kind: k, seed, obj, parts, i: protos.length, ms: performance.now() - t0 };
+        const p = { kind: k, seed, obj, parts, i: protos.length, ms: performance.now() - t0, H: new T.Box3().setFromObject(obj).max.y };
         protos.push(p); byKind[k].push(p);
       }
     }
@@ -146,29 +146,41 @@ const IsleForest = (() => {
     }
     /* ── a tile's trees: every grid's over the tile, those that grow, each its kind and shape, turned and sized ── */
     const C0 = [0, 0, 0], C1 = [0, 0, 0];
+    /* (the tree of grid G's cell (gx, gz), if one grows there: inside the box given, if one is) */
+    function treeAt(G, gx, gz, box) {
+      const c = cand(G, gx, gz, C0); if (!c) return null;
+      const x = c[0], z = c[1], pr = c[2]; if ((box && (x < box[0] || x >= box[0] + box[2] || z < box[1] || z >= box[1] + box[2])) || kept(x, z)) return null;
+      const w = W4.w && W4.w.slice();
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { if (!i && !j) continue; const n = cand(G, gx + i, gz + j, C1); if (n && n[2] > pr && (n[0] - x) ** 2 + (n[1] - z) ** 2 < G.g * G.g * 0.72) return null; }
+      /* (which of its kinds: by the place's weights, or the one) */
+      let kind = G.kinds[0];
+      if (G.kinds.length > 1 && w) { let tot = w.reduce((a, b) => a + b, 0), r = hash3(gx, gz, G.id * 16 + 5) * tot; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } } }
+      const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(gx, gz, G.id * 16 + 6) * P.length) % P.length];
+      const h = I.height(x, z), S = G.s || K.s, s = (S[0] + (S[1] - S[0]) * hash3(gx, gz, G.id * 16 + 7)) * (G.id === 4 || G.id === 5 || G.id === 10 ? 1 - 0.3 * sm(150, 250, h) : 1);
+      return { x, y: land(x, z) - 0.15, z, s, yaw: hash3(gx, gz, G.id * 16 + 8) * TAU, p: p.i, tint: hash3(gx, gz, G.id * 16 + 9), die: hash3(gx, gz, G.id * 16 + 10), kind };
+    }
     function* plan(tx, tz, TS, late) {
-      const out = [];
+      const out = [], box = [tx, tz, TS];
       for (const G of GRIDS) {
         if (G.ground) continue;
         for (let gz = Math.floor(tz / G.g); gz * G.g < tz + TS; gz++) {
-          for (let gx = Math.floor(tx / G.g); gx * G.g < tx + TS; gx++) {
-            const c = cand(G, gx, gz, C0); if (!c) continue;
-            const x = c[0], z = c[1], pr = c[2]; if (x < tx || x >= tx + TS || z < tz || z >= tz + TS || kept(x, z)) continue;
-            const w = W4.w && W4.w.slice();
-            let gives = false;
-            for (let j = -1; j <= 1 && !gives; j++) for (let i = -1; i <= 1; i++) { if (!i && !j) continue; const n = cand(G, gx + i, gz + j, C1); if (n && n[2] > pr && (n[0] - x) ** 2 + (n[1] - z) ** 2 < G.g * G.g * 0.72) { gives = true; break; } }
-            if (gives) continue;
-            /* (which of its kinds: by the place's weights, or the one) */
-            let kind = G.kinds[0];
-            if (G.kinds.length > 1 && w) { let tot = w.reduce((a, b) => a + b, 0), r = hash3(gx, gz, G.id * 16 + 5) * tot; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } } }
-            const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(gx, gz, G.id * 16 + 6) * P.length) % P.length];
-            const h = I.height(x, z), S = G.s || K.s, s = (S[0] + (S[1] - S[0]) * hash3(gx, gz, G.id * 16 + 7)) * (G.id === 4 || G.id === 5 || G.id === 10 ? 1 - 0.3 * sm(150, 250, h) : 1);
-            out.push({ x, y: land(x, z) - 0.15, z, s, yaw: hash3(gx, gz, G.id * 16 + 8) * TAU, p: p.i, tint: hash3(gx, gz, G.id * 16 + 9), die: hash3(gx, gz, G.id * 16 + 10), kind });
-          }
+          for (let gx = Math.floor(tx / G.g); gx * G.g < tx + TS; gx++) { const t = treeAt(G, gx, gz, box); if (t) out.push(t); }
           if (late()) yield;
         }
       }
       return out;
+    }
+    /* the trees of the given kinds standing within r of (x, z), as plan has them (nearest first), and how tall each is */
+    function standing(x, z, r, kinds) {
+      const out = [];
+      for (const G of GRIDS) {
+        if (G.ground || !G.kinds.some(k => kinds.includes(k))) continue;
+        for (let gz = Math.floor((z - r) / G.g); gz * G.g < z + r; gz++) for (let gx = Math.floor((x - r) / G.g); gx * G.g < x + r; gx++) {
+          const t = treeAt(G, gx, gz, null); if (!t || !kinds.includes(t.kind)) continue;
+          const d = Math.hypot(t.x - x, t.z - z); if (d < r) out.push(Object.assign(t, { d, H: protos[t.p].H * t.s }));
+        }
+      }
+      return out.sort((a, b) => a.d - b.d);
     }
     /* a tile's cards: those of each atlas together */
     function cards(list) {
@@ -237,7 +249,7 @@ const IsleForest = (() => {
     /* (only a clearing opens the canopy over the ground: a path or a stream through the forest is still under it) */
     const clearings = keepOut.filter(c => c[2] > 4.6), inClearing = (x, z) => { for (const [cx, cz, r] of clearings) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; };
     const cover = (x, z) => (inClearing(x, z) ? 0 : odds(GRIDS[3], x, z, W4));
-    return { plan, cards, nearUpdate, mats, atlases, protos, stats, setNear, cover, get NEAR() { return NEAR; } };
+    return { plan, cards, nearUpdate, mats, atlases, protos, stats, setNear, cover, standing, get NEAR() { return NEAR; } };
   }
   return { build, KINDS, GRIDS };
 })();
