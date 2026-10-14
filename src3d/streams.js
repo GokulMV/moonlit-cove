@@ -89,11 +89,12 @@ const IsleStreams = (() => {
   const VS = `
 attribute vec4 aS;      /* along it (m), across it (-1..1), how deep, how much of it is out on the beach */
 attribute float aSt;    /* how steeply it falls there */
-varying vec4 vS; varying float vSt; varying vec3 vW;
-void main(){ vS = aS; vSt = aSt; vec4 w = modelMatrix*vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`;
+attribute float aSh;    /* how much of the sun gets down to it through the canopy */
+varying vec4 vS; varying float vSt, vSh; varying vec3 vW;
+void main(){ vS = aS; vSt = aSt; vSh = aSh; vec4 w = modelMatrix*vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`;
   const FS = `
 uniform float uTime, uFlood; uniform vec3 uHor, uZen, uKeyDirT, uKeyColT, uAmbF; uniform vec4 uFog; uniform sampler2D uNoise;
-varying vec4 vS; varying float vSt; varying vec3 vW;
+varying vec4 vS; varying float vSt, vSh; varying vec3 vW;
 float n2(vec2 p){ return texture2D(uNoise, p).r; }
 void main(){
   float along = vS.x, ac = vS.y, dep = vS.z, bch = vS.w, fl = uFlood;
@@ -109,14 +110,25 @@ void main(){
   vec3 N = normalize(vec3(g.x, 1.0, g.y)), V = normalize(cameraPosition - vW);
   float F = 0.02 + 0.98*pow(1.0 - max(dot(N, V), 0.0), 5.0);
   vec3 R = reflect(-V, N); R.y = abs(R.y);
-  vec3 sky = mix(uHor, uZen, pow(clamp(R.y, 0.0, 1.0), 0.6));
-  /* (the bed through the water: brown and grey stones, sand on the beach; clear, a little green with depth) */
-  float st = n2(vW.xz*0.9)*0.6 + n2(vW.xz*3.1)*0.4;
-  vec3 bed = mix(mix(vec3(0.11, 0.09, 0.065), vec3(0.17, 0.16, 0.14), smoothstep(0.45, 0.7, st)), vec3(0.42, 0.36, 0.26), bch);
-  vec3 wc = bed*exp(-dep*vec3(2.2, 1.0, 1.2))*(uAmbF*0.9 + uKeyColT*max(uKeyDirT.y, 0.0)*0.8);
+  /* (what the water mirrors: the sky, where the canopy lets it; under the trees their dark leaves) */
+  vec3 sky = mix(uHor, uZen, pow(clamp(R.y, 0.0, 1.0), 0.6)), sh = vec3(vSh);
+  vec3 refl = mix(vec3(0.025, 0.04, 0.02)*(uAmbF + uKeyColT*0.25), sky, clamp(vSh*1.2 - 0.1, 0.0, 1.0));
+  /* (the bed through the water: rounded stones, grey and tan, packed with sand and fallen leaves between; sand on the
+     beach; clear, a little green with depth) */
+  vec2 bp = vW.xz + N.xz*dep*0.6; float st1 = n2(bp*0.29), st2 = n2(bp*0.83 + 1.7), st3 = n2(bp*2.1 + 4.0);
+  float stones = smoothstep(0.4, 0.58, st1*0.55 + st2*0.3 + st3*0.15);
+  vec3 bed = mix(vec3(0.13, 0.1, 0.065)*(0.8 + 0.4*st3), mix(vec3(0.27, 0.25, 0.21), vec3(0.34, 0.3, 0.24), st2)*(0.75 + 0.35*st3), stones);
+  bed = mix(bed, vec3(0.42, 0.36, 0.26)*(0.9 + 0.2*st2), bch);
+  vec3 light = uAmbF*0.85 + uKeyColT*max(uKeyDirT.y, 0.0)*0.95*sh;
+  vec3 wc = bed*exp(-dep*vec3(1.6, 0.75, 0.9))*light;
   /* (in flood: brown, opaque, fast) */
   wc = mix(wc, vec3(0.12, 0.085, 0.05)*(uAmbF + uKeyColT*0.6), fl*0.85);
-  vec3 c = wc*(1.0 - F) + sky*F;
+  /* (the sun glinting off the ripples where it reaches them) */
+  float gl = pow(max(dot(reflect(-V, N), uKeyDirT), 0.0), 90.0)*5.0*vSh;
+  vec3 c = wc*(1.0 - F) + refl*F + uKeyColT*gl;
+  /* (the ripples' own light and dark, moving down it; at the edges the wet stones) */
+  c *= 0.86 + 0.32*(n2(p2*0.05) - 0.5) + 0.12*(n2(p1*0.09 + 0.3) - 0.5);
+  c = mix(c, vec3(0.05, 0.045, 0.035)*light, smoothstep(0.62, 0.95, abs(ac))*(1.0 - bch)*0.6);
   /* (white where it drops over its stones) */
   float wh = smoothstep(0.08, 0.22, vSt + 0.06*fl)*smoothstep(0.45, 0.75, n2(vec2(along*0.6 - t*1.2, ac*1.5)));
   c = mix(c, (uAmbF + uKeyColT*0.7)*0.85, wh*0.8);
@@ -133,18 +145,18 @@ void main(){
     for (const s of P.streams) {
       const PIECE = 160;
       for (let i0 = 0; i0 < s.n - 1; i0 += PIECE) {
-        const i1 = Math.min(s.n - 1, i0 + PIECE), m = i1 - i0 + 1, A = 5, pos = new Float32Array(m * A * 3), aS = new Float32Array(m * A * 4), aSt = new Float32Array(m * A), idx = [];
+        const i1 = Math.min(s.n - 1, i0 + PIECE), m = i1 - i0 + 1, A = 5, pos = new Float32Array(m * A * 3), aS = new Float32Array(m * A * 4), aSt = new Float32Array(m * A), aSh = new Float32Array(m * A), idx = [];
         let along = 0; for (let i = 1; i <= i0; i++) along += Math.hypot(s.X[i] - s.X[i - 1], s.Z[i] - s.Z[i - 1]);
         for (let k = 0; k < m; k++) {
           const i = i0 + k, a = Math.max(0, i - 1), b = Math.min(s.n - 1, i + 1), tx = s.X[b] - s.X[a], tz = s.Z[b] - s.Z[a], l = Math.hypot(tx, tz) || 1, nx = -tz / l, nz = tx / l;
           if (k) along += Math.hypot(s.X[i] - s.X[i - 1], s.Z[i] - s.Z[i - 1]);
           for (let j = 0; j < A; j++) {
             const ac = -1 + 2 * j / (A - 1), off = ac * (s.W[i] / 2 + 0.35), v = (k * A + j);
-            pos.set([s.X[i] + nx * off, s.Y[i], s.Z[i] + nz * off], v * 3); aS.set([along, ac, s.D[i] * (1 - ac * ac), s.BCH[i]], v * 4); aSt[v] = s.ST[i];
+            pos.set([s.X[i] + nx * off, s.Y[i], s.Z[i] + nz * off], v * 3); aS.set([along, ac, s.D[i] * (1 - ac * ac), s.BCH[i]], v * 4); aSt[v] = s.ST[i]; aSh[v] = o.shade ? o.shade(s.X[i], s.Z[i]) : 1;
           }
-          if (k < m - 1) for (let j = 0; j < A - 1; j++) { const p = k * A + j; idx.push(p, p + A, p + 1, p + 1, p + A, p + A + 1); }
+          if (k < m - 1) for (let j = 0; j < A - 1; j++) { const p = k * A + j; idx.push(p, p + 1, p + A, p + 1, p + A + 1, p + A); }   /* (wound to face up) */
         }
-        const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('aS', new T.BufferAttribute(aS, 4)); g.setAttribute('aSt', new T.BufferAttribute(aSt, 1)); g.setIndex(idx); g.computeBoundingSphere();
+        const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('aS', new T.BufferAttribute(aS, 4)); g.setAttribute('aSt', new T.BufferAttribute(aSt, 1)); g.setAttribute('aSh', new T.BufferAttribute(aSh, 1)); g.setIndex(idx); g.computeBoundingSphere();
         const mesh = new T.Mesh(g, mat); group.add(mesh);
       }
     }

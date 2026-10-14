@@ -46,6 +46,9 @@ try {
     V.coastal = on('coastal', 300); V.tower = (() => { const t = tr.ridge, n = t.X.length - 1; return [[t.X[n - 40], t.Y[n - 40] + 3, t.Z[n - 40]], [t.X[n] - 4, t.Y[n] + 5, t.Z[n] - 2], 55]; })();
     V.trailsky = [[150, 420, -320], [150, 60, 420], 50, 6, 200];
   }
+  /* (the streams': at the cove's, looking up it from the beach; and where the valley trail crosses it) */
+  const sv = await page.evaluate(() => { const S = Engine.world.streams; if (!S) return null; const s = S.streams.find(s => s.q === 3) || S.streams[0], n = s.n - 1; return { mx: s.X[n], mz: s.Z[n], ux: s.X[n - 40], uz: s.Z[n - 40], uy: s.Y[n - 40], bx: s.X[Math.max(0, n - 120)], bz: s.Z[Math.max(0, n - 120)], by: s.Y[Math.max(0, n - 120)] }; });
+  if (sv) { V.stream = [[sv.mx + (sv.mx - sv.ux) * 0.3, 2.2, sv.mz + (sv.mz - sv.uz) * 0.3], [sv.ux, sv.uy, sv.uz], 55]; V.streamup = [[sv.bx + 6, sv.by + 3, sv.bz + 6], [sv.bx, sv.by, sv.bz], 60]; }
   /* (the animals' own: by the nearest of their spots to the camp) */
   const fs2 = await page.evaluate(() => { const F = Engine.isFauna; if (!F) return null; const near = k => F.spots[k].slice().sort((a, b) => Math.hypot(a.x - Layout.camp.x, a.z - Layout.camp.z) - Math.hypot(b.x - Layout.camp.x, b.z - Layout.camp.z))[0]; return { pig: near('pig'), egret: near('egret') }; });
   if (fs2) {

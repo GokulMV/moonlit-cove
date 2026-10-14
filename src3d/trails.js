@@ -142,7 +142,7 @@ const IsleTrails = (() => {
             pos[v] = x; pos[v + 1] = y; pos[v + 2] = z;
             const c = (k * A + j) * 4, edge = j === 0 || j === 3 ? 0 : 1; col[c] = col[c + 1] = col[c + 2] = 1; col[c + 3] = edge;
           });
-          if (k < m - 1) for (let j = 0; j < A - 1; j++) { const p = k * A + j; idx.push(p, p + A, p + 1, p + 1, p + A, p + A + 1); }
+          if (k < m - 1) for (let j = 0; j < A - 1; j++) { const p = k * A + j; idx.push(p, p + 1, p + A, p + 1, p + A + 1, p + A); }   /* (wound to face up) */
         }
         /* (where it is the boardwalk's, no tread under it) */
         const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 4)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();

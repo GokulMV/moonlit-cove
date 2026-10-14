@@ -109,6 +109,8 @@ const IsleFauna = (() => {
           /* (a group keeps to one spot; those out at a spot gone out of reach go home) */
           for (const a of mine) if (!want || a.sp !== want) { if (Math.hypot(a.x - cx, a.z - cz) > OUT * 0.8) { give(k, a.g); out.splice(out.indexOf(a), 1); } }
           if (want && !mine.some(a => a.sp === want) && performance.now() > buildDue) {
+            /* (no more of a kind out than it has: those at a spot left behind go first) */
+            for (const a of out.filter(a => a.k === k)) { give(k, a.g); out.splice(out.indexOf(a), 1); }
             const n = Math.min(K.n, K.group || 1);
             for (let j = 0; j < n; j++) spawn(k, want, j, t);
             /* (a kind built for the first time takes a while: the next waits a moment) */

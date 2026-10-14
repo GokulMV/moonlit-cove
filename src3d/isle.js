@@ -112,7 +112,7 @@ const IsleWorld = (() => {
     /* ── what the park has built (park.js): the jetty, the hut, the boat; the forest keeps clear of them ── */
     const park = typeof IslePark !== 'undefined' && o.park !== false ? IslePark.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), avoid: streams ? streams.streams.map(s => [s.X[s.n - 1], s.Z[s.n - 1]]) : [] }) : null;
     const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z), keep: (park ? park.plan.clear : []).concat(trails ? trails.clear : [], streams ? streams.clear : []) }) : null;
-    const streamsG = streams ? IsleStreams.build(group, I, streams, { sky: { uHor: U.uHor, uZen: U.uZen }, noise: U.uNoise }) : null;
+    const streamsG = streams ? IsleStreams.build(group, I, streams, { sky: { uHor: U.uHor, uZen: U.uZen }, noise: U.uNoise, shade: forest ? (x, z) => 1 - 0.8 * forest.cover(x, z) : null }) : null;
     /* (with the island's map on boards where the trails start: at the camp's back and by the jetty's foot) */
     const maps = [[12, 30, Math.PI]];
     if (park) { const j = park.plan.jetty, t = park.plan.tangent, mx = j.x - j.nx * 4 - t[0] * 4, mz = j.z - j.nz * 4 - t[1] * 4; maps.push([mx, mz, Math.atan2(j.nx, j.nz)]); }
@@ -182,6 +182,8 @@ const IsleWorld = (() => {
       }
     }
     const decorate = (fn, lod = 'near') => { if (lod !== 'tiny') return; tinyHooks.push(fn); for (const ch of bay.values()) if (ch.built) fn(ch); };
+    /* what the van must drive round (and a walker step round): the stones big enough to be in the way, [x, z, radius, kind] */
+    const obsOut = [], obstaclesNear = (x, z) => { obsOut.length = 0; if (stones) for (const st of stones.near(x, z, 14)) if (st.s > 0.45) obsOut.push([st.x, st.z, st.s * 0.95, 'rock']); return obsOut; };
     const wetOut = [], wetNear = (x, z, r) => { wetOut.length = 0; if (stones) for (const st of stones.near(x, z, r)) if (st.wet) wetOut.push({ x: st.x, z: st.z, top: st.y + st.s * st.sy * 0.8, rad: st.s * 0.9, id: st.id }); return wetOut; };
     /* the land's height at a world point, as drawn (on the sand and over the sea, the sand's level) */
     const land = (x, z) => Math.max(drawnH(x, z), LEVEL);
@@ -211,7 +213,7 @@ const IsleWorld = (() => {
     }
     const none = [];
     return { update, prime, reset: prime, LOD: { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 3400, keep: 3800 }, CW, X0,
-      land, hill: land, massif, walk, reefTop: () => -9, reefLines: () => none, obstaclesNear: () => none, wetNear,
+      land, hill: land, massif, walk, reefTop: () => -9, reefLines: () => none, obstaclesNear, wetNear,
       /* (what is laid along the coast in chunks is laid along the camp's bay; nothing claims ground before the stones) */
       place: () => {}, decorate,
       get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0),
