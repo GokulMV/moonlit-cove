@@ -436,17 +436,18 @@ const World = (() => {
 ${GLSL.WAVEH}
 /* seconds since the last crest reached this point, and how big it was */
 vec2 lastHit(float x, float z){
-  float g = shoreDZv(x), s0 = (shoreZv(x) - z)/sqrt(1.0 + g*g), s = max(s0, 0.0), t = uWaveT, tr = 99.0, A = 0.0;
+  /* (timed along the coast as the waves are: by where along it the rock stands) */
+  float s0 = shoreS(vec2(x, z)), s = max(s0, 0.0), al = shoreA(vec2(x, z)), t = uWaveT, tr = 99.0, A = 0.0;
   for (int j = 0; j < 6; j++){ vec4 W = uWv[j]; if (W.y <= 0.0) continue;
-    float d = t - (W.x + 0.9*sin(x*0.11 + W.z) + x*0.03*W.w - s/WC); if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
+    float d = t - (W.x + 0.9*sin(al*0.11 + W.z) + al*0.03*W.w - s/WC); if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
   for (int k = 0; k < ${GLSL.MAXUW}; k++){ if (k >= uNUw) break; vec4 U = uwAt(k); if (U.y <= 0.0) continue;
-    float T0 = U.x - s/CU, d = t - T0, a = userAmp(U, x, T0);
+    float T0 = U.x - s/CU, d = t - T0, a = userAmp(U, al, T0);
     if (d > -0.05 && d < 4.0 && a > 0.04){ tr = d; A = max(A, 1.0 + 2.4*a); } }
   /* (a rock the tide has left high and dry takes no waves) */
   return vec2(tr, A*smoothstep(-0.3, 0.6, s0));
 }
 /* how much of a rock stands in the water just now (the tide comes and goes round it) */
-float inSea(float x, float z){ float g = shoreDZv(x); return smoothstep(-0.3, 0.8, (shoreZv(x) - z)/sqrt(1.0 + g*g)); }`;
+float inSea(float x, float z){ return smoothstep(-0.3, 0.8, shoreS(vec2(x, z))); }`;
   const FOAM_VS = `
 ${SURF_T}
 varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
@@ -469,7 +470,7 @@ void main(){
   float a = ring*smoothstep(0.5 - 0.3*surge, 0.68, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
   if (a < 0.01) discard;
   float fd = distance(vW, cameraPosition);
-  vec3 c = mix((uAmbF*1.6 + uKeyColT*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.3))));
+  vec3 c = mix((uAmbF*1.6 + uKeyColT*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
   gl_FragColor = vec4(c, a*0.85);
 }`;
   const SPRAY_VS = `
@@ -480,12 +481,12 @@ void main(){
   vUv = uv;
   float x = aRock.x, z = aRock.y, top = aRock.z, rad = aRock.w;
   vec2 hit = lastHit(x, z);
-  float g = shoreDZv(x), s = max((shoreZv(x) - z)/sqrt(1.0 + g*g), 0.0);
-  float nA = 0.5 + 0.24*sin(x*0.19 + 1.3) + 0.18*sin(x*0.071 + 0.4) + 0.12*sin(x*0.53 + 2.0), sb = 3.0 + 7.0*nA*hit.y;
+  float s = max(shoreS(vec2(x, z)), 0.0), al = shoreA(vec2(x, z));
+  float nA = 0.5 + 0.24*sin(al*0.19 + 1.3) + 0.18*sin(al*0.071 + 0.4) + 0.12*sin(al*0.53 + 2.0), sb = 3.0 + 7.0*nA*hit.y;
   float k = hit.y*(0.45 + 0.55*smoothstep(sb + 7.0, sb - 1.0, s));
   float life = 0.8 + 0.9*aSeed.z, tt = hit.x - aSeed.w*0.3;
   float on = step(0.0, tt)*step(tt, life), sk = sqrt(max(k, 0.0));
-  vec3 dir = normalize(vec3(-g, 0.0, 1.0)), side = vec3(dir.z, 0.0, -dir.x);
+  vec2 ld = -shoreN(vec2(x, z)); vec3 dir = vec3(ld.x, 0.0, ld.y), side = vec3(dir.z, 0.0, -dir.x);
   float lat = aSeed.y*2.0 - 1.0;
   vec3 p0 = vec3(x, top*(0.3 + 0.55*aSeed.x), z) - dir*rad*0.7 + side*lat*rad*0.75;
   vec3 vel = vec3(0.0, (1.6 + 3.8*aSeed.x)*sk, 0.0) + dir*(0.5 + 1.8*aSeed.z)*sk + side*lat*1.5*sk;
@@ -512,7 +513,7 @@ void main(){
   float a = vA*mix(smoothstep(1.0, 0.15, d), (1.0 - d)*(1.0 - d)*(0.35 + 0.9*n), vMist);
   if (a < 0.004) discard;
   float fd = distance(vWP, cameraPosition);
-  vec3 c = mix(uAmbF*1.8 + uKeyColT*0.65, uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.3))));
+  vec3 c = mix(uAmbF*1.8 + uKeyColT*0.65, uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
   gl_FragColor = vec4(c, a*0.8);
 }`;
 

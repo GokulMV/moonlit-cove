@@ -111,7 +111,7 @@ vec3 onTop(vec3 w, float hs){
 }
 /* how deep the water is here, roughly (as shallows.js reckons it), and where the sun throws the shadow of a thing at
    height y onto the sand under it */
-float bedAt(vec2 p){ float g = shoreDZv(p.x); return clamp(0.12*(shoreZv(p.x) - p.y)/sqrt(1.0 + g*g) + 0.15, 0.0, 4.5); }
+float bedAt(vec2 p){ ${Layout.isle ? 'return clamp(-shoreFloor(p, shoreS(p)), 0.15, 4.5);' : 'return clamp(0.12*shoreS(p) + 0.15, 0.0, 4.5);'} }
 vec2 throwTo(vec2 p, float y, float bed, vec3 L){ vec2 o = -L.xz/max(L.y, 0.12)*max(0.0, y + bed); float n = length(o); return p + (n > 1.4 ? o*(1.4/n) : o); }`;
   /* the shadows of the shoal's fish on the sand under the shallows: each where the sun throws it from its fish, the
      fish's own size, softer the further its fish swims above the sand; strong in full sun, gone under cloud */
@@ -127,7 +127,7 @@ void main(){
   float hd = S.z, c = cos(hd), s = sin(hd);
   vec2 off = vec2(aFish.y, aFish.z) + vec2(sin(uTime*0.9 + aFish.w*6.0)*0.35, sin(uTime*0.6 + aFish.w*4.0)*0.3);
   vec2 p = S.xy + vec2(c*off.x - s*off.y, s*off.x + c*off.y);
-  { float hf = waveH(p), gf = shoreDZv(p.x); p += vec2(-gf, 1.0)/sqrt(1.0 + gf*gf)*0.9*hf; }   /* (carried by the swell, as its fish is) */
+  { float hf = waveH(p); p -= shoreN(p)*0.9*hf; }   /* (carried by the swell, as its fish is) */
   float yaw = hd + 0.25*sin(uTime*2.3 + aFish.w*9.0), fy = -0.26 - 0.36*fract(aFish.w*3.3), bed = bedAt(p);
   vec3 L = normalize(uKeyDirT);
   vec2 at = throwTo(p, fy, bed, L);
@@ -137,7 +137,7 @@ void main(){
   vec2 q = (uv - 0.5)*vec2(0.15, 0.03 + 0.05*(1.0 - L.y))*(0.8 + 0.4*fract(aFish.w*7.7))*(1.0 + vSoft*0.6);
   vec2 w = vec2(cos(yaw)*q.x - sin(yaw)*q.y, sin(yaw)*q.x + cos(yaw)*q.y);
   vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
-  float g = shoreDZv(p.x), dist = (shoreZv(p.x) - p.y)/sqrt(1.0 + g*g);
+  float dist = shoreS(p);
   vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*smoothstep(0.12, 0.35, L.y);
   gl_Position = projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
@@ -177,11 +177,11 @@ void main(){
   vec3 w = vec3(pc.x + cy*p.x - sy*p.z, -0.26 - 0.36*fract(aFish.w*3.3) + p.y, pc.y + sy*p.x + cy*p.z);
   /* the swell passing over carries each fish with it: up and down with the surface, shoreward under a crest and back
      again under the trough (the water itself goes round like that as a wave goes by) */
-  { float hf = waveH(pc), gf = shoreDZv(pc.x); vec2 lf = vec2(-gf, 1.0)/sqrt(1.0 + gf*gf); w.y += 0.72*hf; w.xz += lf*0.9*hf; }
+  { float hf = waveH(pc); vec2 lf = -shoreN(pc); w.y += 0.72*hf; w.xz += lf*0.9*hf; }
   vN = vec3(cy*n.x - sy*n.z, n.y, sy*n.x + cy*n.z); vC = color; vW = w;
   float hs = waveH(w.xz);
   vDepth = max(0.0, hs - w.y);
-  float g = shoreDZv(pc.x), dist = (shoreZv(pc.x) - pc.y)/sqrt(1.0 + g*g);
+  float dist = shoreS(pc);
   vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*step(0.01, sc);
   /* (and a few centimetres nearer still: the sea's mesh only follows the waves between its own points) */
   vec3 ray = w - cameraPosition; float k = ray.y < -1e-4 ? clamp((hs + 0.015 - cameraPosition.y)/ray.y, 0.0, 1.0) : 1.0;

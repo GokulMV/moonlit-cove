@@ -126,10 +126,52 @@ const Layout = (() => {
      edge just now (dz, m), and how far it had it at the last high water (hi). shoreZ is where the sea meets the sand now;
      shoreMeanZ where it does at the mean of the tide, which is what the coast's things are laid out from */
   const tide = { dz: 0, hi: 0 };
-  const shoreMeanZ = x => Coast.shoreZ(x + O.x) - O.z;
-  const shoreZ = x => Coast.shoreZ(x + O.x) - O.z + tide.dz, shoreDZ = x => Coast.shoreDZ(x + O.x), vegZ = x => Coast.vegZ(x + O.x) - O.z;
-  const head = x => Coast.head(x + O.x);
-  const heads = (x0, x1) => Coast.heads(x0 + O.x, x1 + O.x).map(h => Object.assign({}, h, { hx: h.hx - O.x }));
+
+  /* ── the island (island.js), when the page is asked for it (?island): the camp's bay is its east beach, the camp's own
+     shore as it always was, and the rest of the coast is the island's. (Built the first time anything asks) ── */
+  const isle = typeof window !== 'undefined' && !!(window.__coveIsle || (window.location && /[?&]island\b/.test(window.location.search)));
+  let isleUp = false;
+  const ISL = () => { if (!isleUp) { Island.build(); isleUp = true; } return Island; };
+  /* (how far up each kind of shore the tide moves the water's edge: island.js) */
+  const tideK = q => Island.tideK(q);
+  /* (the coast as a line along x, for whatever still sees it so: in the island, its east coast, from the north end to the
+     south end; where along it a world x is, u, found from the camp's bay outward, where u and x are the same) */
+  const SP = {};
+  function eastU(x) { const I = ISL(); let u = x; for (let i = 0; i < 6; i++) { const p = I.shore(u, SP), e = x - p.x; if (Math.abs(e) < 1e-3) break; u += Math.max(-80, Math.min(80, e / Math.max(0.25, p.tx))); } return u; }
+  const iMean = x => ISL().shore(eastU(x), SP).z;
+  const iNow = x => { const p = ISL().shore(eastU(x), SP); return p.z + tide.dz * tideK(p) / Math.max(0.25, p.tx); };
+  const iDZ = x => { const p = ISL().shore(eastU(x), SP); return p.tz / Math.max(0.25, p.tx); };
+  const iVeg = x => { const p = ISL().shore(eastU(x), SP); return p.z + p.W / Math.max(0.25, p.tx); };
+  const iHead = x => Math.abs(x) < WIN.r1 ? Island.headFix(x) * (1 - sm(WIN.r0, WIN.r1, Math.abs(x))) : 0;
+
+  const shoreMeanZ = isle ? iMean : x => Coast.shoreZ(x + O.x) - O.z;
+  const shoreZ = isle ? iNow : x => Coast.shoreZ(x + O.x) - O.z + tide.dz, shoreDZ = isle ? iDZ : x => Coast.shoreDZ(x + O.x), vegZ = isle ? iVeg : x => Coast.vegZ(x + O.x) - O.z;
+  const head = isle ? iHead : x => Coast.head(x + O.x);
+  const heads = isle ? (x0, x1) => Coast.heads(x0, x1).filter(h => h.id === -1 || h.id === 0).map(h => Object.assign({}, h))
+    : (x0, x1) => Coast.heads(x0 + O.x, x1 + O.x).map(h => Object.assign({}, h, { hx: h.hx - O.x }));
+
+  /* ── the shore, wherever it is, for anything that lives by it: from a world point, how far it is from the water's edge
+     just now (s, m: out to sea positive, inland negative), where along the coast it is (a, m), and which way the sea lies
+     (nx, nz); and back, the world point a along the coast and s out from the water's edge at the mean of the tide; and
+     what the shore is like at a (its beach's width to the forest, how much of it is sand, rock, cliff or mangrove, how far
+     its reef runs out, how open it is to the swell). Along the coast that never ends, a is x and the sea lies down -z
+     (more or less); round the island, a runs the whole way round, the camp's bay where it is x ── */
+  const SQ = {};
+  const Shore = isle ? {
+    at(x, z, o = {}) {
+      const I = ISL(), n = I.normalAt(x, z), q = I.shore(I.uAt(x, z), SQ);
+      o.s = I.sdf(x, z) + tide.dz * tideK(q); o.a = I.aAt(x, z); o.nx = n[0]; o.nz = n[1]; return o;
+    },
+    pt(a, s, o = {}) { const q = ISL().shore(a, SQ); o.x = q.x + q.nx * s; o.z = q.z + q.nz * s; o.nx = q.nx; o.nz = q.nz; return o; },
+    info(a, o = {}) { const q = ISL().shore(a, SQ); Object.assign(o, { W: q.W, sand: q.sand, rock: q.rock, cliff: q.cliff, mangrove: q.mangrove, reef: q.reef, ex: q.ex, creek: q.creek, tide: tideK(q) }); return o; },
+    /* how far round the coast is (the island's perimeter: a comes round again after it) */
+    P: () => ISL().data.line.P
+  } : {
+    at(x, z, o = {}) { const g = shoreDZ(x), k = 1 / Math.sqrt(1 + g * g); o.s = (shoreZ(x) - z) * k; o.a = x; o.nx = g * k; o.nz = -k; return o; },
+    pt(a, s, o = {}) { const g = shoreDZ(a), k = 1 / Math.sqrt(1 + g * g); o.x = a + g * k * s; o.z = shoreMeanZ(a) - k * s; o.nx = g * k; o.nz = -k; return o; },
+    info(a, o = {}) { Object.assign(o, { W: vegZ(a) - shoreMeanZ(a), sand: 1, rock: 0, cliff: 0, mangrove: 0, reef: 0, ex: 1, creek: -1, tide: 1 }); return o; },
+    P: () => Infinity
+  };
 
   const camp = { x: 0.6, z: -2.7 };
   const rug = { x: 0.6, z: -2.7, w: 3.9, d: 2.8, rot: 0.06 };
@@ -201,6 +243,6 @@ const Layout = (() => {
     van: [-7.6, 2.4, -3.5], lights: [0.6, 2.7, -5.0], table: [0.6, 0.7, -2.7], fire: [6.9, 1.0, -4.5], bottle: [-3.6, 0.3, -8.05]
   };
 
-  return { shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN,
+  return { shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN, isle, Shore, island: () => isle ? ISL() : null,
            camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, castle, palms, trees, bushes, fruit, wind, cameras, hotspots, board };
 })();

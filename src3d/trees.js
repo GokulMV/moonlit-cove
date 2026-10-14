@@ -567,7 +567,7 @@ void main(){
   c += alb*uKeyColT*vec3(0.8, 1.0, 0.6)*0.05*(0.4 + 0.6*ao)*(0.3 + 0.7*sh);
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
-  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
+  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
   gl_FragColor = vec4(c, 1.0);
 }`;
@@ -669,7 +669,7 @@ void main(){
   c += vC*uKeyCol*max(ndl, 0.0)*cs*mix(0.2, 1.0, ao);
   c += vC*vec3(0.92, 1.06, 0.42)*uKeyCol*max(-ndl, 0.0)*0.45*ao*ao*cs*(1.0 - nb.z);
   float d = distance(vW, cameraPosition);
-  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1900.0/max(uFog.w, 0.3))));
+  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1900.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
   gl_FragColor = vec4(c, 1.0);
 }`;

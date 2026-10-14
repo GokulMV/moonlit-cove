@@ -30,7 +30,21 @@ const Mats = (() => {
   const ctTex = new THREE.DataTexture(ctData, CT.N, 2, THREE.RGBAFormat, THREE.FloatType);
   ctTex.magFilter = ctTex.minFilter = THREE.NearestFilter; ctTex.generateMipmaps = false; ctTex.needsUpdate = true;
   const coastU = { uCoastT: { value: ctTex }, uCoastW: { value: V4(-1, 1, -8, 8) }, uTideZ: { value: 0 } };
+  /* the island's shore, when there is one (glsl.js ISLE_GL; isleUp fills them in) */
+  if (Layout.isle) Object.assign(coastU, { uIsF: { value: null }, uIsU: { value: null }, uIsL: { value: null }, uIsK: { value: null }, uIsC: { value: null }, uIsG: { value: V4() }, uIsD: { value: V4() }, uIsN: { value: V4() } });
   Object.assign(U, coastU);
+  /* the island's shore as the shaders read it: island.js's grid and coastline, as textures */
+  function isleUp(D) {
+    const T = THREE, tx = (data, w, h, fmt, type, lin) => { const t = new T.DataTexture(data, w, h, fmt, type); t.minFilter = t.magFilter = lin ? T.LinearFilter : T.NearestFilter; t.generateMipmaps = false; t.wrapS = t.wrapT = T.ClampToEdgeWrapping; t.needsUpdate = true; return t; };
+    coastU.uIsF.value = tx(D.field, D.nx, D.nz, T.RGBAFormat, T.HalfFloatType, true);
+    coastU.uIsU.value = tx(D.u, D.nx, D.nz, T.RedFormat, T.FloatType, false);
+    coastU.uIsL.value = tx(D.line, D.LW, D.rows * 2, T.RGBAFormat, T.HalfFloatType, false);
+    coastU.uIsK.value = tx(D.k1, D.nx, D.nz, T.RGBAFormat, T.UnsignedByteType, true);
+    coastU.uIsC.value = tx(D.k2, D.nx, D.nz, T.RGBAFormat, T.UnsignedByteType, true);
+    coastU.uIsG.value.set(D.X0, D.Z0, 1 / (D.cell * D.nx), 1 / (D.cell * D.nz));
+    coastU.uIsD.value.set(D.nx, D.nz, D.cell, 1 / D.cell);
+    coastU.uIsN.value.set(D.P, D.u0, D.n, 1 / D.ds);
+  }
   const ctFill = [[0, 0], [0, 0]]; let ctVer = -1;
   function coastFill(camX, budget = 3000) {
     if (ctVer !== Layout.coastVer) { ctVer = Layout.coastVer; ctFill[0] = [0, 0]; ctFill[1] = [0, 0]; budget = Infinity; }
@@ -55,7 +69,7 @@ const Mats = (() => {
 uniform vec4 uFog;
 vec3 fogIt(vec3 c, vec3 wp){
   float d = distance(wp, cameraPosition);
-  c = mix(c, uFog.rgb*1.0, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
+  c = mix(c, uFog.rgb*1.0, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }`;
   const PREFIX = GLSL.COMMON + GLSL.ART + FOG;
@@ -153,10 +167,10 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     float lo = smoothstep(0.69, 0.73, vnz(vWPos*2.7 + 9.0)*0.6 + vnz(vWPos*9.0 + 4.0)*0.4)*smoothstep(1.3, 2.6, vWPos.y)*smoothstep(0.35, 0.8, nWl.y);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.31, 0.28)*(0.85 + 0.3*vnz(vWPos*40.0)), lg*0.4);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.37, 0.19, 0.05)*(0.8 + 0.4*vnz(vWPos*33.0)), lo*0.5); }
-  float sea = smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x));
+  float sea = smoothstep(4.0, -0.5, -shoreS(vWPos.xz));
   float wetl = smoothstep(0.55 + 1.0*sea, 0.05, vWPos.y)*mix(0.3, 1.0, sea), weed = smoothstep(0.32, 0.0, abs(vWPos.y - 0.12))*smoothstep(0.35, 0.65, vnz(vWPos*5.0))*sea;
   diffuseColor.rgb *= mix(1.0, 0.42, wetl); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), weed*0.7);`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, 0.5, smoothstep(0.55 + 1.0*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)), 0.05, vWPos.y)*smoothstep(4.0, -0.5, vWPos.z - shoreZc(vWPos.x)));`)
+  roughnessFactor *= mix(1.0, 0.5, smoothstep(0.55 + 1.0*smoothstep(4.0, -0.5, -shoreS(vWPos.xz)), 0.05, vWPos.y)*smoothstep(4.0, -0.5, -shoreS(vWPos.xz)));`)
         /* its relief, a few centimetres deep: the surface's own slope, worked out from the height of the stone round the point */
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   { float rkD2 = distance(vWPos, cameraPosition), nk = smoothstep(9.0, 3.0, rkD2), ck = smoothstep(16.0, 4.0, rkD2); const float e = 0.006;
@@ -201,7 +215,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}
     vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;
     diffuseColor.rgb = mix(vegC, rockC, vRock);
-    float sea = smoothstep(5.0, -0.5, vWPos.z - shoreZc(vWPos.x));
+    float sea = smoothstep(5.0, -0.5, -shoreS(vWPos.xz));
     wetK = smoothstep(${key === 'reef' ? '0.75, 0.0' : '1.8, 0.1'}, vWPos.y)*sea*vRock;
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), smoothstep(0.35, 0.0, abs(vWPos.y - 0.15))*smoothstep(0.4, 0.7, vnz(vWPos*4.0))*sea*vRock*0.7);
@@ -339,5 +353,5 @@ void main(){
     });
     return m;
   }
-  return { U, coastU, coastFill, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
+  return { U, coastU, coastFill, isleUp, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
 })();

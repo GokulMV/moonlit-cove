@@ -368,7 +368,7 @@ void main(){
   c += alb*uKeyColT*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao)*(0.3 + 0.7*sh);
   if (torchNear(vWPos) || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
-  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
+  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
   gl_FragColor = vec4(c, 1.0);
   /* (no more than the renderer's own finish: nothing where the frame is drawn to a target, as the engine's is) */

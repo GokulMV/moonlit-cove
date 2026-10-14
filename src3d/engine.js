@@ -333,7 +333,9 @@ const Engine = (() => {
   }
   const surge = { ripples: [], waves: [], combo: 0, lastT: -1e9, dyn: [], fireOut: null, lightsOut: null, lantOut: [null, null, null], candleOut: null, vanHit: null, rugWet: null, rng: null };
   const shoreDZ = x => Layout.shoreDZ(x);
-  const sOf = (x, z) => { const g = shoreDZ(x); return (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); };
+  /* the shore as the shaders see it (Layout.Shore): how far out from the water's edge a point is, and where along the coast */
+  const _sh = {}, _shi = {}, shAt = (x, z) => Layout.Shore.at(x, z, _sh);
+  const sOf = (x, z) => shAt(x, z).s;
   const nBof = a => 0.5 + 0.3 * Math.sin(a * 0.23 + 2.1) + 0.2 * Math.sin(a * 0.097 + 1.7);
   const runK = (nB, a) => 0.72 + 0.4 * nB + 0.16 * Math.sin(a * 0.43 + 0.8) + 0.1 * Math.sin(a * 0.79 + 2.3);   /* as in the ground shader */
   const tsOf = amp => TSJ * (0.85 + 0.15 * Math.max(amp, 1));
@@ -371,14 +373,15 @@ const Engine = (() => {
   const dirAt = (nx, ny) => { const v = new T.Vector3(nx * 2 - 1, -(ny * 2 - 1), 0.5).unproject(camera).sub(camera.position).normalize(); return [v.x, v.y, v.z]; };
   function clickSea(nx, ny, wt) {
     const h = seaPick(nx, ny); if (!h || h.s < 0.8) return null;
+    h.a = shAt(h.x, h.z).a;
     surge.combo = wt - surge.lastT < 2.8 ? surge.combo + 1 : 1; surge.lastT = wt;
     /* (a soft ring where it was touched; the swell itself rises there and rolls in) */
     surge.ripples.push({ x: h.x, z: h.z, t0: wt, A: 0.35 });
     const s0 = Math.min(Math.max(h.s, 7), 76);
     /* clicks close together in time and place stack into one taller swell */
-    let w = surge.waves.find(q => q.x - wt > 1.2 && Math.abs(q.xc - h.x) < 14 && wt - q.t0 < 4.5);
-    if (w) { w.amp = Math.min(7.5, w.amp + 1.15); w.xc += (h.x - w.xc) * 0.3; }
-    else { w = { t0: wt, x: wt + s0 / CU, amp: 1.5, xc: h.x, s0 }; surge.waves.push(w); }
+    let w = surge.waves.find(q => q.x - wt > 1.2 && Math.abs(q.xc - h.a) < 14 && wt - q.t0 < 4.5);
+    if (w) { w.amp = Math.min(7.5, w.amp + 1.15); w.xc += (h.a - w.xc) * 0.3; }
+    else { w = { t0: wt, x: wt + s0 / CU, amp: 1.5, xc: h.a, s0, px: h.x, pz: h.z }; surge.waves.push(w); }
     surge.waves = surge.waves.filter(q => wt - q.x < tsOf(q.amp) + 15);   /* each kept as long as the shader still draws its wet sand */
     return { x: h.x, z: h.z, combo: surge.combo, amp: w.amp, eta: w.x - wt, reach: (0.85 + 0.75 * w.amp) };
   }
@@ -393,11 +396,13 @@ const Engine = (() => {
     const prof = x < 0 ? Math.exp(-x * x / (lf * lf)) : Math.exp(-x * x / (lb * lb)), k = spd > 2 ? 0.27 / (1 + 0.08 * Math.max(amp - 1.5, 0)) : 0.16;
     return amp * k * shoal * (1 + (bore - 1) * broken) * prof * smJ(-0.3, 1.4, s);
   }
-  function waveAt(x, z, wt = waveNow) {
-    const g = shoreDZ(x), s = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); if (s < -0.5 || !gU) return 0;
+  function waveAt(x0, z, wt = waveNow) {
+    const q = shAt(x0, z), s = q.s, x = q.a; if (s < -0.5 || !gU) return 0;
     const nA = 0.5 + 0.24 * Math.sin(x * 0.19 + 1.3) + 0.18 * Math.sin(x * 0.071 + 0.4) + 0.12 * Math.sin(x * 0.53 + 2.0);
+    /* (how open the shore is to the swell, and how much breaks out on a reef: as the shaders have it) */
+    const I = Layout.isle ? Layout.Shore.info(x, _shi) : null, ex = I ? I.ex : 1, rk = I ? Math.min(1, I.rock + 0.6 * I.cliff) : 0, R = I ? I.reef : 0;
     let h = 0;
-    for (const W of gU.uWv.value) { if (W.y <= 0) continue; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w), W.y, 1.55, 3 + 7 * nA * W.y); }
+    for (const W of gU.uWv.value) { if (W.y <= 0) continue; const sb0 = 3 + 7 * nA * W.y; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w), W.y * ex, 1.55, sb0 + (Math.max(R, 4) + 1.5 * W.y - sb0) * rk); }
     for (const w of surge.waves) {
       const amp = userAmpJS(w, x, wt) * smJ(w.x - w.s0 / CU, w.x - w.s0 / CU + 1.8, wt); if (amp < 0.01) continue;
       h += swellJS(s, wt - w.x, amp, CU, Math.min((3 + 4.6 * amp) * (0.88 + 0.24 * nA), Math.max(4, 0.5 * w.s0 * (0.9 + 0.2 * nA))));
@@ -405,8 +410,8 @@ const Engine = (() => {
     return h;
   }
   /* is (x, z) under the swash of a click-swell at time wt? (mirrors the ground shader, tongues and all) */
-  function swashAt(x, z, wt) {
-    const r = -sOf(x, z); let best = null;
+  function swashAt(x0, z, wt) {
+    const q = shAt(x0, z), r = -q.s, x = q.a; let best = null;
     for (const w of surge.waves) {
       const amp = userAmpJS(w, x, wt); if (amp < 0.05) continue;
       const T_ = tsOf(amp), [R, dl] = reach(x, amp, seedU(w)), u = (wt - w.x - dl) / T_;
@@ -419,7 +424,7 @@ const Engine = (() => {
   function registerDyn(list) {
     surge.dyn = list.map(d => {
       d.o.updateMatrixWorld(true);
-      const wp = d.o.getWorldPosition(new T.Vector3()), g = shoreDZ(wp.x), Lw = new T.Vector3(-g, 0, 1).normalize();
+      const wp = d.o.getWorldPosition(new T.Vector3()), qn = shAt(wp.x, wp.z), Lw = new T.Vector3(-qn.nx, 0, -qn.nz).normalize();
       const pq = d.o.parent.getWorldQuaternion(new T.Quaternion()).invert();
       const L = Lw.clone().applyQuaternion(pq); L.y = 0; L.normalize();
       return Object.assign(d, { wx: wp.x, wz: wp.z, p0: d.o.position.clone(), q0: d.o.quaternion.clone(), P0: d.o.position.clone(), Q0: d.o.quaternion.clone(), L, L0: L.clone(), S: new T.Vector3().crossVectors(UP, L), axis: new T.Vector3().crossVectors(UP, L).normalize(), hit: null });
@@ -557,12 +562,12 @@ const Engine = (() => {
     const WT = 9.0;
     for (const p of world.wetNear(cx, cz, maxD)) {
       const d = Math.hypot(p.x - cx, p.z - cz), i = p.id;
-      const g = shoreDZ(p.x), s = Math.max(0, (Layout.shoreZ(p.x) - p.z) / Math.sqrt(1 + g * g));
+      const qr = shAt(p.x, p.z), s = Math.max(0, qr.s), al = qr.a;
       for (let k = Math.floor(wt0 / WT) - 1; k <= Math.ceil(wt1 / WT) + 1; k++) {
-        const h = n => hash(k * n + 0.37), T0 = k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(p.x * 0.11 + h(2.71) * 6.283) + p.x * 0.03 * (h(0.93) - 0.5) - s / WCJ;
+        const h = n => hash(k * n + 0.37), T0 = k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(al * 0.11 + h(2.71) * 6.283) + al * 0.03 * (h(0.93) - 0.5) - s / WCJ;
         if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'r' + k + '_' + i, wave: 'w' + k, x: T0, amp: 0.55 + 0.6 * h(3.33), d, rad: p.rad, px: p.x });
       }
-      for (const w of surge.waves) { const T0 = w.x - s / CU; if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'ru' + w.t0.toFixed(2) + '_' + i, wave: 'u' + w.t0.toFixed(2), x: T0, amp: 1 + 0.6 * userAmpJS(w, p.x, T0), d, rad: p.rad, px: p.x }); }
+      for (const w of surge.waves) { const T0 = w.x - s / CU; if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'ru' + w.t0.toFixed(2) + '_' + i, wave: 'u' + w.t0.toFixed(2), x: T0, amp: 1 + 0.6 * userAmpJS(w, al, T0), d, rad: p.rad, px: p.x }); }
     }
     return out;
   }
@@ -740,6 +745,9 @@ const Engine = (() => {
     Mats.U.uFireSh.value = fireS.rt.depthTexture; Mats.U.uFireShM.value = fireS.M;
     Mats.U.uCanSh.value = canS.rt.depthTexture; Mats.U.uCanShM.value = canS.M;
 
+    /* the island's shore, for the shaders, when the page is asked for the island (Layout.isle): its grid and its coastline
+       as textures (glsl.js ISLE_GL) */
+    if (Layout.isle) { const t0 = performance.now(), I = Layout.island(); Mats.isleUp(I.gpu()); isleMs = { build: I.data.ms, gpu: Math.round(performance.now() - t0) }; }
     const drect = { x: -17, z: -10.5, w: 34, d: 15 }, dec = Paint.decals(drect, opts.decalPPM || 48);
     gU = Object.assign({}, Mats.U, skyU, {
       uNoise: { value: noiseTex }, uWater: { value: waterTex },
@@ -747,7 +755,7 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uNearT: { value: new T.Vector4(0, 0, 1, 0) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
       uSunVis: { value: null }
     });
     /* (the clouds' own uniforms, the very same, for their shadows on the sand and the sea) */
@@ -767,7 +775,8 @@ const Engine = (() => {
        and the small lives of the shore, its shells laid along every chunk of it as the chunk is built.
        The chunk round the camp is built now, the rest a little at a time as the camera comes near */
     coastFollow(Layout.cameras.wide.pos[0]);
-    world = World.build(natG, gU, noiseTex);
+    /* (or the island's land, when the page is asked for the island) */
+    world = Layout.isle ? IsleWorld.build(natG, gU) : World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
@@ -793,7 +802,7 @@ const Engine = (() => {
 
   /* the shoreline the shaders draw: the strip of it round the camera (Mats.coastFill), carried along as it moves */
   /* (every frame: when there is nothing new to work out it costs nothing) */
-  function coastFollow(x) { Mats.coastFill(x); }
+  function coastFollow(x) { if (!Layout.isle) Mats.coastFill(x); }
   Object.assign(api, { coastFollow });
 
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -885,6 +894,30 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     R.toneMapping = tm; R.toneMappingExposure = te; R.autoClear = ac; R.outputColorSpace = cs;
   }
 
+  /* ── round the island the near-shore sea's fine mesh is laid along whichever shore is being looked at: turned to face
+     it square (in steps of three degrees, so it is seldom turned at all, and its vertices keep to one lattice while it
+     is not), its landward edge a little above the water's edge all along it, and round any swell that has been sent in ── */
+  let isleMs = null; const nearI = { phi: null, cx: 1e9, cz: 1e9 }, _nq = {}, _np = {};
+  function nearIsle(o) {
+    const lk = (o.cam || Layout.cameras.wide).look, Sh = Layout.Shore, wtn = o.waveT ?? (o.t || 0);
+    let px = (camera.position.x + lk[0]) / 2, pz = (camera.position.z + lk[2]) / 2;
+    const pend = surge.waves.filter(w => wtn < w.x + 8 && w.px !== undefined);
+    if (pend.length) { const w = pend.reduce((a, b) => (b.t0 > a.t0 ? b : a)); px = w.px; pz = w.pz; }
+    const q = Sh.at(px, pz, _nq), fx = px - q.nx * q.s, fz = pz - q.nz * q.s, STEP = Math.PI / 60;
+    const want = Math.atan2(-q.nx, -q.nz);
+    if (nearI.phi === null || Math.abs(Math.atan2(Math.sin(want - nearI.phi), Math.cos(want - nearI.phi))) > STEP * 1.5) nearI.phi = Math.round(want / STEP) * STEP;
+    const c = Math.cos(nearI.phi), sn = Math.sin(nearI.phi), toW = (lx, lz) => [lx * c + lz * sn, -lx * sn + lz * c];
+    /* (the water's edge across the mesh's width: its landward edge goes 4 m beyond the furthest in of it) */
+    const lzF = fx * sn + fz * c, lxF = fx * c - fz * sn; let edge = -1e9;
+    for (let i = 0; i <= 8; i++) { const lx = lxF - NEAR.W / 2 + i * NEAR.W / 8, [wx, wz] = toW(lx, lzF), s = Sh.at(wx, wz, _np).s; edge = Math.max(edge, lzF + s); }
+    edge = Math.min(edge, lzF + 40);
+    const lx = Math.round(lxF / NEAR.CELL) * NEAR.CELL, lz = Math.round((edge + 4 - NEAR.D / 2) / NEAR.CELL) * NEAR.CELL, [cx, cz] = toW(lx, lz);
+    if (cx !== nearI.cx || cz !== nearI.cz) {
+      nearI.cx = cx; nearI.cz = cz; nearMesh.position.set(cx, 0, cz); nearMesh.rotation.set(0, nearI.phi, 0);
+      gU.uNearT.value.set(cx, cz, c, sn); gU.uNearRect.value.set(-NEAR.W / 2, -NEAR.D / 2, NEAR.W / 2, NEAR.D / 2);
+    }
+  }
+  Object.defineProperty(api, 'isleMs', { get: () => isleMs });
   let lastCW = 0, lastCH = 0, fabT = null;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
@@ -917,7 +950,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
        draw, and the building of the coast's chunks (a few milliseconds of it a frame, unless asked otherwise) */
     /* (the surf is meshed round what is being looked at, and round any swell that has been sent in, so a swell clicked far
        along the beach rises where it was clicked; its landward edge just above the shore there) */
-    if (nearMesh) {
+    if (nearMesh && Layout.isle) nearIsle(o);
+    else if (nearMesh) {
       const lk = (o.cam || Layout.cameras.wide).look, keep = NEAR.W / 2 - 52;
       let cx = (camera.position.x + lk[0]) / 2;
       /* (swells on their way in: as many of them as the mesh can hold, the newest first, as near the view as can be) */
@@ -937,8 +971,9 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     }
     skyMesh.position.copy(camera.position);
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
+    if (Layout.isle) groundMesh.position.z = Math.round(camera.position.z / 100) * 100;
     coastFollow(camera.position.x);
-    if (world) world.update(camera.position.x, o.buildMs ?? 4);
+    if (world) world.update(camera.position.x, o.buildMs ?? 4, camera.position.z);
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;
       const sc = o.shadowC || (away ? [Math.round(lk[0]), Math.round(lk[2])] : [Layout.camp.x, Layout.camp.z]);
@@ -1053,6 +1088,12 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     const hazeR = Math.abs(fireSide.x - fireTop.x) * 0.5 * (canvas.width / canvas.height);
     const haze = haze4.set(fireTop.x * 0.5 + 0.5, fireTop.y * 0.5 + 0.5, hazeR, fireTop.z < 1 ? F.i * (o.haze ?? 1) : 0);
     gU.uMist.value = 1 + 1.6 * soft;
+    /* (round the island the eye can climb high: the haze lies low over the sea, thinning upward, so from high up there is
+       less of it between the eye and what it looks down on: as much less as the air it looks down through is thinner, on
+       average, than the air at the sea) */
+    /* (and the haze the camp's own views are drawn with, close and soft, is the low air's over the sea at night: from a
+       hillside or the summit, looking out over kilometres, the day's air is far clearer) */
+    if (Layout.isle) { const y = Math.max(1, camera.position.y), H = 600, up = Math.max(0, Math.min(1, (y - 20) / 180)); gU.uMist.value *= H / y * (1 - Math.exp(-y / H)) * (1 - 0.86 * up * up * (3 - 2 * up)); }
     Mats.U.uFog.value.set(S.hor[0], S.hor[1], S.hor[2], gU.uMist.value);
     if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
     pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;

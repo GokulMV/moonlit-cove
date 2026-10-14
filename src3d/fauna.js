@@ -29,7 +29,7 @@ ${GLSL.ART}
 uniform vec3 uAmbF, uKeyDirT, uKeyColT; uniform vec4 uFog;
 vec3 fogIt(vec3 c, vec3 wp){
   float d = distance(wp, cameraPosition);
-  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))));
+  c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }
 vec3 shade(vec3 alb, vec3 n, vec3 wp, float thin, float gloss){
@@ -193,7 +193,7 @@ void main(){
   float px = sz*uScale/max(-mv.z, 0.1);
   vA *= min(1.0, px*0.6);
   float fw = pow(max(dot(normalize(p - cameraPosition), uKeyDirT), 0.0), 4.0), d = length(mv.xyz);
-  vC = mix(uAmbF*1.5 + uKeyColT*(0.55 + 1.1*fw), uFog.rgb, (1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.3))))*0.85);
+  vC = mix(uAmbF*1.5 + uKeyColT*(0.55 + 1.1*fw), uFog.rgb, (1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))))*0.85);
   gl_PointSize = clamp(px, 1.0, 256.0);
   gl_Position = vA < 0.004 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
 }`;

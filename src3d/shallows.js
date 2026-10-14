@@ -60,7 +60,7 @@ void main(){
     vT = t; vBulb = exp(-pow((t - 0.04)/0.05, 2.0)); vX = aS;
   }
   /* the swell going over sways the whole plant: shoreward under a crest, back under the trough, its top most */
-  { float hk = waveH(iK.xy), gk = shoreDZv(iK.x); vec2 lk = vec2(-gk, 1.0)/sqrt(1.0 + gk*gk); w.xz += lk*1.1*hk*(lying ? 1.0 : k*k); }
+  { float hk = waveH(iK.xy); vec2 lk = -shoreN(iK.xy); w.xz += lk*1.1*hk*(lying ? 1.0 : k*k); }
   float hs = waveH(w.xz);
   /* (nothing stands up out of the water: what reaches the top lies along it) */
   if (lying || w.y > hs - 0.012) { w.y = hs - 0.012 - 0.004*aS*aS; n = Y; }
@@ -103,10 +103,9 @@ void main(){
   /* (longer along the stream than across it, and reaching further downstream of the rock than up) */
   vec2 lq = vec2(position.x*R*1.25 + 0.35*R, position.z*R);
   vec3 w = vec3(iC.x + lq.x*ca - lq.y*sa, 0.0, iC.y + lq.x*sa + lq.y*ca);
-  { float hk = waveH(iC.xy), gk = shoreDZv(iC.x); w.xz += vec2(-gk, 1.0)/sqrt(1.0 + gk*gk)*1.1*hk; }   /* (swaying with the fronds under it) */
+  { float hk = waveH(iC.xy); w.xz -= shoreN(iC.xy)*1.1*hk; }   /* (swaying with the fronds under it) */
   w.y = waveH(w.xz);
-  float g = shoreDZv(w.x);
-  vDeep = 0.12*(shoreZv(w.x) - w.z)/sqrt(1.0 + g*g) + 0.15;
+  vDeep = ${Layout.isle ? 'max(-shoreFloor(w.xz, shoreS(w.xz)), 0.15)' : '0.12*shoreS(w.xz) + 0.15'};
   vQ = lq; vR = R; vRock = iC.z; vSeed = iS.y; vW = w;
   gl_Position = projectionMatrix*viewMatrix*vec4(onTop(w, w.y), 1.0);
 }`;
@@ -189,7 +188,7 @@ void main(){
   float flick = pow(max(0.0, sin(t*0.7 + ph)), 18.0);
   vec2 dir = vec2(cos(iP.w), sin(iP.w));
   vec3 base = vec3(iP.x, 0.0, iP.z) + vec3(dir.x, 0.0, dir.y)*(0.06*sin(t*0.5 + ph) - 0.25*flick) + vec3(0.0, 0.02*sin(t*1.3 + ph), 0.0);
-  { float hk = waveH(base.xz), gk = shoreDZv(base.x); base.xz += vec2(-gk, 1.0)/sqrt(1.0 + gk*gk)*0.7*hk; }   /* (the swell carries it to and fro) */
+  { float hk = waveH(base.xz); base.xz -= shoreN(base.xz)*0.7*hk; }   /* (the swell carries it to and fro) */
   vec3 p = position*1.6*iV, n = normal;
   float c = cos(iP.w), s = sin(iP.w);
   vec3 w = base + vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z);
