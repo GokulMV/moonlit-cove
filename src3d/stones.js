@@ -60,7 +60,7 @@ void main() {
       { k: 2, n: 3, rock: 0.3, cliff: 0.2, d: [-4, -1, 14, 22], s: [0.18, 0.55], sc: [0.3, 0.8] }
     ];
     /* every stone: x, y, z, size, its shape, yaw, tilt, tint; listed by which tile it lies in */
-    const byTile = new Map(), TS = o.TS, all = [];
+    const byTile = new Map(), TS = o.TS, all = [], AV = o.avoid || [];
     let n = 0;
     for (let i = 0; i < L.n; i++) {
       const kr = L.K[i * 4 + 1], kc = L.K[i * 4 + 2], k = kr + kc; if (k < 0.12) continue;
@@ -74,6 +74,7 @@ void main() {
         for (let tries = 0; tries < 3 && !ok; tries++) { d = C.d[0] + (C.d[3] + (C.k ? W * 0.5 : 0) - C.d[0]) * h(2 + tries); ok = h(5 + tries) < bump(d, C.d[0], C.d[1], C.d[2] + (C.k ? W * 0.5 : 0), C.d[3] + (C.k ? W * 0.5 : 0)); }
         if (!ok) continue;
         const along = (h(9) - 0.5) * 1.6, x = L.X[i] - nx * d + tx * along, z = L.Z[i] - nz * d + tz * along;
+        if (AV.some(a => (a[0] - x) ** 2 + (a[1] - z) ** 2 < a[2] * a[2])) continue;
         const cl = kc / Math.max(k, 1e-3), S0 = C.s[0] + (C.sc[0] - C.s[0]) * cl, S1 = C.s[1] + (C.sc[1] - C.s[1]) * cl;
         /* (the sizes skewed small: many little, few big) */
         const s = S0 + (S1 - S0) * Math.pow(h(10), 1.6);

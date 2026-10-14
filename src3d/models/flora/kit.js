@@ -14,12 +14,21 @@ const FloraKit = (() => {
 
   /* ── noise that tiles: value noise and cells on a lattice that wraps after px × py of its cells (each at most 512) ── */
   function noiseKit(seed) {
-    const N = 512, r = Models.rng(seed), L = new Float32Array(N * N), J = new Float32Array(N * N * 2), I = new Float32Array(N * N);
-    for (let i = 0; i < N * N; i++) { L[i] = r(); J[i * 2] = r(); J[i * 2 + 1] = r(); I[i] = r(); }
-    const wrap = (i, p) => ((i % p) + p) % p;
+    const N = 512, L = new Float32Array(N * N), J = new Float32Array(N * N * 2), I = new Float32Array(N * N);
+    /* (Models.rng's own stream, its steps written out here: a million draws, and a function call each was most of it) */
+    let s = (seed * 2654435761) >>> 0 || 1;
+    for (let i = 0; i < N * N; i++) {
+      s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; L[i] = s / 4294967296;
+      s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; J[i * 2] = s / 4294967296;
+      s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; J[i * 2 + 1] = s / 4294967296;
+      s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; I[i] = s / 4294967296;
+    }
+    /* (one remainder, not two: these are called some millions of times for a texture) */
+    const wrap = (i, p) => { const m = i % p; return m < 0 ? m + p : m; };
     function vn(x, y, px, py) {
       const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
-      const x0 = wrap(ix, px), x1 = wrap(ix + 1, px), y0 = wrap(iy, py) * N, y1 = wrap(iy + 1, py) * N;
+      let x0 = ix % px; if (x0 < 0) x0 += px; let yy = iy % py; if (yy < 0) yy += py;
+      const x1 = x0 + 1 === px ? 0 : x0 + 1, y0 = yy * N, y1 = (yy + 1 === py ? 0 : yy + 1) * N;
       const a = L[y0 + x0], b = L[y0 + x1], c = L[y1 + x0], d = L[y1 + x1];
       return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
     }
@@ -29,11 +38,11 @@ const FloraKit = (() => {
        0..1), and the offset to the nearest (dx, dy), written into out */
     function cell(x, y, px, py, out, jit = 0.85) {
       const ix = Math.floor(x), iy = Math.floor(y); let f1 = 9, f2 = 9, id = 0, dx = 0, dy = 0;
-      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-        const cx = ix + i, cy = iy + j, k = wrap(cy, py) * N + wrap(cx, px);
+      for (let j = -1; j <= 1; j++) { let wy = (iy + j) % py; if (wy < 0) wy += py; const row = wy * N; for (let i = -1; i <= 1; i++) {
+        let wx = (ix + i) % px; if (wx < 0) wx += px; const cx = ix + i, cy = iy + j, k = row + wx;
         const qx = cx + 0.5 + (J[k * 2] - 0.5) * jit - x, qy = cy + 0.5 + (J[k * 2 + 1] - 0.5) * jit - y, d = Math.sqrt(qx * qx + qy * qy);
         if (d < f1) { f2 = f1; f1 = d; id = I[k]; dx = qx; dy = qy; } else if (d < f2) f2 = d;
-      }
+      } }
       out[0] = f1; out[1] = f2; out[2] = id; out[3] = dx; out[4] = dy; return out;
     }
     /* cells, measuring how far the point is from its cell's edge in metres: sx, sy are the metres one lattice step covers
@@ -42,11 +51,11 @@ const FloraKit = (() => {
        f1, cell id, dx, dy] */
     function cellE(x, y, px, py, sx, sy, out, jit = 0.85) {
       const ix = Math.floor(x), iy = Math.floor(y); let f1 = 9, f2 = 9, id = 0, ax = 0, ay = 0, bx = 0, by = 0;
-      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-        const cx = ix + i, cy = iy + j, k = wrap(cy, py) * N + wrap(cx, px);
+      for (let j = -1; j <= 1; j++) { let wy = (iy + j) % py; if (wy < 0) wy += py; const row = wy * N; for (let i = -1; i <= 1; i++) {
+        let wx = (ix + i) % px; if (wx < 0) wx += px; const cx = ix + i, cy = iy + j, k = row + wx;
         const qx = cx + 0.5 + (J[k * 2] - 0.5) * jit - x, qy = cy + 0.5 + (J[k * 2 + 1] - 0.5) * jit - y, d = qx * qx + qy * qy;
         if (d < f1) { f2 = f1; bx = ax; by = ay; f1 = d; id = I[k]; ax = qx; ay = qy; } else if (d < f2) { f2 = d; bx = qx; by = qy; }
-      }
+      } }
       /* (the edge between the two nearest, on the bark: its line through their midpoint, square to the line joining them) */
       let nx = bx - ax, ny = by - ay; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
       const dxp = -ny * sx, dyp = nx * sy, dl = Math.hypot(dxp, dyp) || 1, mx = (ax + bx) * 0.5 * sx, my = (ay + by) * 0.5 * sy;

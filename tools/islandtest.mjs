@@ -66,8 +66,9 @@ try {
   const cl = await page.evaluate(() => { const W = Engine.world, S = W.streams; if (!S) return null; const s = S.streams.find(s => s.q === 3) || S.streams[0], n = s.n - 1;
     const mb = s.BCH.findIndex(b => b > 0.6), m = mb > 0 ? mb : n - 20, k = Math.max(0, m - 160), k2 = Math.min(n, k + 14), tx = s.X[k2] - s.X[k], tz = s.Z[k2] - s.Z[k], tl = Math.hypot(tx, tz) || 1;
     const o = { mouth: [s.X[m], s.Z[m], s.X[Math.min(n, m + 10)], s.Z[Math.min(n, m + 10)]], pool: [s.X[k] - tz / tl * 4.5, W.land(s.X[k] - tz / tl * 4.5, s.Z[k] + tx / tl * 4.5), s.Z[k] + tx / tl * 4.5, s.X[k2], s.Y[k2], s.Z[k2]] };
-    const C = Layout.camp, st = W.stones ? W.stones.all.filter(q => q.wet && q.s > 0.9).sort((a, b) => Math.hypot(a.x - C.x, a.z - C.z) - Math.hypot(b.x - C.x, b.z - C.z))[0] : null;
-    if (st) { const q = Layout.Shore.at(st.x, st.z); o.rocks = [st.x - q.nx * 13, st.z - q.nz * 13, st.x, st.y + st.s * 0.5, st.z]; }
+    const C = Layout.camp, I = Layout.island(), st = W.stones ? W.stones.all.filter(q => q.wet && q.s > 0.8 && I.sdf(q.x, q.z) > 1.5).sort((a, b) => Math.hypot(a.x - C.x, a.z - C.z) - Math.hypot(b.x - C.x, b.z - C.z))[0] : null;
+    /* (from out over the water, looking back at it and the shore behind) */
+    if (st) { const q = Layout.Shore.at(st.x, st.z); o.rocks = [st.x + q.nx * 11 + q.nz * 3, st.z + q.nz * 11 - q.nx * 3, st.x, st.y + st.s * 0.3, st.z]; }
     return o; });
   if (cl) {
     const [mx, mz, ex, ez] = cl.mouth, dx = ex - mx, dz = ez - mz, dl = Math.hypot(dx, dz) || 1;

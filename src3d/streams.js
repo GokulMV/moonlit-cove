@@ -207,8 +207,11 @@ void main(){
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   /* (the wet margin darkens the sand under it, as wet sand is darker, in the sun or the shade alike: drawn as a share of
      the sand's own light taken away, the water over it as itself) */
-  float a = wat + (1.0 - wat)*wetA;
-  gl_FragColor = vec4(c*(wat/max(a, 1e-4)), a);
+  /* (out on the sand the sheet of water is thin enough to see the sand through: the sand under it drawn as itself, lit and
+     shaded as the beach is, the water over it as much as it mirrors) */
+  float wa = wat*mix(1.0, 0.5 + 0.45*F, bk);
+  float a = wa + (1.0 - wa)*wetA;
+  gl_FragColor = vec4(c*(wa/max(a, 1e-4)), a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;

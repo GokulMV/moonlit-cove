@@ -254,21 +254,31 @@ const Trees = (() => {
      that is leaf (Castaño's coverage-preserving mipmaps), so thin leaves stay as thick far off as up close ── */
   function flip(px, w, h) { const out = new Uint8Array(px.length), rb = w * 4; for (let y = 0; y < h; y++) out.set(px.subarray((h - 1 - y) * rb, (h - y) * rb), y * rb); return out; }
   function dilate(px, w, h) {
-    const N = w * h, on = new Uint8Array(N); let mr = 0, mg = 0, mb = 0, mn = 0;
+    /* (the texels not yet coloured, those that are, and the ones each pass colours, as flat typed lists: no arrays made per
+       texel, which is where the time went) */
+    const N = w * h, on = new Uint8Array(N), add = new Int32Array(N); let mr = 0, mg = 0, mb = 0, mn = 0;
     for (let i = 0; i < N; i++) if (px[i * 4 + 3] > 10) { on[i] = 1; mr += px[i * 4]; mg += px[i * 4 + 1]; mb += px[i * 4 + 2]; mn++; }
     for (let pass = 0; pass < 10; pass++) {
-      const add = [];
+      let na = 0;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const i = y * w + x; if (on[i]) continue;
-        let r = 0, g = 0, b = 0, n = 0;
-        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) if (j >= 0 && on[j]) { r += px[j * 4]; g += px[j * 4 + 1]; b += px[j * 4 + 2]; n++; }
-        if (n) { px[i * 4] = r / n; px[i * 4 + 1] = g / n; px[i * 4 + 2] = b / n; add.push(i); }
+        let r = 0, g = 0, b = 0, n = 0, j;
+        if (x > 0 && on[j = i - 1]) { r += px[j * 4]; g += px[j * 4 + 1]; b += px[j * 4 + 2]; n++; }
+        if (x < w - 1 && on[j = i + 1]) { r += px[j * 4]; g += px[j * 4 + 1]; b += px[j * 4 + 2]; n++; }
+        if (y > 0 && on[j = i - w]) { r += px[j * 4]; g += px[j * 4 + 1]; b += px[j * 4 + 2]; n++; }
+        if (y < h - 1 && on[j = i + w]) { r += px[j * 4]; g += px[j * 4 + 1]; b += px[j * 4 + 2]; n++; }
+        if (n) { px[i * 4] = r / n; px[i * 4 + 1] = g / n; px[i * 4 + 2] = b / n; add[na++] = i; }
       }
-      for (const i of add) on[i] = 1;
+      if (!na) break;
+      for (let k = 0; k < na; k++) on[add[k]] = 1;
     }
     if (mn) for (let i = 0; i < N; i++) if (!on[i]) { px[i * 4] = mr / mn; px[i * 4 + 1] = mg / mn; px[i * 4 + 2] = mb / mn; }
   }
-  const coverage = (d, cut, k) => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] * k >= cut) n++; return n / (d.length / 4); };
+  /* (how much of a picture is covered at or over cut once its cover is scaled by k: from a count of its texels at each
+     cover, so each try costs 256 sums, not a pass over the picture) */
+  const hist = d => { const H = new Float64Array(256); for (let i = 3; i < d.length; i += 4) H[d[i]]++; return H; };
+  const covH = (H, n, cut, k) => { let c = 0; for (let v = 255; v >= 0 && v * k >= cut; v--) c += H[v]; return c / n; };
+  const coverage = (d, cut, k) => covH(hist(d), d.length / 4, cut, k);
   function mipChain(px, w, h, cut) {
     const levels = [{ data: px, width: w, height: h }], c0 = cut ? coverage(px, cut, 1) : 0;
     let raw = px, cw = w, ch = h;
@@ -280,7 +290,8 @@ const Trees = (() => {
       }
       let out = d;
       if (cut && c0 > 0) {
-        let lo = 1, hi = 16; for (let it = 0; it < 12; it++) { const m = (lo + hi) / 2; if (coverage(d, cut, m) < c0) lo = m; else hi = m; }
+        const Hd = hist(d), nd = d.length / 4;
+        let lo = 1, hi = 16; for (let it = 0; it < 12; it++) { const m = (lo + hi) / 2; if (covH(Hd, nd, cut, m) < c0) lo = m; else hi = m; }
         out = new Uint8Array(d); for (let i = 3; i < out.length; i += 4) out[i] = Math.min(255, Math.round(d[i] * hi));
       }
       levels.push({ data: out, width: nw, height: nh }); raw = d; cw = nw; ch = nh;

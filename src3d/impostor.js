@@ -112,10 +112,16 @@ void main(){
      the colour of what is next to it, so its edges never darken ── */
   function mips(pc, pn, W, H, cell, cols, rows) {
     const CUT = 127, outC = [{ data: pc, width: W, height: H }], outN = [{ data: pn, width: W, height: H }];
-    const dil = (D, A, w, h, it, four) => { for (let n = 0; n < it; n++) { let moved = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (A[i]) continue; let r = 0, g = 0, b = 0, k = 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; const j = yy * w + xx; if (!A[j]) continue; r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; k++; }
-      if (k) { D[i * 4] = r / k; D[i * 4 + 1] = g / k; D[i * 4 + 2] = b / k; if (four) { let a4 = 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; const j = yy * w + xx; if (A[j]) a4 += D[j * 4 + 3]; } D[i * 4 + 3] = a4 / k; } moved++; } }
-      if (!moved) break; } };
+    /* (it passes of colouring the empty texels from their covered neighbours; four: the fourth channel too. As in
+       trees.js, flat loops and typed lists, no arrays made per texel) */
+    const add = new Int32Array(W * H);
+    const dil = (D, A, w, h, it, four) => { for (let n = 0; n < it; n++) { let na = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (A[i]) continue; let r = 0, g = 0, b = 0, a4 = 0, k = 0, j;
+      if (x < w - 1 && A[j = i + 1]) { r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; a4 += D[j * 4 + 3]; k++; }
+      if (x > 0 && A[j = i - 1]) { r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; a4 += D[j * 4 + 3]; k++; }
+      if (y < h - 1 && A[j = i + w]) { r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; a4 += D[j * 4 + 3]; k++; }
+      if (y > 0 && A[j = i - w]) { r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; a4 += D[j * 4 + 3]; k++; }
+      if (k) { D[i * 4] = r / k; D[i * 4 + 1] = g / k; D[i * 4 + 2] = b / k; if (four) D[i * 4 + 3] = a4 / k; add[na++] = i; } }
+      if (!na) break; for (let q = 0; q < na; q++) A[add[q]] = 1; } };
     /* (the raw cover of each texel, apart from the cover kept up: the next copy is made from the raw) */
     let A = new Uint8Array(W * H); for (let i = 0; i < W * H; i++) A[i] = pc[i * 4 + 3];
     const mark0 = new Uint8Array(A); dil(pc, mark0, W, H, 3); dil(pn, new Uint8Array(A), W, H, 3, true);
@@ -139,7 +145,9 @@ void main(){
       cs >>= 1; lvl++;
       /* (each picture's cover made up again, as much as its full-size picture had) */
       for (let ci = 0; ci < nc; ci++) {
-        const x0 = (ci % cols) * cs, y0 = Math.floor(ci / cols) * cs, cov = k => { let n = 0; for (let y = y0; y < y0 + cs; y++) for (let x = x0; x < x0 + cs; x++) if (A2[y * nw + x] * k > CUT) n++; return n / (cs * cs); };
+        const x0 = (ci % cols) * cs, y0 = Math.floor(ci / cols) * cs, Hc = new Float64Array(256);
+        for (let y = y0; y < y0 + cs; y++) for (let x = x0; x < x0 + cs; x++) Hc[A2[y * nw + x]]++;
+        const cov = k => { let n = 0; for (let v = 255; v >= 0 && v * k > CUT; v--) n += Hc[v]; return n / (cs * cs); };
         let k = 1; if (c0[ci] > 0) { let lo = 1, hi = 8; for (let it = 0; it < 10; it++) { const m = (lo + hi) / 2; if (cov(m) < c0[ci]) lo = m; else hi = m; } k = hi; }
         for (let y = y0; y < y0 + cs; y++) for (let x = x0; x < x0 + cs; x++) { const i = y * nw + x; C2[i * 4 + 3] = Math.min(255, Math.round(A2[i] * k)); }
       }

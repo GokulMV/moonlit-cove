@@ -38,7 +38,7 @@
   const cache = new Map();
   function paintWing(kind, fore, under) {
     const key = kind + (fore ? 'f' : 'h') + (under ? 'u' : ''); if (cache.has(key)) return cache.get(key);
-    const P = PAL[kind], S = 512, cv = M.canvas(S, S), x = cv.getContext('2d'), O = loop(fore ? FORE : HIND, 120), B = bounds(O);
+    const P = PAL[kind], S = 512, cv = M.canvas(S, S), x = cv.getContext('2d', { willReadFrequently: true }), O = loop(fore ? FORE : HIND, 120), B = bounds(O);
     const px = ([wx, wz]) => [(wx - B[0]) / (B[1] - B[0]) * S, (wz - B[2]) / (B[3] - B[2]) * S];
     const root = px(fore ? [0.0004, 0.0012] : [-0.0022, 0.0012]);
     x.fillStyle = under ? P.under : P.base; x.fillRect(0, 0, S, S);
@@ -75,8 +75,9 @@
     if (kind === 3 && !under) { x.lineWidth = 10; x.strokeStyle = '#f4f4f0'; x.stroke(); }
     x.restore();
     /* a fine scale texture over all */
-    const id = x.getImageData(0, 0, S, S), d = id.data, r = M.rng(kind * 7 + (fore ? 1 : 2));
-    for (let i = 0; i < d.length; i += 4) { const k = 0.92 + 0.16 * r(); d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+    const id = x.getImageData(0, 0, S, S), d = id.data;
+    { let s = ((kind * 7 + (fore ? 1 : 2)) * 2654435761) >>> 0 || 1;   /* (Models.rng's stream, written out) */
+      for (let i = 0; i < d.length; i += 4) { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; const k = 0.92 + 0.16 * (s / 4294967296); d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; } }
     x.putImageData(id, 0, 0);
     /* (painted with z down the canvas, as the wing's uv runs) */
     const tex = Mats.tex(cv); tex.flipY = false; tex.needsUpdate = true; tex.userData.keep = true; cache.set(key, tex); return tex;

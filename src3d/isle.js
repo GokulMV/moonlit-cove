@@ -173,7 +173,9 @@ const IsleWorld = (() => {
     if (park) { const j = park.plan.jetty, t = park.plan.tangent, mx = j.x - j.nx * 4 - t[0] * 4, mz = j.z - j.nz * 4 - t[1] * 4; maps.push([mx, mz, Math.atan2(j.nx, j.nz)]); }
     const trailsG = trails ? IsleTrails.build(group, I, trails, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), maps, streams }) : null;
     /* ── the rocky shores' boulders (stones.js) ── */
-    const stones = typeof IsleStones !== 'undefined' && typeof StoneKit !== 'undefined' && o.stones !== false ? IsleStones.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), TS, streams }) : null;
+    const stones = typeof IsleStones !== 'undefined' && typeof StoneKit !== 'undefined' && o.stones !== false ? IsleStones.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), TS, streams,
+      /* (none where the park's things stand: the jetty's footing and the hut's ground, and all along the jetty out to its head) */
+      avoid: park ? park.plan.clear.concat((() => { const j = park.plan.jetty, out = []; for (let d = -4; d <= j.len + 8; d += 3) out.push([j.x + j.nx * d, j.z + j.nz * d, 4.5]); return out; })()) : [] }) : null;
     /* ── foam round the stones standing in the water, and the spray a wave throws up off them: the coast's own (world.js),
        timed to the same waves, for the stones near the eye ── */
     const surf = (() => {
@@ -284,8 +286,9 @@ const IsleWorld = (() => {
        stands and walks on it, steps across onto the next, and down off it; one higher stands in their way. Asked without
        foot, any stone's top is where they would stand) */
     function walk(x, z, out = WO, foot) {
-      ground0(x, z, out);
-      if (stones) { const S = stones.top(x, z); if (S.y > out.y + 0.05) {
+      out.deck = false; ground0(x, z, out);
+      /* (a deck — the jetty, a footbridge — is over whatever stones lie under it) */
+      if (stones && !out.deck && out.kind !== 'deck') { const S = stones.top(x, z); if (S.y > out.y + 0.05) {
         if (foot !== undefined && S.y > foot + STEP) { out.ok = false; out.kind = 'stone'; }
         else { out.ok = true; out.kind = 'rock'; out.y = S.y; out.wade = 0; } } }
       return out;
@@ -295,7 +298,7 @@ const IsleWorld = (() => {
       /* (the jetty: along its line from its foot out to its head, its deck's height there) */
       if (park) {
         const j = park.plan.jetty, ax = x - j.x, az = z - j.z, al = ax * j.nx + az * j.nz, ac = -ax * j.nz + az * j.nx, info = park.jetty.userData.info, Lh = info.len;
-        if (al > -0.6 && al < Lh + 0.2 && Math.abs(ac) < (al > Lh - 4.8 ? info.headW / 2 - 0.25 : info.width / 2 - 0.2)) { out.ok = true; out.kind = 'deck'; out.y = Math.max(info.deckAt(Math.max(0, al)), out.y); return out; }
+        if (al > -0.6 && al < Lh + 0.2 && Math.abs(ac) < (al > Lh - 4.8 ? info.headW / 2 - 0.25 : info.width / 2 - 0.2)) { out.ok = true; out.kind = 'deck'; out.y = Math.max(info.deckAt(Math.max(0, al)), out.y); out.deck = true; return out; }
       }
       /* (a trail's tread, or the boardwalk) */
       if (trails) { const q = trails.nearest(x, z); if (q && q.d < q.t.w / 2 + 0.55) { out.ok = true; out.kind = q.t.id === 'creek' ? 'deck' : 'trail'; if (q.t.id === 'creek') out.y = Math.max(out.y, 1.0);
@@ -307,9 +310,17 @@ const IsleWorld = (() => {
       if (park && Math.hypot(x - park.plan.hut.x, z - park.plan.hut.z) < 12) { out.ok = true; out.kind = 'grass'; }
       if (out.ok) return out;
       /* (a beach: from a little way out in the water up to the forest's edge) */
-      const s = I.sdf(x, z); if (s > 1.4) return out;
+      /* (out into the water no further than a wade: over the knees, a few metres out, far enough to reach a stone standing
+         in the shallows) */
+      const s = I.sdf(x, z); if (s > 2.4) return out;
       const q = I.shore(I.uAt(x, z), WQ);
-      if (q.sand > 0.5 && -s < q.W + 1.5) { out.ok = true; out.kind = 'sand'; out.wade = Math.max(0, Math.min(1, (s + 0.2) / 1.2)); out.y = s > 0 ? 0 : out.y; }
+      if (q.sand > 0.5 && -s < q.W + 1.5) { out.ok = true; out.kind = 'sand'; out.wade = Math.max(0, Math.min(1, (s + 0.2) / 1.8)); out.y = s > 0 ? 0 : out.y; }
+      /* (a rocky shore, below its cliffs: the rock itself, where it lies no steeper than a scramble, out to the water and up to
+         the forest's edge; the boulders on it are stepped up onto, or round) */
+      else if (q.cliff < 0.5 && q.sand + q.rock > 0.5 && -s < q.W + 1.0) {
+        const e = 0.6, gx = land(x + e, z) - land(x - e, z), gz = land(x, z + e) - land(x, z - e);
+        if (Math.hypot(gx, gz) / (2 * e) < 0.7) { out.ok = true; out.kind = 'rockshore'; out.wade = Math.max(0, Math.min(1, (s + 0.2) / 1.8)); if (s > 0) out.y = Math.max(out.y, 0); }
+      }
       return out;
     }
     const none = [];
