@@ -92,7 +92,7 @@ void main() {
     /* ── a tile's stones at a level: one instanced mesh a shape (the small ones only at the middle level, never far) ── */
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), col = new T.Color();
     const place = st => { e.set(st.tx, st.yaw, st.tz); q.setFromEuler(e); sc.set(st.s, st.s * st.sy, st.s); pos.set(st.x, st.y, st.z); return m4.compose(pos, q, sc); };
-    const tintOf = st => { const k = 0.86 + 0.26 * st.tint, w = (st.tint * 7.13) % 1; return col.setRGB(k * (0.97 + 0.06 * w), k, k * (1.03 - 0.06 * w)); };
+    const tintOf = st => { const k = (0.86 + 0.26 * st.tint) * (st.brook ? 0.6 : 1), w = (st.tint * 7.13) % 1; return st.brook ? col.setRGB(k * 0.95, k, k * 0.88) : col.setRGB(k * (0.97 + 0.06 * w), k, k * (1.03 - 0.06 * w)); };
     function meshes(list, lev) {
       const out = [], by = SHAPES.map(() => []);
       for (const st of list) if (lev < 2 || st.cls < 2) by[st.p].push(st);
@@ -136,6 +136,84 @@ void main() {
       });
     }
     const stats = () => ({ stones: n, planMs: Math.round(planMs), near: nearIm.reduce((a, m) => a + m.count, 0), tiles: byTile.size });
+    /* ── each shape's top, for a walker stepping up onto a stone: over a grid across its footprint, the highest its surface
+       comes over each cell (its triangles laid flat onto the grid); and its highest point. A stone's top at a world
+       point is its shape's, turned, tilted and sized as the stone is ── */
+    const TN = 28, tops = protos.map(P => {
+      const g = P[0], p = g.attributes.position.array, ix = g.index.array;
+      let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, peak = 0;
+      for (let i = 0; i < p.length; i += 3) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 2]); z1 = Math.max(z1, p[i + 2]); peak = Math.max(peak, p[i + 1]); }
+      const H = new Float32Array(TN * TN).fill(-1), dx = (x1 - x0) / TN, dz = (z1 - z0) / TN;
+      for (let t = 0; t < ix.length; t += 3) {
+        const a = ix[t] * 3, b = ix[t + 1] * 3, c = ix[t + 2] * 3, ax = p[a], az = p[a + 2], bx = p[b], bz = p[b + 2], cx = p[c], cz = p[c + 2];
+        const den = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz); if (Math.abs(den) < 1e-12) continue;
+        const i0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - x0) / dx - 0.5)), i1 = Math.min(TN - 1, Math.ceil((Math.max(ax, bx, cx) - x0) / dx - 0.5));
+        const j0 = Math.max(0, Math.floor((Math.min(az, bz, cz) - z0) / dz - 0.5)), j1 = Math.min(TN - 1, Math.ceil((Math.max(az, bz, cz) - z0) / dz - 0.5));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const px = x0 + (i + 0.5) * dx, pz = z0 + (j + 0.5) * dz;
+          const w0 = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / den, w1 = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / den, w2 = 1 - w0 - w1;
+          if (w0 < -1e-6 || w1 < -1e-6 || w2 < -1e-6) continue;
+          const y = w0 * p[a + 1] + w1 * p[b + 1] + w2 * p[c + 1], k = j * TN + i; if (y > H[k]) H[k] = y;
+        }
+      }
+      return { H, x0, z0, dx, dz, peak };
+    });
+    /* (the stone's top over a world point, or -1e9 off it: the point taken into the stone's own frame, its shape's height
+       there read off the grid, and that point of its surface taken back out, twice over for the tilt) */
+    const _q = new T.Quaternion(), _qi = new T.Quaternion(), _v = new T.Vector3();
+    function topOf(st, x, z) {
+      const S = tops[st.p];
+      e.set(st.tx, st.yaw, st.tz); _q.setFromEuler(e); _qi.copy(_q).invert();
+      let wx = x, wz = z, y = -1e9;
+      for (let it = 0; it < 2; it++) {
+        _v.set(wx - st.x, 0, wz - st.z).applyQuaternion(_qi);
+        const lx = _v.x / st.s, lz = _v.z / st.s, gx = (lx - S.x0) / S.dx - 0.5, gz = (lz - S.z0) / S.dz - 0.5, i = Math.floor(gx), j = Math.floor(gz);
+        if (i < 0 || j < 0 || i >= TN - 1 || j >= TN - 1) return -1e9;
+        const fx = gx - i, fz = gz - j, H = S.H, h00 = H[j * TN + i], h10 = H[j * TN + i + 1], h01 = H[(j + 1) * TN + i], h11 = H[(j + 1) * TN + i + 1];
+        if (h00 < 0 || h10 < 0 || h01 < 0 || h11 < 0) return -1e9;
+        const h = (h00 * (1 - fx) + h10 * fx) * (1 - fz) + (h01 * (1 - fx) + h11 * fx) * fz;
+        _v.set(lx * st.s, h * st.s * st.sy, lz * st.s).applyQuaternion(_q);
+        y = st.y + _v.y; wx += x - (st.x + _v.x); wz += z - (st.z + _v.z);
+      }
+      return y;
+    }
+    /* the highest stone top over a point (-1e9 where there is none), and the stone */
+    const TOP = { y: -1e9, st: null }, _nl = [];
+    function top(x, z) {
+      TOP.y = -1e9; TOP.st = null;
+      for (const st of near(x, z, 0.2, _nl)) { if (st.s < 0.3) continue; const y = topOf(st, x, z); if (y > TOP.y) { TOP.y = y; TOP.st = st; } }
+      return TOP;
+    }
+    /* (a stone's highest point) */
+    const peakOf = st => st.y + tops[st.p].peak * st.s * st.sy;
+    /* ── and the streams' own stones (streams.js): the boulders of each step lined across it, the water pouring between and
+       over them; a boulder now and then in a pool, its top just out of the water; cobbles along its edges and up the
+       foot of its banks, half sunk in them. Dark with the wet ── */
+    if (o.streams) for (const S of o.streams.streams) {
+      const hs = k => hash3(S.q + 40, k, 77);
+      const add = (x, z, s, top, k, bury, tall = 0) => {
+        const p = Math.floor(hs(k) * SHAPES.length) % SHAPES.length, sy = 0.7 + 0.3 * hs(k + 5) + tall, y = top === null ? land(x, z) - bury * s : top - tops[p].peak * s * sy;
+        const st = { x, y, z, s, p, yaw: hs(k + 1) * TAU, tx: (hs(k + 2) - 0.5) * 0.3, tz: (hs(k + 3) - 0.5) * 0.3, tint: hs(k + 4), sy, cls: s > 1.3 ? 0 : s > 0.5 ? 1 : 2, id: n, wet: false, brook: true };
+        const key = Math.floor(x / TS) + ',' + Math.floor(z / TS); if (!byTile.has(key)) byTile.set(key, []); byTile.get(key).push(st); all.push(st); n++;
+      };
+      const frame = i => { const a = Math.max(0, i - 1), b = Math.min(S.n - 1, i + 1), tx = S.X[b] - S.X[a], tz = S.Z[b] - S.Z[a], l = Math.hypot(tx, tz) || 1; return [-tz / l, tx / l]; };
+      for (const i of S.steps) {
+        const [nx, nz] = frame(i), w = S.W[i] / 2, m = Math.max(2, Math.round(2 * w / 0.5));
+        for (let k = 0; k <= m; k++) { const kk = i * 31 + k, ac = -1.08 + 2.16 * k / m + (hs(kk) - 0.5) * 0.12;
+          add(S.X[i] + nx * ac * w, S.Z[i] + nz * ac * w, 0.28 + 0.28 * hs(kk + 500), S.Y[i] + 0.04 + 0.16 * hs(kk + 900), kk + 1300, 0, 0.35); }
+      }
+      for (let i = 2; i < S.n - 2; i += 2) {
+        if (S.BCH[i] > 0.3) continue;
+        const [nx, nz] = frame(i), w = S.W[i] / 2, steep = Math.min(1, S.ST[i] / 0.15), kk = 70000 + i * 7;
+        /* (a boulder in the pool) */
+        if (S.SP[i] > 2.5 && S.SP[i] < 98 && hs(kk) < 0.07 + 0.08 * steep) { const ac = (hs(kk + 1) - 0.5) * 1.1; add(S.X[i] + nx * ac * w, S.Z[i] + nz * ac * w, 0.35 + 0.35 * hs(kk + 2), S.Y[i] + 0.04 + 0.2 * hs(kk + 3), kk + 4, 0); }
+        /* (cobbles at its edges and up its banks' foot) */
+        for (const side of [-1, 1]) if (hs(kk + (side > 0 ? 10 : 20)) < 0.32 + 0.4 * steep) {
+          const ac = side * (0.78 + 0.5 * hs(kk + (side > 0 ? 11 : 21))), x = S.X[i] + nx * ac * w + (hs(kk + 30) - 0.5), z = S.Z[i] + nz * ac * w + (hs(kk + 31) - 0.5);
+          add(x, z, 0.13 + (0.22 + 0.2 * steep) * Math.pow(hs(kk + (side > 0 ? 12 : 22)), 1.5), null, kk + (side > 0 ? 40 : 50), 0.35);
+        }
+      }
+    }
     /* the stones within r of a point (for the walk to climb them, the waves' slap on those in the water) */
     function near(x, z, r, out = []) {
       out.length = 0;
@@ -145,7 +223,7 @@ void main() {
       }
       return out;
     }
-    return { update, stats, near, all, protos, mats: [matN, matF] };
+    return { update, stats, near, top, topOf, peakOf, all, protos, mats: [matN, matF] };
   }
   return { build, SHAPES, NEAR };
 })();

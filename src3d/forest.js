@@ -77,11 +77,11 @@ const IsleForest = (() => {
        on its knees, nipa palms up the creek's banks */
     { id: 6, g: 6.5, kinds: ['rhizophora', 'avicennia', 'sonneratia', 'nipa', 'bruguiera'] },
     /* the forest's lower storey: small trees, fan palms, tree ferns, thickest at its edges, where the light gets in */
-    { id: 7, g: 6.5, kinds: ['understory', 'fanpalm', 'treefern'] },
+    { id: 7, g: 5.2, kinds: ['understory', 'fanpalm', 'treefern'] },
     /* the green wall along a beach's top: sea hibiscus sprawling, pandans, a fan palm or a sapling */
     { id: 8, g: 4.2, kinds: ['hibiscus', 'pandanus', 'fanpalm', 'understory'] },
     /* the forest's floor (worked out round the eye as it goes, never all at once) */
-    { id: 9, g: 2.3, kinds: ['groundfern', 'aroid', 'seedling', 'ginger', 'log'], ground: true }
+    { id: 9, g: 2.0, kinds: ['groundfern', 'aroid', 'seedling', 'ginger', 'log'], ground: true }
   ];
 
   function build(root, I, o) {
@@ -127,9 +127,9 @@ const IsleForest = (() => {
       if (G.id === 4) return forest * (h > 225 ? 0.85 : 1) * 0.93;
       if (G.id === 5) { const deep = sm(W + 55, W + 120, d) * forest * (h > 200 ? 0.4 : 1); out.w = [0.62, 0.22, 0.16]; return deep * 0.42; }
       if (G.id === 10) return sm(W + 22, W + 50, d) * forest * (h > 225 ? 0.7 : 1) * 0.8;
-      if (G.id === 7) { const edge = 1 - sm(W + 30, W + 80, d); out.w = [0.62, 0.24, 0.14 + 0.2 * (1 - edge)]; return Math.max(forest, sm(W + 4, W + 14, d) * q.sand * edge) * (0.42 + 0.52 * edge) * (h > 230 ? 0.6 : 1); }
+      if (G.id === 7) { const edge = 1 - sm(W + 30, W + 80, d); out.w = [0.62, 0.24, 0.14 + 0.2 * (1 - edge)]; return Math.max(forest, sm(W + 4, W + 14, d) * q.sand * edge) * (0.56 + 0.4 * edge) * (h > 230 ? 0.6 : 1); }
       if (G.id === 8) { const wall = q.sand * notMang * bump(d, W - 2.5, W + 0.5, W + 12, W + 20) + (q.rock + q.cliff) * bump(d, W + 1, W + 4, W + 14, W + 24) * 0.7; out.w = [0.5, 0.2, 0.12, 0.18]; return Math.min(1, wall) * 0.85; }
-      if (G.id === 9) { out.w = [0.46, 0.17, 0.27, 0.06, 0.04]; return Math.max(forest, q.sand * bump(d, W + 1, W + 6, W + 40, W + 60)) * 0.62; }
+      if (G.id === 9) { out.w = [0.42, 0.16, 0.33, 0.06, 0.03]; return Math.max(forest, q.sand * bump(d, W + 1, W + 6, W + 40, W + 60)) * 0.74; }
       if (G.id === 6) {
         const m = q.mangrove; if (m < 0.2) return 0;
         out.w = [bump(d, -8, -4, 9, 20), bump(d, -14, -8, 2, 8) * 0.8, bump(d, -12, -6, 1, 6) * 0.6, (q.creek >= 0 ? 1 : 0.2) * bump(d, -1, 3, 14, 26) * 0.7, bump(d, 5, 11, 26, 40) * 0.85];
@@ -180,7 +180,7 @@ const IsleForest = (() => {
 
     /* ── near the eye: the trees themselves. Every few frames, the trees within reach, nearest first, as many of each
        shape as it has room for, drawn as many copies of that shape's parts ── */
-    const capOf = p => KINDS[p.kind].cap || (KINDS[p.kind].ground ? 360 : 140), near = protos.map(p => p.parts.map(pt => {
+    const capOf = p => KINDS[p.kind].cap || (KINDS[p.kind].ground ? 360 : KINDS[p.kind].small ? 200 : 140), near = protos.map(p => p.parts.map(pt => {
       const im = new T.InstancedMesh(pt.geo, pt.mat, capOf(p)); im.count = 0; im.frustumCulled = false; im.castShadow = pt.cast; im.receiveShadow = true; if (pt.depth) im.customDepthMaterial = pt.depth;
       /* (the leaves each tree's own green, as its card has it) */
       if (pt.leaf) im.instanceColor = new T.InstancedBufferAttribute(new Float32Array(capOf(p) * 3).fill(1), 3);

@@ -1139,8 +1139,10 @@
     GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
     for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; goAdd(o[0], o[1], o[2]); }
     const W = Engine.world;
-    /* (not a groyne's foot, though: that keeps the van off it, but a person climbs up onto its blocks and walks out) */
-    if (W) { const L = W.obstaclesNear(x, z); for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef') goAdd(L[i][0], L[i][1], L[i][2]); }
+    /* (not a groyne's foot, though: that keeps the van off it, but a person climbs up onto its blocks and walks out; nor,
+       round the island, a stone no higher than a long step up from where the walker stands: they step up onto it) */
+    if (W) { const L = W.obstaclesNear(x, z), foot = Layout.isle && W.walk ? W.walk(x, z).y + ISLE_STEP : 1e9;
+      for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef' && !(L[i][4] !== undefined && L[i][4] <= foot)) goAdd(L[i][0], L[i][1], L[i][2]); }
     for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
     if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
   }
@@ -1149,8 +1151,9 @@
   /* round the island: pushed out of things as on the coast, and kept to where a walker can go there (the beaches, the
      trails, the jetty and the boardwalk, the clearings): a step that would leave it slides along its edge, or is not
      taken */
+  const ISLE_STEP = 0.75;
   function walkCollideIsle() {
-    const W = Engine.world;
+    const W = Engine.world, foot = wk.ox !== undefined ? W.walk(wk.ox, wk.oz).y : undefined;
     for (let it = 0; it < 3; it++) {
       let moved = false;
       for (let j = 0; j < GO.n; j++) {
@@ -1159,7 +1162,7 @@
       }
       if (!moved) break;
     }
-    if (!W.walk(wk.x, wk.z).ok && wk.ox !== undefined) {
+    if (!W.walk(wk.x, wk.z, undefined, foot).ok && wk.ox !== undefined) {
       /* (off the side of a trail: back onto it, sliding along it, as a path keeps a walker to itself) */
       const q = W.trails && W.trails.nearest(wk.x, wk.z);
       if (q && q.d < q.t.w / 2 + 3) {
@@ -1167,7 +1170,7 @@
         const px = wk.x - t.X[q.i], pz = wk.z - t.Z[q.i], al = px * ux + pz * uz, ac = -px * uz + pz * ux, lim = t.w / 2 + 0.4, ac2 = Math.max(-lim, Math.min(lim, ac));
         wk.x = t.X[q.i] + ux * al - uz * ac2; wk.z = t.Z[q.i] + uz * al + ux * ac2;
       }
-      if (!W.walk(wk.x, wk.z).ok) { if (W.walk(wk.x, wk.oz).ok) wk.z = wk.oz; else if (W.walk(wk.ox, wk.z).ok) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; wk.blocked = (wk.blocked || 0) + 1; }
+      if (!W.walk(wk.x, wk.z, undefined, foot).ok) { if (W.walk(wk.x, wk.oz, undefined, foot).ok) wk.z = wk.oz; else if (W.walk(wk.ox, wk.z, undefined, foot).ok) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; wk.blocked = (wk.blocked || 0) + 1; }
       else wk.blocked = 0;
     } else wk.blocked = 0;
   }
@@ -1715,11 +1718,16 @@
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
     const fade = stepPitch();
+    /* (the eyes adapting: in under the forest's canopy, round the island, the dark under the trees opens up over a second
+       or two, as eyes open to it; and closes down again out in the sun) */
+    { let tgt = 1; const Wd = Engine.world;
+      if (Layout.isle && Wd && Wd.forest && cam && cam.pos) { const p = cam.pos, up = p[1] - Wd.land(p[0], p[2]); tgt = 1 + 0.75 * Wd.forest.cover(p[0], p[2]) * (1 - smf(16, 40, up)); }
+      st.eyeK = (st.eyeK || 1) + (tgt - (st.eyeK || 1)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.5)); }
     const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
-      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: 1 + 1.4 * wxf.flash * W.storm });
+      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1) });
     st.S = S;
     if (!st.shown && ++drawn >= 3) introReady();
     updateSky(ms, S);

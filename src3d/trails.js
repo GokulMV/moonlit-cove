@@ -123,7 +123,18 @@ const IsleTrails = (() => {
     float leaf = smoothstep(0.35, 0.0, e - 0.35 - 0.3*n2)*0.8 + smoothstep(0.7, 0.85, vnz(vWPos*2.3 + 7.0))*0.4;
     vec3 lit = mix(vec3(0.13, 0.09, 0.05), vec3(0.09, 0.075, 0.05), n3)*(0.7 + 0.5*n1);
     float root = smoothstep(0.84, 0.9, vnz(vec3(vWPos.x*0.9, 0.0, vWPos.z*0.9) + vec3(0.0, n2*0.6, 0.0)));
-    diffuseColor.rgb = mix(mix(soil, lit, clamp(leaf, 0.0, 1.0)), vec3(0.07, 0.05, 0.035), root*0.7)*diffuseColor.rgb;
+    vec3 c = mix(soil, lit, clamp(leaf, 0.0, 1.0));
+    /* (up close: the leaves themselves along its edges and blown across it here and there; small stones trodden into
+       it, pale where the feet have worn them; the scuffs of feet, darker) */
+    float fw = length(fwidth(vWPos.xz)), nk = 1.0 - smoothstep(0.01, 0.045, fw);
+    if (nk > 0.0){
+      float lfk = (1.0 - smoothstep(0.2, 0.62, e - 0.15*n2)) + 0.6*smoothstep(0.66, 0.76, vnz(vWPos*1.7 + 5.0)) ;
+      c = mix(c, litterAt(vWPos.xz)*0.62, clamp(lfk, 0.0, 1.0)*nk);
+      float pb = smoothstep(0.8, 0.84, vnz(vWPos*11.0 + 2.0)*0.7 + vnz(vWPos*29.0)*0.3)*smoothstep(0.4, 0.8, e);
+      c = mix(c, vec3(0.26, 0.21, 0.16)*(0.8 + 0.4*n3), pb*nk*0.8);
+      c *= 1.0 - 0.18*smoothstep(0.55, 0.75, vnz(vec3(vWPos.x*2.6, 0.0, vWPos.z*2.6) + 9.0))*e*nk;
+    }
+    diffuseColor.rgb = mix(c, vec3(0.07, 0.05, 0.035), root*0.7)*diffuseColor.rgb;
     diffuseColor.a = 1.0; }`);
     };
     mat.customProgramCacheKey = () => 'art-trail';
@@ -162,14 +173,17 @@ const IsleTrails = (() => {
       }
     }
     /* where a trail crosses a stream, a footbridge over it: a short span of the boardwalk's build, railings either side */
+    const bridges = [];
     if (o.streams) for (const t of P.trails) {
       let last = -99;
       for (let i = 3; i < t.n - 3; i++) {
         const q = o.streams.nearest(t.X[i], t.Z[i]); if (!q || q.d > q.t.W[q.i] / 2 + 0.8 || i - last < 20 || q.t.BCH[q.i] > 0.5) continue;
         last = i;
         const a = Math.max(0, i - 4), b = Math.min(t.n - 1, i + 4), wy = q.t.Y[q.i], pts = []; for (let k = a; k <= b; k += 2) pts.push([t.X[k] - t.X[a], t.Z[k] - t.Z[a]]);
-        const br = Models.make('struct/boardwalk', { seed: i + 11, path: pts, h: Math.max(0.65, t.Y[i] - wy + 0.45), width: 1.25 });
+        const bh = Math.max(0.65, t.Y[i] - wy + 0.45), br = Models.make('struct/boardwalk', { seed: i + 11, path: pts, h: bh, width: 1.25 });
         br.position.set(t.X[a], wy - 0.05, t.Z[a]); group.add(br);
+        /* (its deck, for the walk: along the trail from a to b, its boards' top) */
+        bridges.push({ t, a, b, y: wy - 0.05 + bh, w: 1.25 });
       }
     }
     /* the signposts: at each trail's ends, pointing along the trails that leave from there, with how far */
@@ -240,7 +254,20 @@ const IsleTrails = (() => {
     { const r = P.trails.find(t => t.id === 'ridge'), x = r.X[r.n - 1] - 4, z = r.Z[r.n - 1] - 2, tw = Models.make('struct/platform', { seed: 4, h: 6.5 });
       tw.position.set(x, land(x, z) - 0.05, z); tw.rotation.y = 0.3; group.add(tw); }
     group.traverse(m => { if (m.isMesh) { m.castShadow = m.castShadow || false; m.receiveShadow = true; } });
-    return { group, ms: Math.round(performance.now() - ms0), posts: posts.length };
+    /* (the deck of a footbridge over (x, z), if there is one: its height; -1e9 where there is none, and -2e9 just beside
+       one, past its railings, where a walker on it can't go) */
+    function deckAt(x, z) {
+      for (const B of bridges) {
+        const t = B.t; let best = 1e9, end = false;
+        if (Math.abs(x - t.X[B.a]) > 14 || Math.abs(z - t.Z[B.a]) > 14) continue;
+        for (let i = B.a; i < B.b; i++) { const ax = t.X[i], az = t.Z[i], ex = t.X[i + 1] - ax, ez = t.Z[i + 1] - az, ll = ex * ex + ez * ez || 1, u0 = ((x - ax) * ex + (z - az) * ez) / ll, u = Math.max(0, Math.min(1, u0)), d = Math.hypot(x - ax - ex * u, z - az - ez * u);
+          if (d < best) { best = d; end = (i === B.a && u0 < 0) || (i === B.b - 1 && u0 > 1); } }
+        if (best < B.w / 2 + 0.1) return B.y;
+        if (!end && best < B.w / 2 + 1.8) return -2e9;
+      }
+      return -1e9;
+    }
+    return { group, ms: Math.round(performance.now() - ms0), posts: posts.length, bridges, deckAt };
   }
   return { plan, build, DEFS };
 })();

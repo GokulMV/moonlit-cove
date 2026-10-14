@@ -96,6 +96,49 @@ float rkH(vec3 p, float nk, float ck){
   float a = vnz(p*2.1), b = 1.0 - abs(2.0*vnz(p*5.7 + 3.0) - 1.0), c = vnz(p*15.0 + 7.0), d = vnz(p*41.0 + 1.0);
   return 0.026*a + 0.02*b*b + 0.014*c + 0.006*nk*d - 0.022*ck*rkCrack(p);
 }`;
+  /* the forest's floor up close (round the island): the fallen leaves themselves, layer on layer, each a leaf of its own
+     shape, size, turn and colour (most of them brown, from tan to nearly black as they rot, some grey, a few orange or
+     yellow, now and then a green one just down), its midrib, its edges curled and dark; the bare dark soil showing where
+     none lies; a twig across them here and there. Worked out where each point lies (world x, z) in cells a leaf's size:
+     only the leaves of the four cells nearest can reach a point */
+  const LITTER = `
+vec2 ltH2(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p)*43758.5453); }
+/* one layer of leaves in cells S across: the leaf over p, as (its colour's draw, its shade's, how far in from its
+   edge, 1) or nothing (w = 0); rib: on its midrib */
+vec4 ltLayer(vec2 p, float S, vec2 sd, out float rib){
+  vec2 q = p/S + sd, g = floor(q), f = q - g, o = step(0.5, f) - 1.0; vec4 best = vec4(0.0); float bz = -1.0; rib = 0.0;
+  for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++){
+    vec2 c = g + o + vec2(float(i), float(j)), h = ltH2(c), h2 = ltH2(c + 17.31);
+    float a = h2.x*6.2832, L = 0.4 + 0.32*h.y, Wd = L*(0.2 + 0.24*h2.y);
+    vec2 d = q - (c + 0.25 + 0.5*h), u = vec2(cos(a), sin(a)); float x = dot(d, u), y = dot(d, vec2(-u.y, u.x)), t = x/L;
+    if (abs(t) >= 1.0) continue;
+    /* (widest a little behind its middle, drawn to a point at its tip, rounded to its stalk; some of them lobed, or
+       broken, or eaten through) */
+    float w = Wd*pow(1.0 - t*t, 0.62)*(1.0 - 0.3*t)*(1.0 - 0.18*step(0.8, h2.y)*abs(sin(t*9.0 + h.x*20.0)));
+    float e = 1.0 - abs(y)/max(w, 1e-4); if (e <= 0.0) continue;
+    float z = fract(h.x*7.13 + h2.y*3.7);
+    if (z > bz){ bz = z; best = vec4(h.x, fract(h2.x*5.3 + h.y), e, 1.0); rib = (1.0 - smoothstep(0.0, 0.07, abs(y)/max(w, 1e-4)))*step(-0.85, t); }
+  }
+  return best;
+}
+vec3 ltCol(float r, float r2){
+  vec3 c = r < 0.3 ? vec3(0.3, 0.2, 0.11) : r < 0.55 ? vec3(0.19, 0.115, 0.065) : r < 0.72 ? vec3(0.11, 0.07, 0.042) : r < 0.83 ? vec3(0.34, 0.17, 0.06) : r < 0.93 ? vec3(0.25, 0.23, 0.19) : r < 0.975 ? vec3(0.4, 0.31, 0.1) : vec3(0.17, 0.22, 0.07);
+  return c*(0.78 + 0.44*r2);
+}
+/* the leaves over p: their colour, from the topmost layer that has one there (and the soil if none does) */
+vec3 litterAt(vec2 p){
+  float rb; vec4 A = ltLayer(p, 0.19, vec2(0.0), rb); vec3 c;
+  if (A.w > 0.0) c = ltCol(A.x, A.y)*(0.62 + 0.38*smoothstep(0.0, 0.3, A.z))*(1.0 + 0.2*rb);
+  else { vec4 B = ltLayer(p, 0.15, vec2(3.7, 1.9), rb);
+    if (B.w > 0.0) c = ltCol(B.x, B.y)*(0.55 + 0.33*smoothstep(0.0, 0.3, B.z))*(1.0 + 0.15*rb);
+    else { vec4 C = ltLayer(p, 0.27, vec2(8.1, 5.3), rb);
+      c = C.w > 0.0 ? ltCol(C.x, C.y)*(0.45 + 0.27*smoothstep(0.0, 0.3, C.z)) : vec3(0.05, 0.038, 0.027); } }
+  /* (a twig across them now and then: thin, dark, straight) */
+  { vec2 q = p/0.9, g = floor(q), h = ltH2(g + 41.7), h2 = ltH2(g + 7.9); float a = h.x*6.2832; vec2 u = vec2(cos(a), sin(a)), d = q - g - 0.5;
+    float x = dot(d, u), y = abs(dot(d, vec2(-u.y, u.x))), L = 0.15 + 0.3*h.y, wd = 0.008 + 0.012*h2.x;
+    if (h2.y > 0.55 && abs(x) < L && y < wd) c = vec3(0.075, 0.052, 0.035)*(0.8 + 0.5*smoothstep(wd, 0.0, y)); }
+  return c;
+}`;
   /* the canopy's crowns, worked out where each point of it lies (world x, z): a Voronoi of crowns about 6 m across,
      big ones of 11 m standing up out of them here and there. cnAt sets the colour the point takes (its crown's own
      green and how deep in shade) and the slope of its dome (for the normal); far off, where a crown is only a few
@@ -226,15 +269,19 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     { float fd = distance(vWPos, cameraPosition); flN = smoothstep(78.0, 26.0, fd)*(1.0 - vRock);
       if (flN > 0.0){
         float l1 = vnz(vWPos*0.45 + 3.0), l2 = vnz(vWPos*2.3), l3 = vnz(vWPos*9.0 + 1.0), l4 = vnz(vWPos*31.0);
-        vec3 litter = mix(vec3(0.12, 0.08, 0.045), vec3(0.085, 0.075, 0.06), l2)*(0.62 + 0.42*l3 + 0.22*l4);
+        vec3 litter = mix(vec3(0.17, 0.115, 0.064), vec3(0.125, 0.1, 0.078), l2)*(0.62 + 0.42*l3 + 0.22*l4);
         litter = mix(litter, vec3(0.045, 0.07, 0.025)*(0.75 + 0.5*l4), smoothstep(0.58, 0.78, l1*0.6 + l3*0.4)*0.55);
+        /* (up close, the leaves themselves; further off, where one is no more than a pixel or two, their average) */
+        { vec3 nW = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz);
+          float fw = length(fwidth(vWPos.xz)), lk = (1.0 - smoothstep(0.01, 0.045, fw))*smoothstep(0.1, 0.5, vCov)*(1.0 - 0.75*vMud)*smoothstep(0.6, 0.82, nW.y);
+          if (lk > 0.0) litter = mix(litter, litterAt(vWPos.xz)*(0.64 + 0.22*l3), lk); }
         float fleck = smoothstep(0.7, 0.78, vnz(vWPos*0.8 + 11.0)*0.65 + l3*0.35);
         float shade = mix(1.0, 0.26 + 0.9*fleck, smoothstep(0.1, 0.55, vCov));
         vec3 grass = mix(vec3(0.07, 0.1, 0.035), vec3(0.1, 0.105, 0.05), l2)*(0.72 + 0.4*l1 + 0.22*l4);
         vegC = mix(vegC, mix(grass, litter, smoothstep(0.1, 0.5, vCov))*shade, flN);
         /* (in the mangroves, their mud: grey-brown, wet, the leaves fallen on it, the light coming through in flecks) */
         vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.45 + 0.8*fleck, smoothstep(0.1, 0.55, vCov));
-        vegC = mix(vegC, mudC, vMud*flN);
+        vegC = mix(vegC, mudC, smoothstep(0.08, 0.45, vMud)*flN);
         /* (a trail's tread: red-brown earth trodden bare, roots across it, the forest's shade on it) */
         vec3 earth = mix(vec3(0.24, 0.125, 0.065), vec3(0.19, 0.115, 0.07), l2)*(0.82 + 0.22*l3 + 0.1*l4)*mix(1.0, 0.5 + 0.7*fleck, smoothstep(0.1, 0.55, vCov));
         /* (its edges ragged into the litter, a root across it now and then) */
@@ -247,7 +294,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), smoothstep(0.35, 0.0, abs(vWPos.y - 0.15))*smoothstep(0.4, 0.7, vnz(vWPos*4.0))*sea*vRock*0.7);
   }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);${key === 'land' && Layout.isle ? '\n  roughnessFactor *= mix(1.0, 0.6, vMud*flN);' : ''}`);
+  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);${key === 'land' && Layout.isle ? '\n  roughnessFactor *= mix(1.0, 0.6, smoothstep(0.08, 0.45, vMud)*flN);' : ''}`);
       /* packed sand (the sand castles): its grain, a few tenths of a millimetre of relief in specks, lighter and darker */
       if (key === 'sandc') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   diffuseColor.rgb *= 0.95 + 0.07*vnz(vWPos*61.0) + 0.05*vnz(vWPos*173.0 + 5.0);`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -277,7 +324,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};

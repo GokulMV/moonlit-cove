@@ -1089,5 +1089,5 @@ void main(){
       get counts() { return counts(); }, get chunks() { return live.slice(); }, chunkAt: x => chunks.get(Math.floor((x + o.x - X0) / CW)) || null,
       resetWorst: () => { stat.worst = 0; } };
   }
-  return { build, LOD, CW, X0 };
+  return { build, LOD, CW, X0, SURF: { FOAM_VS, FOAM_FS, SPRAY_VS, SPRAY_FS } };
 })();

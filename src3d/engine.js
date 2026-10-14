@@ -790,7 +790,7 @@ const Engine = (() => {
       skyMat.uniforms.uHzMist = gU.uMist; envSkyMat.uniforms.uHzMist = gU.uMist;
     }
     /* (and its animals, round the eye) */
-    if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [] }); Object.assign(api, { isFauna }); }
+    if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [], creek: world.trails ? world.trails.trails.find(t => t.id === 'creek') : null }); Object.assign(api, { isFauna }); }
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
@@ -1077,7 +1077,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       fi.dens = o.dens; fi.pxScale = pxScale; fi.van = camp.vanGroup.position; fi.swash = swashFront; fi.calm = !!o.calm;
       for (const sp of fauna.update(fi)) { surge.ripples.push({ x: sp.x, z: sp.z, t0: wt, A: sp.k }); }
     }
-    if (isFauna) { const dt = isFaunaT === null ? 0 : Math.max(0, Math.min(0.25, t - isFaunaT)); isFaunaT = t; isFauna.update(dt, t, camera.position, { day: S.day, dens: o.dens }); }
+    if (isFauna) { const dt = isFaunaT === null ? 0 : Math.max(0, Math.min(0.25, t - isFaunaT)); isFaunaT = t; isFauna.update(dt, t, camera.position, { day: S.day, dens: o.dens, sAlt: S.sAlt }); }
     if (shacks) shacks.update(S, t, wt, swashFront);
     const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
     fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;
