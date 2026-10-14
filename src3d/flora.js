@@ -111,7 +111,7 @@ float shadowHere(vec3 wp){
 }
 void main(){
   vec3 V = normalize(cameraPosition - vWPos), n = normalize(vN); if (dot(n, V) < 0.0) n = -n;
-  float ndl = dot(n, uKeyDirT), sh = shadowHere(vWPos), ao = 0.4 + 0.6*smoothstep(0.0, 0.7, vH);
+  float ndl = dot(n, uKeyDirT), sh = shadowHere(vWPos)*isleSh(vWPos.xz), ao = 0.4 + 0.6*smoothstep(0.0, 0.7, vH);
   /* (a blade is thin: lit from either side, the light from behind coming through it yellower) */
   vec3 L = uAmbF*(0.65 + 0.35*max(n.y, 0.0))*ao + uKeyColT*sh*(0.3 + max(ndl, 0.0)*0.7 + max(-ndl, 0.0)*0.5*vec3(0.95, 1.05, 0.5))*(0.5 + 0.5*ao);
   L += uKeyColT*sh*0.25*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 24.0)*ao;

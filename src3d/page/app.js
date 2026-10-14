@@ -442,6 +442,18 @@
   const WXNOTE = { auto: 'Clouds drift through their kinds on their own.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.' };
   st.weather = store.get('weather', 'auto'); if (st.weather !== 'auto' && !WX[st.weather]) st.weather = 'auto'; st.wx = Object.assign({}, WX.puffy, { wet: 0 }); st.flash = null; st.nextBolt = 0;
   function syncWxUI() { seg('wx', st.weather); $('wxNote').textContent = WXNOTE[st.weather] || ''; }
+  /* where the sun and moon go: on the true compass (the camp faces east: the sun comes up out of the sea ahead and goes
+     down behind the camp), or across the view in front of the camp, left to right, low enough to stay in it. Each page
+     keeps its own choice: the island starts on the true compass, the coast in front */
+  const PATHK = Layout.isle ? 'skyPathIsle' : 'skyPath', PATH0 = Layout.isle ? 'true' : 'front';
+  st.skyPath = store.get(PATHK, PATH0); if (st.skyPath !== 'true' && st.skyPath !== 'front') st.skyPath = PATH0;
+  st.frontK = st.skyPath === 'front' ? 1 : 0;
+  const PATHNOTE = {
+    true: `Where they really are. The camp faces east: the sun comes up out of the sea ahead of you, and goes down behind the ${Layout.isle ? 'island' : 'forest'} at your back.`,
+    front: 'Across the sea in front of the camp, from left to right, kept low enough to stay in view.' };
+  function syncPathUI() { seg('path', st.skyPath); $('pathNote').textContent = PATHNOTE[st.skyPath]; }
+  document.querySelectorAll('[data-path]').forEach(b => b.addEventListener('click', () => { st.skyPath = b.dataset.path; store.set(PATHK, st.skyPath); syncPathUI(); }));
+  syncPathUI();
   document.querySelectorAll('[data-wx]').forEach(b => b.addEventListener('click', () => { st.weather = b.dataset.wx; store.set('weather', st.weather); syncWxUI(); if (st.weather === 'storm') unlock('storm'); }));
   function stepWeather(dt) {
     const tgt = (st.weather === 'auto' ? WX[AUTO[Math.floor(Date.now() / 420000) % AUTO.length]] : WX[st.weather]) || WX.clear;
@@ -1247,13 +1259,18 @@
     ai.gazeT = 6 + Math.random() * 8; ai.gside = Math.random() < 0.5 ? -1 : 1;
   }
   /* where that is, as a turn in the world and a tilt */
+  const gzQ = {};
   function gazeAt(t) {
     const S = st.S, k = ai.gaze;
     if (k === 'sea' || k === 'sky') {
-      const d = S && S.mAlt > -1 ? S.moonDirV : S && S.sAlt > 0 ? S.sunDirV : null;
+      /* (out to sea, toward the moon or the sun if it is out over the water and low enough to look at; never straight up
+         at a high sun, nor round at one setting inland behind the trees) */
+      const sh = Layout.Shore.at(wk.x, wk.z, gzQ), over = v => v[0] * sh.nx + v[2] * sh.nz > 0.25 * Math.hypot(v[0], v[2]);
+      const ok = (v, top) => v[1] < top && (k === 'sky' || over(v));
+      const d = S && S.mAlt > -1 && ok(S.moonDirV, k === 'sky' ? 0.8 : 0.45) ? S.moonDirV : S && S.sAlt > 0 && ok(S.sunDirV, 0.3) ? S.sunDirV : null;
       if (d) { ai.gy = Math.atan2(-d[0], -d[2]); ai.gp = Math.atan2(d[1], Math.hypot(d[0], d[2])) * 0.7 + 0.01; }
-      else { ai.gy = Math.atan2(-Layout.shoreDZ(wk.x), 1); ai.gp = 0.02; }
-      if (k === 'sky') { ai.gy += 0.45 * ai.gside; ai.gp = 0.36; }
+      else { ai.gy = Math.atan2(-sh.nx, -sh.nz); ai.gp = 0.02; }
+      if (k === 'sky') { ai.gy += 0.45 * ai.gside; ai.gp = Math.max(ai.gp, 0.36); }
     } else if (k === 'beach') { ai.gy = (ai.dir > 0 ? -Math.PI / 2 : Math.PI / 2) + 0.38 * ai.gside; ai.gp = -0.03; }
     else if (k === 'camp') { ai.gy = Math.atan2(-(Layout.camp.x - wk.x), -(Layout.camp.z - wk.z)); ai.gp = 0.02; }
     else { ai.gy = wk.h; ai.gp = -0.06; }
@@ -1725,7 +1742,9 @@
       st.eyeK = (st.eyeK || 1) + (tgt - (st.eyeK || 1)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.5)); }
     const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    /* (the sun and moon swing over to the other path in a second or so, rather than jumping) */
+    st.frontK += ((st.skyPath === 'front' ? 1 : 0) - st.frontK) * (1 - Math.exp(-dtR / 0.45)); if (Math.abs(st.frontK - (st.skyPath === 'front' ? 1 : 0)) < 1e-3) st.frontK = st.skyPath === 'front' ? 1 : 0;
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1) });
     st.S = S;

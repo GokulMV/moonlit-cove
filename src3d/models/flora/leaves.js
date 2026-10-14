@@ -350,7 +350,8 @@ void main(){
   vec3 tn = texture2D(nmap, vUv).xyz*2.0 - 1.0;
   vec3 nl = normalize(Tg*tn.x + Bt*tn.y + Nc*max(tn.z, 0.05))*face;
   vec3 nb = normalize(vN);
-  float ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT), sh = leafShadow(vWPos);
+  /* (sh: the shadow map's, and round the island the shade of its hill and forest) */
+  float tsh = isleSh(vWPos.xz), ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT), sh = leafShadow(vWPos)*tsh;
   /* how much of the sun gets this far into the crown */
   float vis = mix(0.1, 1.0, smoothstep(-0.4, 0.6, cr))*mix(0.32, 1.0, ao)*sh;
   vec3 alb = tx.rgb*uTint*vTint;
@@ -369,7 +370,7 @@ void main(){
   c += uKeyColT*uLeafK.x*pow(max(dot(nl, Hh), 0.0), uLeafK.y)*(0.3 + 0.7*F)*vis*step(0.0, ndl);
   c += uAmbF*uLeafK.x*0.4*F*max(nl.y, 0.0)*(0.3 + 0.7*ao);
   /* and the light the crown scatters about inside itself, green from leaf to leaf */
-  c += alb*uKeyColT*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao)*(0.3 + 0.7*sh);
+  c += alb*uKeyColT*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao)*(0.3 + 0.7*sh)*tsh;
   if (torchNear(vWPos) || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));

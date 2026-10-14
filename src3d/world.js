@@ -461,6 +461,7 @@ void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), 
   const FOAM_FS = `
 uniform float uTime; uniform vec3 uAmbF, uKeyColT; uniform sampler2D uNoise; uniform vec4 uFog;
 varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
+${GLSL.ISLE_SH}
 void main(){
   if (vSea < 0.01) discard;
   vec2 q = vUv*2.0 - 1.0; float d = length(q);
@@ -470,7 +471,7 @@ void main(){
   float a = ring*smoothstep(0.5 - 0.3*surge, 0.68, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
   if (a < 0.01) discard;
   float fd = distance(vW, cameraPosition);
-  vec3 c = mix((uAmbF*1.6 + uKeyColT*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
+  vec3 c = mix((uAmbF*1.6 + uKeyColT*isleSh(vW.xz)*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
   gl_FragColor = vec4(c, a*0.85);
 }`;
   const SPRAY_VS = `
@@ -507,13 +508,14 @@ void main(){
   const SPRAY_FS = `
 uniform vec3 uAmbF, uKeyColT; uniform sampler2D uNoise; uniform vec4 uFog;
 varying vec2 vUv; varying float vA; varying vec3 vWP; varying float vMist;
+${GLSL.ISLE_SH}
 void main(){
   vec2 q = vUv*2.0 - 1.0; float d = dot(q, q); if (d > 1.0) discard;
   float n = texture2D(uNoise, vUv*0.45 + vWP.xz*0.05).r;
   float a = vA*mix(smoothstep(1.0, 0.15, d), (1.0 - d)*(1.0 - d)*(0.35 + 0.9*n), vMist);
   if (a < 0.004) discard;
   float fd = distance(vWP, cameraPosition);
-  vec3 c = mix(uAmbF*1.8 + uKeyColT*0.65, uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
+  vec3 c = mix(uAmbF*1.8 + uKeyColT*isleSh(vWP.xz)*0.65, uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
   gl_FragColor = vec4(c, a*0.8);
 }`;
 

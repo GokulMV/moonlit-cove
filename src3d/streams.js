@@ -137,6 +137,7 @@ attribute float aSp;    /* how far below the step above it (m): it pours over th
 varying vec4 vS; varying float vSt, vSh, vSp; varying vec3 vW, vF;
 void main(){ vS = aS; vSt = aSt; vSh = aSh; vF = aF; vSp = aSp; vec4 w = modelMatrix*vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`;
   const FS = `
+${GLSL.ISLE_SH}
 uniform float uTime, uFlood; uniform vec3 uHor, uZen, uKeyDirT, uKeyColT, uAmbF; uniform vec4 uFog; uniform sampler2D uNoise;
 varying vec4 vS; varying float vSt, vSh, vSp; varying vec3 vW, vF;
 float n2(vec2 p){ return texture2D(uNoise, p).r; }
@@ -185,7 +186,7 @@ void main(){
   vec3 bed = mix(vec3(0.11, 0.085, 0.055)*(0.8 + 0.4*st3), mix(vec3(0.25, 0.23, 0.19), vec3(0.32, 0.28, 0.22), st2)*(0.75 + 0.35*st3), stones);
   bed = mix(bed, vec3(0.38, 0.31, 0.22)*(0.9 + 0.2*st2), bch);
   /* (the light: the sky's, and the sun's where it comes down through the canopy, in flecks) */
-  float fleck = smoothstep(0.62, 0.74, n2(vW.xz*0.045 + 0.3)*0.65 + n2(vW.xz*0.19)*0.35), sun = mix(fleck, 1.0, clamp(vSo*1.25 - 0.25, 0.0, 1.0));
+  float fleck = smoothstep(0.62, 0.74, n2(vW.xz*0.045 + 0.3)*0.65 + n2(vW.xz*0.19)*0.35), sun = mix(fleck, 1.0, clamp(vSo*1.25 - 0.25, 0.0, 1.0))*isleSh(vW.xz);
   vec3 light = uAmbF*0.85 + uKeyColT*max(uKeyDirT.y, 0.0)*0.95*sun;
   vec3 wc = bed*exp(-dp*mix(vec3(1.1, 1.75, 2.7), vec3(1.6, 0.75, 0.9), bk))*light;
   /* (in flood: brown, opaque, fast) */
@@ -217,7 +218,7 @@ void main(){
 }`;
   function build(root, I, P, o) {
     const group = new T.Group(); group.name = 'streams'; root.add(group);
-    const U = Mats.U, mat = new T.ShaderMaterial({ uniforms: { uTime: U.uTime, uFlood: U.uFlood, uHor: o.sky.uHor, uZen: o.sky.uZen, uKeyDirT: U.uKeyDirT, uKeyColT: U.uKeyColT, uAmbF: U.uAmbF, uFog: U.uFog, uNoise: o.noise },
+    const U = Mats.U, mat = new T.ShaderMaterial({ uniforms: { uTime: U.uTime, uFlood: U.uFlood, uHor: o.sky.uHor, uZen: o.sky.uZen, uKeyDirT: U.uKeyDirT, uKeyColT: U.uKeyColT, uAmbF: U.uAmbF, uFog: U.uFog, uNoise: o.noise, ...Mats.shadeU() },
       vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     for (const s of P.streams) {
       const PIECE = 160;

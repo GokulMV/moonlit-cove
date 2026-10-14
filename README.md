@@ -16,6 +16,7 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 - Draw on the sketchboard and leave it in the toolbox for others to open
 - Sit by the fire and play the radio: world radio, your own songs, or a Spotify link pasted in
 - Watch it full screen, nothing over it, for as long as you like (Esc to leave)
+- Choose where the sun and moon go (Settings → Sky): on the true compass, rising out of the sea ahead and setting behind the camp, or across the sky in front of it
 
 ## Run it locally
 

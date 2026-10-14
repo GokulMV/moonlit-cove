@@ -206,6 +206,101 @@ const IsleWorld = (() => {
       }
       return { update, foam, spray };
     })();
+    /* ── what the island's hill and its forest shade from the key light, the sun by day and the moon by night: over the
+       grid, at half its resolution, how much of the light reaches each point of the ground, or of the forest's canopy
+       where there is forest, looking from it toward the light over the ground and the canopy (the forest a roof as high
+       as its trees, with walls at its edges; the mangroves' lower; open over the camp's clearing and the hut's). Drawn
+       on the GPU, again whenever the light has moved; GLSL.ISLE_SH reads it, for every shader that the light lights ── */
+    const shade = (() => {
+      if (!o.R || !Mats.coastU.uIsSh) return null;
+      const R = o.R, cu = Mats.coastU, W2 = Math.ceil(G.nx / 2), H2 = Math.ceil(G.nz / 2);
+      const rt = new T.WebGLRenderTarget(W2, H2, { depthBuffer: false, stencilBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter, generateMipmaps: false, type: T.UnsignedByteType });
+      rt.texture.name = 'isle-shade';
+      const clr = [[Layout.camp.x, Layout.camp.z, 25]].concat(park ? [[park.plan.hut.x, park.plan.hut.z, 13]] : []);
+      const mat = new T.ShaderMaterial({
+        uniforms: { uIsF: cu.uIsF, uIsK: cu.uIsK, uIsC: cu.uIsC, uIsG: cu.uIsG, uL: { value: new T.Vector3(0, 1, 0) },
+          uClr: { value: [0, 1, 2, 3].map(i => new T.Vector4(...(clr[i] || [0, 0, 0]), 0)) } },
+        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+        fragmentShader: `
+uniform highp sampler2D uIsF; uniform sampler2D uIsK, uIsC; uniform vec4 uIsG;
+uniform vec3 uL;          /* toward the light */
+uniform vec4 uClr[4];     /* the clearings: x, z, radius */
+varying vec2 vUv;
+/* the top of whatever stands at p: the ground (or the sea's surface), and the forest's canopy over it */
+float topAt(vec2 p){
+  vec2 uv = (p - uIsG.xy)*uIsG.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  vec4 f = texture2D(uIsF, uv), k1 = texture2D(uIsK, uv), k2 = texture2D(uIsC, uv);
+  float d = -f.x, W = k1.y*50.0, sand = k1.z, rock = k2.x, cliff = k2.y, mang = k2.z;
+  /* (where forest.js grows it: back from a beach's top, behind the bare rock of a rocky shore, on the mangroves' mud) */
+  float rk = (rock + cliff)*(1.0 - smoothstep(W + 4.0, W + 18.0, d));
+  float forest = max(max(smoothstep(W + 16.0, W + 46.0, d)*sand, smoothstep(W + 6.0, W + 20.0, d)*(rock + cliff)), smoothstep(16.0, 44.0, d)*mang)*(1.0 - rk);
+  /* (along a beach's top, the palms and the thicket under them: lower, and not a wall) */
+  float fringe = sand*smoothstep(W - 4.0, W + 1.0, d)*(1.0 - smoothstep(0.3, 0.6, mang));
+  float open = 1.0;
+  for (int i = 0; i < 4; i++){ vec4 c = uClr[i]; if (c.z > 0.0) open *= smoothstep(c.z*0.8, c.z + 5.0, length(p - c.xy)); }
+  float mg = smoothstep(0.25, 0.6, mang), roof = smoothstep(0.02, 0.22, forest);
+  return max(f.w, 0.0) + (roof*mix(26.0, 10.0, mg) + (1.0 - roof)*fringe*8.0)*open;
+}
+void main(){
+  vec2 p = uIsG.xy + vUv/uIsG.zw;
+  vec2 Lh = uL.xz; float lh = length(Lh);
+  if (lh < 1e-4 || uL.y > 0.999){ gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0); return; }
+  Lh /= lh; float tg = uL.y/lh;
+  float h0 = topAt(p) + 0.8, vis = 1.0, tMin = 1000.0, t = 3.0;
+  for (int i = 0; i < 60; i++){
+    float hr = h0 + t*tg; vec2 q = p + Lh*t, uq = (q - uIsG.xy)*uIsG.zw;
+    if (hr > 300.0 || uq.x < 0.0 || uq.y < 0.0 || uq.x > 1.0 || uq.y > 1.0) break;   /* (over everything the island has, or off its grid) */
+    float pen = (topAt(q) - hr)/(1.4 + t*0.0093);   /* (into what is in the way, over the width of the sun's disc there) */
+    float v = clamp(0.5 - pen, 0.0, 1.0);
+    if (v < vis){ vis = v; tMin = t; }
+    if (vis <= 0.0) break;
+    t = t*1.12 + 1.0;
+  }
+  gl_FragColor = vec4(vis, clamp(tMin/1000.0, 0.0, 1.0), 0.0, 1.0);
+}`, depthTest: false, depthWrite: false, toneMapped: false });
+      const sc = new T.Scene(), cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), q = new T.Mesh(new T.PlaneGeometry(2, 2), mat); q.frustumCulled = false; sc.add(q);
+      cu.uIsSh.value = rt.texture; cu.uIsShG.value.copy(cu.uIsG.value);
+      const last = new T.Vector3(0, -9, 0), L = new T.Vector3(); let lastT = -1e9, ms = 0, n = 0;
+      /* (again when the light has moved a twentieth of a degree; no more than four times a second as the time-lapse runs,
+         unless it has jumped) */
+      function update(dir, force) {
+        L.set(dir[0], dir[1], dir[2]).normalize(); const ang = Math.acos(Math.max(-1, Math.min(1, L.dot(last)))), now = performance.now();
+        if (!force && (ang < 0.0009 || (ang < 0.035 && now - lastT < 250))) return false;
+        const t0 = now, prt = R.getRenderTarget(), pac = R.autoClear;
+        mat.uniforms.uL.value.copy(L); R.autoClear = false; R.setRenderTarget(rt); R.render(sc, cam); R.setRenderTarget(prt); R.autoClear = pac;
+        last.copy(L); lastT = now; cu.uIsShOn.value = 1; cu.uIsShL.value.copy(L); ms = performance.now() - t0; n++; memo.clear();
+        return true;
+      }
+      /* how much of the light reaches (x, z), for what the engine wants to know of it (how much shade the camera is in):
+         the same look toward the light, here on the CPU from the island's own grid (reading the GPU's picture back would
+         hold up the frame) */
+      const SQ2 = {}, memo = new Map(), ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      function topAt(x, z) {
+        const sd = I.sdf(x, z), d = -sd, q = I.shore(I.uAt(x, z), SQ2), W = q.W;
+        const rk = (q.rock + q.cliff) * (1 - ss(W + 4, W + 18, d));
+        const forest = Math.max(ss(W + 16, W + 46, d) * q.sand, ss(W + 6, W + 20, d) * (q.rock + q.cliff), ss(16, 44, d) * q.mangrove) * (1 - rk);
+        const fringe = q.sand * ss(W - 4, W + 1, d) * (1 - ss(0.3, 0.6, q.mangrove));
+        let open = 1; for (const c of clr) open *= ss(c[2] * 0.8, c[2] + 5, Math.hypot(x - c[0], z - c[1]));
+        const mg = ss(0.25, 0.6, q.mangrove), roof = ss(0.02, 0.22, forest);
+        return Math.max(I.height(x, z), 0) + (roof * (26 + (10 - 26) * mg) + (1 - roof) * fringe * 8) * open;
+      }
+      function at(x, z) {
+        if (!n) return 1;
+        const key = Math.round(x / 2) * 100003 + Math.round(z / 2); let v = memo.get(key); if (v !== undefined) return v;
+        const lh = Math.hypot(L.x, L.z); v = 1;
+        if (lh > 1e-4 && L.y < 0.999) {
+          const ux = L.x / lh, uz = L.z / lh, tg = L.y / lh, h0 = topAt(x, z) + 0.8; let t = 3;
+          for (let i = 0; i < 60; i++) {
+            const hr = h0 + t * tg, qx = x + ux * t, qz = z + uz * t; if (hr > 300 || qx < G.X0 || qz < G.Z0 || qx > G.X0 + G.nx * G.cell || qz > G.Z0 + G.nz * G.cell) break;
+            v = Math.min(v, Math.max(0, Math.min(1, 0.5 - (topAt(qx, qz) - hr) / (1.4 + t * 0.0093)))); if (v <= 0) break;
+            t = t * 1.12 + 1;
+          }
+        }
+        if (memo.size > 64) memo.clear(); memo.set(key, v); return v;
+      }
+      return { update, at, rt, get ms() { return ms; }, get n() { return n; } };
+    })();
     function treeStep(t, slice) {
       if (!t.tjob) t.tjob = forest.plan(t.x, t.z, TS, late);
       const t0 = performance.now(); due = t0 + slice; const r = t.tjob.next(); due = Infinity; stat.worst = Math.max(stat.worst, performance.now() - t0);
@@ -330,7 +425,7 @@ const IsleWorld = (() => {
       place: () => {}, decorate,
       get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0),
         treeTiles: tiles.filter(t => t.trees).length, trees: stat.trees || 0, forest: forest ? forest.stats() : null, stones: stones ? stones.stats() : null }; },
-      forest, stones, park, trails, trailsG, streams, streamsG,
+      forest, stones, park, trails, trailsG, streams, streamsG, shade,
       get chunks() { return [...bay.values()].filter(ch => ch.built); }, chunkAt: x => bay.get(Math.floor((x - X0) / CW)) || null, resetWorst: () => { stat.worst = 0; }, tiles };
   }
   return { build, LODS, TS };

@@ -120,7 +120,7 @@ ${GLSL.WAVEH}
 ${ONTOP}
 uniform vec4 uSchool[5]; uniform float uTime; uniform vec3 uKeyDirT;
 attribute vec4 aFish;   /* school, along, across, phase */
-varying vec2 vUv; varying float vA, vSoft;
+varying vec2 vUv, vXZ; varying float vA, vSoft;
 void main(){
   vUv = uv;
   vec4 S = uSchool[int(aFish.x)];
@@ -138,16 +138,17 @@ void main(){
   vec2 w = vec2(cos(yaw)*q.x - sin(yaw)*q.y, sin(yaw)*q.x + cos(yaw)*q.y);
   vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
   float dist = shoreS(p);
-  vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*smoothstep(0.12, 0.35, L.y);
+  vA = S.w*smoothstep(5.6, 7.0, dist)*smoothstep(14.0, 11.5, dist)*smoothstep(0.12, 0.35, L.y); vXZ = wp.xz;
   gl_Position = projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
   const SHOAL_FS = `
-uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv; varying float vA, vSoft;
+uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv, vXZ; varying float vA, vSoft;
+${GLSL.ISLE_SH}
 void main(){
   vec2 q = vUv*2.0 - 1.0;
   float m = 1.0 - smoothstep(1.0 - vSoft, 1.0, length(q));
   float lk = dot(uKeyColT, vec3(0.3, 0.59, 0.11)), la = dot(uAmbF, vec3(0.3, 0.59, 0.11)), sun = clamp(lk/(lk + 2.0*la + 1e-4)*1.5, 0.0, 1.0);
-  float a = m*vA*uDay*sun*(0.34 - 0.18*vSoft);
+  float a = m*vA*uDay*sun*isleSh(vXZ)*(0.34 - 0.18*vSoft);
   if (a < 0.01) discard;
   gl_FragColor = vec4(0.012, 0.035, 0.04, a);
 }`;
@@ -191,15 +192,16 @@ void main(){
   const FISH3_FS = `
 uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay;
 varying vec3 vC, vN, vW; varying float vDepth, vA;
+${GLSL.ISLE_SH}
 void main(){
   if (vA < 0.01) discard;
-  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW);
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW), kc = uKeyColT*isleSh(vW.xz);
   float tr = exp(-vDepth*1.6);
-  vec3 L = uAmbF*0.9 + uKeyColT*max(dot(n, uKeyDirT), 0.0)*tr*1.2;
+  vec3 L = uAmbF*0.9 + kc*max(dot(n, uKeyDirT), 0.0)*tr*1.2;
   vec3 h = normalize(uKeyDirT + V); float sp = pow(max(dot(n, h), 0.0), 40.0)*0.6*tr;
-  vec3 col = vC*L + uKeyColT*sp;
+  vec3 col = vC*L + kc*sp;
   /* (through the water: tinted toward its own green, more so the deeper it swims) */
-  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + uKeyColT*0.3), col*1.15, exp(-vDepth*0.75));
+  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + kc*0.3), col*1.15, exp(-vDepth*0.75));
   float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
   gl_FragColor = vec4(col, vA*uDay*(0.25 + 0.75*exp(-vDepth*0.7))*(1.0 - 0.85*fres));
 }`;
@@ -213,7 +215,7 @@ ${ONTOP}
 uniform vec3 uKeyDirT;
 attribute vec4 iT;   /* x, z, heading, how much it shows */
 attribute vec4 iU;   /* flipper stroke phase, length, which (0 a turtle, 1 a ray), how high it swims (y) */
-varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
+varying vec2 vUv, vXZ; varying float vA; varying float vPh; varying float vKind;
 void main(){
   vUv = uv; vPh = iU.x; vKind = iU.z;
   vec3 L = normalize(uKeyDirT);
@@ -222,11 +224,12 @@ void main(){
   vA = iT.w*smoothstep(0.12, 0.35, L.y);
   float c = cos(iT.z), s = sin(iT.z);
   vec2 q = (uv - 0.5)*iU.y*1.5*(1.0 + 0.08*max(0.0, iU.w + bed)), w = vec2(c*q.x - s*q.y, s*q.x + c*q.y);
-  vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y);
+  vec3 wp = vec3(at.x + w.x, -bed + 0.02, at.y + w.y); vXZ = wp.xz;
   gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(onTop(wp, waveH(wp.xz)), 1.0);
 }`;
   const TURTLE_FS = `
-uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv; varying float vA; varying float vPh; varying float vKind;
+uniform float uDay; uniform vec3 uKeyColT, uAmbF; varying vec2 vUv, vXZ; varying float vA; varying float vPh; varying float vKind;
+${GLSL.ISLE_SH}
 float ell(vec2 p, vec2 c, vec2 r, float a){ p -= c; float cs = cos(a), sn = sin(a); p = vec2(cs*p.x + sn*p.y, -sn*p.x + cs*p.y); return length(p/r); }
 void main(){
   vec2 p = (vUv - 0.5)*1.5;
@@ -247,7 +250,7 @@ void main(){
       m = max(m, 1.0 - smoothstep(0.45, 1.0, ell(p, hip + 0.07*vec2(cos(b), sin(b)), vec2(0.09, 0.05), b)));
     }
   }
-  float al = m*vA*uDay*sun*0.26;
+  float al = m*vA*uDay*sun*isleSh(vXZ)*0.26;
   if (al < 0.01) discard;
   gl_FragColor = vec4(0.012, 0.035, 0.04, al);
 }`;
@@ -270,15 +273,16 @@ void main(){
   const UW_FS = `
 uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay, uFade, uHasMap; uniform sampler2D uMap;
 varying vec3 vC, vN, vW; varying float vDepth; varying vec2 vUv;
+${GLSL.ISLE_SH}
 void main(){
-  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW);
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW), kc = uKeyColT*isleSh(vW.xz);
   float tr = exp(-vDepth*1.4);
-  vec3 L = uAmbF*0.95 + uKeyColT*max(dot(n, uKeyDirT), 0.0)*tr*1.15;
+  vec3 L = uAmbF*0.95 + kc*max(dot(n, uKeyDirT), 0.0)*tr*1.15;
   vec3 h = normalize(uKeyDirT + V); float sp = pow(max(dot(n, h), 0.0), 30.0)*0.3*tr;
   /* (a painted model's picture, where it has one) */
   vec3 base = uHasMap > 0.5 ? vC*texture2D(uMap, vUv).rgb : vC;
-  vec3 col = base*L + uKeyColT*sp;
-  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + uKeyColT*0.3), col*1.1, exp(-vDepth*0.75));
+  vec3 col = base*L + kc*sp;
+  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + kc*0.3), col*1.1, exp(-vDepth*0.75));
   float under = smoothstep(0.0, 0.04, vDepth), fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
   float a = uFade*mix(1.0, (0.35 + 0.65*exp(-vDepth*0.7))*(1.0 - 0.85*fres), under)*(0.45 + 0.55*uDay);
   if (a < 0.01) discard;

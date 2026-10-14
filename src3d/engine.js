@@ -105,7 +105,7 @@ const Engine = (() => {
     /* the clouds: marched at half size before the scene, each frame blended into the last (turned to where it now lies on
        screen), so the grain of a few dozen steps smooths away; the sky draws them from it */
     const su0 = skyMat.uniforms, cloudU = { uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uFrame: { value: 0 }, uEnv: { value: 0 }, uPxA: { value: 0.004 }, uOff: { value: new T.Vector2() }, uFull: { value: new T.Vector2(1, 1) } };
-    for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uCO', 'uCQ', 'uShape', 'uDetail', 'uWeather', 'uLdM', 'uDriftW', 'uDriftS', 'uDriftT', 'uAltoD']) cloudU[k] = su0[k];
+    for (const k of ['uZen', 'uHor', 'uGlow', 'uSunDirV', 'uMoonDirV', 'uMoonDisc', 'uSunDisc', 'uAnti', 'uTime', 'uStars', 'uCloud', 'uCloudLit', 'uCirrus', 'uAlto', 'uCumulus', 'uStratus', 'uStorm', 'uFlash', 'uBolt', 'uWind', 'uNoise', 'uCloudT', 'uCO', 'uCQ', 'uShape', 'uDetail', 'uWeather', 'uLdM', 'uDriftW', 'uDriftS', 'uDriftT', 'uAltoD']) cloudU[k] = su0[k];
     const cloudM = mk(GLSL.CLOUD_FS, cloudU);
     const cloudR = mk(GLSL.CLOUD_RES_FS, { uCur: { value: null }, uHist: { value: null }, uPrevVP: { value: new T.Matrix4() }, uInvProj: { value: new T.Matrix4() }, uCamRot: { value: new T.Matrix3() }, uHasPrev: { value: 0 }, uAlpha: { value: 0.3 }, uOff: cloudU.uOff, uFull: cloudU.uFull, uCamD: { value: new T.Vector3() }, uDriftD: { value: new T.Vector2() }, uShell: { value: new T.Vector2(0, 2200) }, uAltoOn: { value: 0 } });
     const OFFS = [[0, 0], [1, 1], [1, 0], [0, 1]];
@@ -699,7 +699,7 @@ const Engine = (() => {
     for (const l of [keyLight, hemi]) { l.layers.enable(2); l.layers.enable(3); }
 
     const V3 = () => new T.Vector3();
-    skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() } };
+    skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() }, uAnti: { value: new T.Vector4() } };
     /* (round the island, the far ranges across the sea: drawn by the sky, from horizon.js's profile of them) */
     const hzP = Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false ? IsleHorizon.profile() : null;
     skyMat = new T.ShaderMaterial({
@@ -930,12 +930,22 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     }
   }
   Object.defineProperty(api, 'isleMs', { get: () => isleMs });
-  let lastCW = 0, lastCH = 0, fabT = null;
+  let lastCW = 0, lastCH = 0, fabT = null, shExT = null, shExK = 9;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
        or a resized window shows the frame in only part of it */
     if (canvas.width !== lastCW || canvas.height !== lastCH) { lastCW = canvas.width; lastCH = canvas.height; R.setSize(lastCW, lastCH, false); }
-    const S = Sky.compute(o.ms, o.loc), t = o.t;
+    const S = Sky.compute(o.ms, o.loc, { front: o.skyFront ?? (Layout.isle ? 0 : 1) }), t = o.t;
+    /* (round the island: what its hill and forest shade from the light, worked out again as the light moves; and the
+       camera, like an eye, exposing for the shade when what it looks at, and where it stands, is in it — not all the
+       way: the sunlit sea and sky beyond are in the picture too) */
+    if (world && world.shade) {
+      world.shade.update(S.shDir);
+      const c0 = o.cam || Layout.cameras.wide, lk = c0.look, cp = c0.pos || lk, k = 0.5 * world.shade.at(lk[0], lk[2]) + 0.5 * world.shade.at(cp[0], cp[2]);
+      const dt = shExT === null ? 1 : Math.max(0, Math.min(1, (o.t - shExT) / 1.2)); shExT = o.t; shExK += (k - shExK) * (shExK > 1.5 ? 1 : dt);
+      const lu = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], la = lu(S.amb), ld = lu(S.keyCol) * Math.max(0, S.keyDir[1]);
+      S.exposure = Math.min(16, S.exposure * (la + ld + 0.0045) / (la + ld * (0.4 + 0.6 * Math.min(1, shExK)) + 0.0045));
+    }
     /* the tide: where the water's edge is now (everything that knows where the sea is reads it from Layout), and where it
        reached at the last high water (the sand it left is still damp) */
     { const TD = o.tide === false ? { dz: 0, hi: 0 } : S.tide; Layout.tide.dz = TD.dz; Layout.tide.hi = TD.hi; Mats.U.uTideZ.value = TD.dz; if (gU) gU.uTideHi.value = TD.hi; }
@@ -1003,7 +1013,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     if (flora) flora.update(t, camera);
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
-    V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc);
+    V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc); skyU.uAnti.value.set(S.anti[0], S.anti[1], S.anti[2], 0);
     V(skyMat.uniforms.uLdM, S.keyDir);
     /* the stars: the sky turned to the time and the place, as bright as the night (and the moon) lets them be */
     if (stars) { const k = o.sky ? Math.min(1, 0.55 * o.sky.cumulus + o.sky.stratus + o.sky.storm + 0.6 * (o.sky.rain || 0)) : 0;

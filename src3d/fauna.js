@@ -35,11 +35,12 @@ vec3 fogIt(vec3 c, vec3 wp){
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }
 vec3 shade(vec3 alb, vec3 n, vec3 wp, float thin, float gloss){
-  float ndl = dot(n, uKeyDirT);
-  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + uKeyColT*(max(ndl, 0.0) + thin*max(-ndl, 0.0) + 0.05);
+  /* (round the island, none of the key light in the shade of its hill and forest; up in the air, the shade there) */
+  float ndl = dot(n, uKeyDirT); vec3 kc = uKeyColT*isleShUp(wp, wp.y - 1.2);
+  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + kc*(max(ndl, 0.0) + thin*max(-ndl, 0.0) + 0.05);
   if (length(wp.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(wp.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(wp.xz - uHead.xz) < 34.0) || torchNear(wp)) L += artLight(wp, n);
   vec3 c = alb*L;
-  if (gloss > 0.0) c += uKeyColT*pow(max(dot(reflect(normalize(wp - cameraPosition), n), uKeyDirT), 0.0), 40.0)*gloss;
+  if (gloss > 0.0) c += kc*pow(max(dot(reflect(normalize(wp - cameraPosition), n), uKeyDirT), 0.0), 40.0)*gloss;
   return fogIt(c, wp);
 }`;
   /* every creature mesh has a local frame (x forward, y up, z across), set into the world by heading, then pitch, then bank */
@@ -343,6 +344,7 @@ void main(){
 attribute vec4 aSw; attribute float aR;   /* the swarm's middle and seed; this midge's own seed */
 uniform float uTime, uScale, uI; uniform vec3 uAmbF, uKeyColT, uKeyDirT; uniform vec2 uWind;
 varying float vA; varying vec3 vC;
+${GLSL.ISLE_SH}
 void main(){
   float t = uTime, h = aR, s = aSw.w;
   vec3 c = aSw.xyz + vec3(sin(t*0.31 + s*7.0)*0.5, sin(t*0.23 + s*3.0)*0.25, cos(t*0.27 + s*5.0)*0.5) + vec3(uWind.x, 0.0, uWind.y)*0.3*sin(t*0.4 + s);
@@ -352,7 +354,7 @@ void main(){
   vec4 mv = modelViewMatrix*vec4(p, 1.0);
   float d = max(-mv.z, 0.1), px = 0.03*uScale/d;
   float back = pow(max(dot(normalize(p - cameraPosition), uKeyDirT), 0.0), 6.0);
-  vC = uAmbF*0.3 + uKeyColT*(0.03 + 1.4*back);
+  vC = uAmbF*0.3 + uKeyColT*isleShUp(p, p.y - 1.2)*(0.03 + 1.4*back);
   vA = uI*min(1.0, px)*smoothstep(45.0, 25.0, d)*(0.55 + 0.45*back);
   gl_PointSize = max(px, 1.0);
   gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
@@ -364,6 +366,7 @@ void main(){ float r = length(gl_PointCoord - 0.5); if (r > 0.5) discard; gl_Fra
 attribute vec4 aS;   /* which splash, and three dice */
 uniform float uTime, uScale; uniform vec4 uSpl[8]; uniform vec3 uAmbF, uKeyColT;
 varying float vA; varying vec3 vC;
+${GLSL.ISLE_SH}
 void main(){
   vec4 S = uSpl[int(aS.x + 0.5)];
   float tt = uTime - S.z, life = 0.7 + 0.5*aS.y, a = aS.z*6.2832, sp = (0.4 + 1.1*aS.w)*S.w;
@@ -371,7 +374,7 @@ void main(){
   vA = tt > 0.0 && tt < life && p.y > -0.05 ? 1.0 - tt/life : 0.0;
   vec4 mv = modelViewMatrix*vec4(p, 1.0);
   float px = 0.07*uScale/max(-mv.z, 0.1);
-  vA *= min(1.0, px); vC = uAmbF*1.8 + uKeyColT*0.65;
+  vA *= min(1.0, px); vC = uAmbF*1.8 + uKeyColT*isleShUp(p, p.y)*0.65;
   gl_PointSize = max(px, 1.0);
   gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
 }`;
@@ -380,14 +383,16 @@ void main(){ float r = length(gl_PointCoord - 0.5); if (r > 0.5) discard; gl_Fra
   /* crab burrows: a dark hole with the sand it threw out round it */
   const HOLE_VS = `
 attribute vec4 iP;   /* x, z, size, how much it shows */
-varying vec2 vUv; varying float vK;
-void main(){ vUv = uv*2.0 - 1.0; vK = iP.w; gl_Position = iP.w < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(iP.x + position.x*iP.z, 0.006, iP.y - position.y*iP.z, 1.0); }`;
+varying vec2 vUv, vXZ; varying float vK;
+void main(){ vUv = uv*2.0 - 1.0; vK = iP.w; vXZ = vec2(iP.x + position.x*iP.z, iP.y - position.y*iP.z);
+  gl_Position = iP.w < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(vXZ.x, 0.006, vXZ.y, 1.0); }`;
   const HOLE_FS = `
-uniform vec3 uAmbF, uKeyColT, uKeyDirT; varying vec2 vUv; varying float vK;
+uniform vec3 uAmbF, uKeyColT, uKeyDirT; varying vec2 vUv, vXZ; varying float vK;
+${GLSL.ISLE_SH}
 void main(){
   float r = length(vUv); if (r > 1.0) discard;
   float hole = 1.0 - smoothstep(0.26, 0.36, r), rim = smoothstep(0.3, 0.45, r)*(1.0 - smoothstep(0.55, 1.0, r));
-  vec3 sand = vec3(0.6, 0.53, 0.43)*(uAmbF + uKeyColT*max(uKeyDirT.y, 0.0))*1.15;
+  vec3 sand = vec3(0.6, 0.53, 0.43)*(uAmbF + uKeyColT*isleSh(vXZ)*max(uKeyDirT.y, 0.0))*1.15;
   gl_FragColor = vec4(sand*(1.0 - hole), (hole*0.75 + rim*0.3)*vK);
 }`;
 
@@ -594,7 +599,7 @@ void main(){
     /* ── midges: small swarms dancing over the edge of the trees at dusk ── */
     const gnats = (() => {
       const NS = 14, PS = 40, N = NS * PS, cx = new Float64Array(NS).fill(NaN);
-      const u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uI: { value: 0 }, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uKeyDirT: Mats.U.uKeyDirT, uWind: { value: new T.Vector2(Layout.wind[0], Layout.wind[1]) } };
+      const u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uI: { value: 0 }, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uKeyDirT: Mats.U.uKeyDirT, uWind: { value: new T.Vector2(Layout.wind[0], Layout.wind[1]) }, ...Mats.shadeU() };
       const C = cloud(N, [['aSw', 4], ['aR', 1]], new T.ShaderMaterial({ uniforms: u, vertexShader: GNAT_VS, fragmentShader: GNAT_FS, transparent: true, depthWrite: false })), S = C.A.aSw.array;
       for (let i = 0; i < N; i++) C.A.aR.array[i] = rnd();
       function put(j, x) {
@@ -981,7 +986,7 @@ void main(){
        the swash, and darts home and down when the van or a walker comes near (or the night ends) ── */
     const crabs = (() => {
       const MAX = 48, H = herd(crabGeo(), MAX, mat(CRAB_VS, GEN_FS, { GLOSS: 0 }), [['iP', 4], ['iQ', 4]]), A = H.A;
-      const Ho = herd(new T.PlaneGeometry(1, 1), MAX, new T.ShaderMaterial({ uniforms: { uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uKeyDirT: Mats.U.uKeyDirT }, vertexShader: HOLE_VS, fragmentShader: HOLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide }), [['iP', 4]]);
+      const Ho = herd(new T.PlaneGeometry(1, 1), MAX, new T.ShaderMaterial({ uniforms: { uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uKeyDirT: Mats.U.uKeyDirT, ...Mats.shadeU() }, vertexShader: HOLE_VS, fragmentShader: HOLE_FS, transparent: true, depthWrite: false, side: T.DoubleSide }), [['iP', 4]]);
       const C = Array.from({ length: MAX }, () => ({ st: 'off', bx: 0, bz: 0, x: 0, z: 0, face: 0, mx: 0, mz: 0, sp: 0, tm: 0, sink: 1, gait: 0, gaitA: 0, size: 0.9 + rnd() * 0.5 }));
       function dig(c, cx, near) {
         for (let k = 0; k < 14; k++) {
@@ -1069,7 +1074,7 @@ void main(){
 
     /* ── spray where dolphins break the surface ── */
     const spray = (() => {
-      const NE = 8, PE = 22, u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uSpl: { value: Array.from({ length: NE }, () => new T.Vector4(0, 0, -1e4, 0)) }, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT };
+      const NE = 8, PE = 22, u = { uTime: Mats.U.uTime, uScale: { value: 1000 }, uSpl: { value: Array.from({ length: NE }, () => new T.Vector4(0, 0, -1e4, 0)) }, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, ...Mats.shadeU() };
       const C = cloud(NE * PE, [['aS', 4]], new T.ShaderMaterial({ uniforms: u, vertexShader: SPRAY_VS, fragmentShader: SPRAY_FS, transparent: true, depthWrite: false })), a = C.A.aS.array;
       for (let e = 0; e < NE; e++) for (let i = 0; i < PE; i++) { const k = (e * PE + i) * 4; a[k] = e; a[k + 1] = rnd(); a[k + 2] = rnd(); a[k + 3] = rnd(); }
       let next = 0, last = -1e4;

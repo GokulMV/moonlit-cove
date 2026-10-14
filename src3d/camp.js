@@ -54,15 +54,16 @@ void main(){
      gathered at the sides */
   const VAN_VS = `
 uniform mat4 uVanInv;
-varying vec3 vL, vCam; varying vec2 vP2;
+varying vec3 vL, vCam; varying vec2 vP2, vWxz;
 void main(){
   vec4 w = modelMatrix*vec4(position, 1.0);
-  vL = (uVanInv*w).xyz; vCam = (uVanInv*vec4(cameraPosition, 1.0)).xyz; vP2 = position.xy;
+  vL = (uVanInv*w).xyz; vCam = (uVanInv*vec4(cameraPosition, 1.0)).xyz; vP2 = position.xy; vWxz = w.xz;
   gl_Position = projectionMatrix*viewMatrix*w;
 }`;
   const VAN_FS = `
 uniform vec3 uLamp, uAmbIn, uKeyDirT, uKeyColT, uAmbF, uNrm; uniform float uTime, uMode, uPop, uDoor; uniform vec2 uHalf; uniform mat4 uVanInv;
-varying vec3 vL, vCam; varying vec2 vP2;
+varying vec3 vL, vCam; varying vec2 vP2, vWxz;
+${GLSL.ISLE_SH}
 float h21(vec2 p){ vec3 q = fract(vec3(p.xyx)*0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
 /* (a box hit from outside, nearer than t so far: t, the normal, and which it was) */
 void box(vec3 ro, vec3 rd, vec3 a, vec3 b, float id, inout float t, inout vec3 n, inout float hit){
@@ -189,7 +190,7 @@ void main(){
     col *= 0.62 + 0.38*smoothstep(0.0, 0.05, min(hf.x - q.x, hf.y - q.y));
     float cv = clamp(dot(-rd, uNrm), 0.0, 1.0), F = 0.05 + 0.95*pow(1.0 - cv, 5.0);
     vec3 R = reflect(rd, uNrm), kd = normalize(mat3(uVanInv)*uKeyDirT);
-    vec3 refl = uAmbF*mix(vec3(0.5, 0.45, 0.38)*0.7, vec3(1.1, 1.25, 1.45), smoothstep(-0.15, 0.3, R.y)) + uKeyColT*pow(max(dot(R, kd), 0.0), 500.0)*3.0;
+    vec3 refl = uAmbF*mix(vec3(0.5, 0.45, 0.38)*0.7, vec3(1.1, 1.25, 1.45), smoothstep(-0.15, 0.3, R.y)) + uKeyColT*isleSh(vWxz)*pow(max(dot(R, kd), 0.0), 500.0)*3.0;
     col = mix(col*0.85, refl, min(1.0, F + 0.08));
   } else {
     /* (the doorway's own edge: the thickness of the body) */
@@ -330,7 +331,7 @@ void main(){
     refs.vanInside = { color: lamp, amb: ambIn, pop: uPop, door: uDoor };
     /* a pane that looks into the van: mode 0 the open doorway, 1 a living window with its curtains, 2 the cab's glass */
     const paneMat = (hw, hh, mode, nrm) => new T.ShaderMaterial({ uniforms: { uLamp: { value: lamp }, uAmbIn: { value: ambIn }, uPop, uDoor, uTime: U.bulb.uTime, uVanInv: Mats.U.uVanInv,
-      uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF, uHalf: { value: new T.Vector2(hw, hh) }, uMode: { value: mode }, uNrm: { value: nrm.clone() } }, vertexShader: VAN_VS, fragmentShader: VAN_FS });
+      uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uAmbF: Mats.U.uAmbF, uHalf: { value: new T.Vector2(hw, hh) }, uMode: { value: mode }, uNrm: { value: nrm.clone() }, ...Mats.shadeU() }, vertexShader: VAN_VS, fragmentShader: VAN_FS });
     /* body: side profile with real wheel arches, extruded across the width with rounded edges */
     const sill = 0.36, xr = -1.25, xf = 1.28, AR = 0.53, BV = 0.1;
     const sh = new T.Shape();

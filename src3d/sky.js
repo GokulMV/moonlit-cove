@@ -1,11 +1,17 @@
 /* ─────────────────────────────────────────────────────────────
-   sky.js — real sun & moon → sky colours, lights and the
-   on-screen positions of the moon and sun.
-   The camera faces east over the sea. The sky band in frame is
-   only ~9° tall, so each body's arc is compressed to fit: it
-   rises at the horizon, climbs, and sets at the frame's edge,
-   always where its real azimuth and altitude say it is relative
-   to the rest of its path tonight.
+   sky.js — real sun & moon → sky colours, lights and where the
+   moon and sun are drawn.
+   The camp faces east over the sea (the world's −z; north is −x).
+   Two ways to draw them (o.path):
+   · 'true' — the true compass: each where it really is, by its
+     azimuth and altitude for the visitor's place and time; the
+     sun comes up out of the sea ahead, crosses high to the south
+     (north, south of the equator) and sets behind the camp.
+   · 'front' — in front of the camp: the view's sky band is only
+     ~9° tall, so each body's arc is compressed to fit: it rises
+     at the frame's left, climbs, and sets at its right, always
+     where its real path says it is relative to the rest of it.
+   The stars and planets are always real (stars.js).
    ───────────────────────────────────────────────────────────── */
 const Sky = (() => {
   const D = Math.PI / 180;
@@ -36,6 +42,7 @@ const Sky = (() => {
   /* view-relative placement: each body crosses the frame at an even pace from rise (left)
      through transit (centre) to set (right), by its hour angle; altitude is compressed into
      the ~9° sky band */
+  const dirOf = (phi, a) => [Math.sin(phi) * Math.cos(a), Math.sin(a), -Math.cos(phi) * Math.cos(a)];
   let LAT = 17;
   function place(body, isSun) {
     const ct = -Math.tan(LAT * D) * Math.tan(body.dec);
@@ -48,7 +55,6 @@ const Sky = (() => {
                     : (0.75 * D + 5.6 * D * Math.pow(Math.max(sa, 0), 0.85));
     return { phi, e, prog, dir: [Math.sin(phi) * Math.cos(e), Math.sin(e), -Math.cos(phi) * Math.cos(e)] };
   }
-  const dirOf = (phi, a) => [Math.sin(phi) * Math.cos(a), Math.sin(a), -Math.cos(phi) * Math.cos(a)];
 
   /* ── the tide, from the real moon and sun. Each raises the sea's equilibrium tide (Laplace's form of it): two bulges a
      day that come round as the earth turns under them, and a daily inequality when the body stands north or south of the
@@ -79,8 +85,18 @@ const Sky = (() => {
     return { eta, dz, hi: Math.max(tideMemo.hi, dz), rising, next: tideMemo.next, spring: Math.abs(eta) };
   }
 
-  function compute(ms, loc) {
+  /* a direction's turn round the view (0 ahead, + to the right) and its height; and from those, the direction again */
+  const phiOf = v => Math.atan2(v[0], -v[2]), elOf = v => Math.asin(Math.max(-1, Math.min(1, v[1])));
+  const turn = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * k; };
+  /* (between where a body really is and where it is drawn in front of the camp, k of the way: round the horizon the
+     shorter way, and up or down as it goes) */
+  const between = (a, b, k) => k <= 0 ? a : k >= 1 ? b : dirOf(turn(phiOf(a), phiOf(b), k), elOf(a) + (elOf(b) - elOf(a)) * k);
+
+  function compute(ms, loc, o = {}) {
     LAT = loc.lat;
+    /* (how far toward drawing them in front of the camp: 0 the true compass, 1 in front; in between while the visitor
+       switches, so they swing across rather than jump) */
+    const fk = Math.max(0, Math.min(1, o.front ?? (o.path === 'front' ? 1 : 0))), front = fk > 0.5;
     const sun = Astro.sun(ms, loc.lat, loc.lng), moon = Astro.moon(ms, loc.lat, loc.lng), il = Astro.illumination(ms);
     const sAlt = sun.alt / D, mAlt = moon.alt / D;
     let [zen, hor, glow] = keyed(sAlt);
@@ -97,21 +113,29 @@ const Sky = (() => {
     hor = hor.map((v, i) => v + moonI * [0.13, 0.16, 0.25][i]);
 
     const pS = place(sun, true), pM = place(moon, false);
-    /* the moon where it really is in the sky tonight, among the real stars (stars.js): from its hour angle and declination
-       (the sun's day keeps its own path across the view, above, for the light) */
+    /* each where it really is in the sky, from its hour angle and declination: the world's south (+x) and west (+z)
+       components, and up; the moon among the real stars (stars.js) */
     const real = b => { const p = loc.lat * D, cd = Math.cos(b.dec), sd = Math.sin(b.dec), cH = Math.cos(b.H), sH = Math.sin(b.H);
       return [Math.sin(p) * cd * cH - Math.cos(p) * sd, Math.cos(p) * cd * cH + Math.sin(p) * sd, cd * sH]; };
     const moonV = real(moon), sunR = real(sun);
+    /* where each is drawn: where it really is, or on its path across the view in front of the camp */
+    const sunD = between(sunR, pS.dir, fk), moonD = between(moonV, pM.dir, fk);
     /* the sun as seen from the moon, in the frame its disc is drawn in (x across, y up the disc, z back toward us): which
        part of it is lit, and which way its bright limb faces, as the real sun and moon stand */
     const mz = moonV, mxl = Math.hypot(mz[2], mz[0]) || 1, mx = [-mz[2] / mxl, 0, mz[0] / mxl], my = [mx[1] * mz[2] - mx[2] * mz[1], mx[2] * mz[0] - mx[0] * mz[2], mx[0] * mz[1] - mx[1] * mz[0]];
     const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sunM = [dot3(sunR, mx), dot3(sunR, my), -dot3(sunR, mz)];
 
+    /* the light comes from where the body is drawn (its turn round the view, phi: 0 ahead, + to the right), at its real
+       height, never lower than a little over the horizon (a sun at the horizon still throws its long shadows) nor so
+       high it casts none */
     const useSun = sAlt > -1.5;
-    const keyPhi = useSun ? pS.phi : Math.atan2(moonV[0], -moonV[2]);
+    const keyPhi = useSun ? turn(phiOf(sunR), pS.phi, fk) : turn(phiOf(moonV), pM.phi, fk);
     const keyAlt = useSun ? Math.max(sun.alt, 3 * D) : Math.max(moon.alt, 16 * D);
     const keyCol = (useSun ? sunCol : moonCol).map(v => v * (useSun ? sunI : moonI));
     const keyDir = dirOf(keyPhi, Math.min(keyAlt, 62 * D));
+    /* (and for what the land shades from it — the island's hill, its forest — the light's own real height, so the camp
+       goes into the hill's shade before the sun is down) */
+    const shDir = dirOf(keyPhi, Math.max(useSun ? sun.alt : moon.alt, 0.4 * D));
 
     const amb = mix(zen, hor, 0.45).map(v => v * 1.45);
     const groundAmb = amb.map((v, i) => v * 0.35 + keyCol[i] * 0.04);
@@ -130,10 +154,15 @@ const Sky = (() => {
        before it is high: at sunset they glow orange and pink rather than going grey */
     const cloudSun = 3.0 * sm(-0.045, 0.08, Math.sin(sun.alt)), cloudCol = mix([1.0, 0.36, 0.16], sunCol, sm(0.0, 0.3, Math.sin(sun.alt)));
     const cloudLit = cloudCol.map((v, i) => v * cloudSun * 0.2 + moonCol[i] * moonI * 0.6);
+    /* the twilight opposite the sun, as it sets and as it rises: the earth's own shadow coming up the sky there, a grey-blue
+       band along the horizon as high as the sun has gone down, and over it the pink of the sky still in the sun (the
+       Belt of Venus), a few degrees deep; strongest with the sun just under the horizon, gone by the end of civil twilight.
+       [how strong, the shadow's top (rad), how deep the pink (rad)] */
+    const anti = [sm(4, 0.5, sAlt) * (1 - sm(-4.5, -8, sAlt)), Math.max(0, -sAlt) * 0.95 * D + 0.0025, (6 + 3 * sm(0, -5, sAlt)) * D];
 
     return {
-      sun, moon, illum: il, sAlt, mAlt, zen, hor, glow, haze: hor,
-      sunDirV: pS.dir, moonDirV: moonV, sunReal: sunR, sunM, moonDisc, sunDisc, moonGlit, sunGlit, stars, cloudLit,
+      sun, moon, illum: il, sAlt, mAlt, zen, hor, glow, haze: hor, path: front ? 'front' : 'true',
+      sunDirV: sunD, moonDirV: moonD, sunReal: sunR, moonReal: moonV, sunM, moonDisc, sunDisc, moonGlit, sunGlit, stars, cloudLit, anti, shDir,
       moonPhaseC: 2 * il.fraction - 1, moonPhaseSign: il.phase < 0.5 ? 1 : -1,
       amb, groundAmb, keyDir, keyCol, shadowK, exposure,
       day: sm(0, 15, sAlt), night: 1 - sm(-6, 8, sAlt), lightsAuto: sAlt < -3 ? 1 : 0,

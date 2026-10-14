@@ -21,6 +21,36 @@ const GLSL = (() => {
      (uIsK: how far the tide moves the water up it, its beach's width, how much of it is sand, how open it is to the swell;
      uIsC: how much rock, cliff and mangrove, how far its reef runs out); and the coastline itself, a texel a metre (uIsL,
      in two planes, as island.js packs it) */
+  /* how much of the key light (the sun by day, the moon by night) reaches a point past the island's hill and its forest
+     (isle.js works it out over the grid, for the light's direction as it moves: r how much, g how far off what is in the
+     way, as a share of a kilometre); off the island, all of it. Its edges as ragged as the crowns that cast them when what
+     casts them is near (a canopy's edge), smooth when it is far (the hill's). Standalone, for any shader */
+  const ISLE_SH = Layout.isle ? `
+#ifndef ISLE_SH
+#define ISLE_SH
+uniform sampler2D uIsSh; uniform vec4 uIsShG; uniform float uIsShOn; uniform vec3 uIsShL;
+float isShH(vec2 i){ return fract(sin(dot(i, vec2(127.1, 311.7)))*43758.5453); }
+float isShN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+  return mix(mix(isShH(i), isShH(i + vec2(1.0, 0.0)), f.x), mix(isShH(i + vec2(0.0, 1.0)), isShH(i + vec2(1.0, 1.0)), f.x), f.y); }
+float isleSh(vec2 p){
+  if (uIsShOn < 0.5) return 1.0;
+  vec2 uv = (p - uIsShG.xy)*uIsShG.zw;
+  if (uv.x <= 0.001 || uv.y <= 0.001 || uv.x >= 0.999 || uv.y >= 0.999) return 1.0;
+  vec4 s = texture2D(uIsSh, uv); float v = s.r, e = 4.0*v*(1.0 - v)*(1.0 - smoothstep(0.08, 0.4, s.g));
+  if (e > 0.01) v = clamp(v + (isShN(p*0.21)*0.62 + isShN(p*0.63 + 7.3)*0.38 - 0.5)*1.25*e, 0.0, 1.0);
+  return v;
+}
+/* (for something up in the air, that high over the ground: the shade where the light comes down past it to the ground,
+   further from the light the higher it is, so a gull over a beach in the hill's shade can still be in the last sun) */
+float isleShUp(vec3 w, float above){ vec3 L = uIsShL; return isleSh(w.xz - L.xz*(clamp(above, 0.0, 60.0)/max(L.y, 0.06))); }
+#endif
+` : `
+#ifndef ISLE_SH
+#define ISLE_SH
+float isleSh(vec2 p){ return 1.0; }
+float isleShUp(vec3 w, float above){ return 1.0; }
+#endif
+`;
   const ISLE_GL = `
 uniform highp sampler2D uIsF, uIsU, uIsL; uniform sampler2D uIsK, uIsC;
 uniform vec4 uIsG;   /* the grid's corner (x, z), and one over its size in metres (x, z) */
@@ -125,17 +155,28 @@ float vnz(vec3 p){
 }
 /* the shoreline, for anything that needs to know how near the water it is */
 ${shoreGL('c', { head: 'headc', z: 'shoreZc' })}
+${ISLE_SH}
 `;
 
   /* sky radiance in a direction (no stars, no discs) */
   const SKY_FN = `
 uniform vec3 uZen, uHor, uGlow, uSunDirV, uMoonDirV, uMoonDisc, uSunDisc;
+uniform vec4 uAnti;   /* the twilight opposite the sun (sky.js): how strong, the earth's shadow's top and the pink's depth (rad) */
 vec3 skyColor(vec3 d){
   float e = d.y, eu = max(e, 0.0);
   vec3 c = mix(uHor, uZen, pow(smoothstep(0.0, 0.5, eu), 0.6));
   vec2 hs = normalize(uSunDirV.xz + vec2(1e-5)), hd = normalize(d.xz + vec2(1e-5));
   float az = max(dot(hd, hs), 0.0);
   c += uGlow*(pow(az, 5.0)*exp(-eu*11.0) + 0.2*exp(-eu*5.0));
+  /* (opposite a sun at the horizon: the earth's shadow, grey-blue, rising up the sky as the sun goes down, and the band of
+     pink over it; the warmth of the sunset is the other side's, so here the horizon is cooler) */
+  if (uAnti.x > 0.001){
+    float op = smoothstep(-0.15, -0.85, dot(hd, hs))*uAnti.x, el = asin(clamp(e, -1.0, 1.0));
+    float shd = 1.0 - smoothstep(uAnti.y - 0.006, uAnti.y + 0.01, el);
+    float blt = smoothstep(uAnti.y - 0.004, uAnti.y + 0.016, el)*exp(-max(el - uAnti.y, 0.0)/uAnti.z);
+    c = mix(c, c*vec3(0.62, 0.66, 0.84), shd*op*0.8);
+    c = mix(c, c*vec3(1.32, 0.9, 1.02), blt*op*0.75);
+  }
   float cm = max(dot(d, uMoonDirV), 0.0);
   c += uMoonDisc*(pow(cm, 1500.0)*0.3 + pow(cm, 160.0)*0.05 + pow(cm, 14.0)*0.012);
   float cs = max(dot(d, uSunDirV), 0.0);
@@ -436,7 +477,9 @@ void main(){
         float fold = 0.75 + 0.5*texture2D(uNoise, vec2(u*180.0, q*3.0 + float(k)*0.37)).r;
         vec3 alb = vec3(0.035, 0.05, 0.03)*fold;
         if (k == 2) alb = mix(alb, vec3(0.16, 0.155, 0.15)*(0.8 + 0.4*fold), smoothstep(0.42, 0.18, q)*smoothstep(2600.0, 3400.0, L.x));
-        vec3 lit = alb*(mix(uZen, uHor, 0.6)*1.1 + uCloudLit*ndl*1.3*day);
+        /* (and its crest, kilometres up, still in the sun a few minutes after the beach has lost it: the alpenglow) */
+        float dip = sqrt(2.0*max(L.x - hc, 0.0)/6.37e6), dayK = smoothstep(-0.05 - dip, 0.1 - 0.5*dip, Lv.y)*mix(1.0, 1.0 - q, smoothstep(0.02, -0.02, Lv.y));
+        vec3 lit = alb*(mix(uZen, uHor, 0.6)*1.1 + uCloudLit*ndl*1.3*max(day, dayK));
         float hz = 1.0 - exp(-D/(40000.0/max(uHzMist, 0.25)));
         /* (low down it is seen through more of the air over the sea) */
         hz = mix(hz, 1.0 - (1.0 - hz)*0.75, q);
@@ -937,7 +980,7 @@ void main(){
   vec3 Lk = normalize(uKeyDir);
   /* the clouds' shadow here, and how much of the sun and the moon the camera sees past the clouds: their glitter on the
      sea goes as they do (it shone on under a cloud that hid the sun) */
-  float cs = cloudShadow(p);
+  float cs = cloudShadow(p)*isleSh(p);
   vec3 keyC = uKeyCol*cs;
   /* (the glitter is so bright that even a tenth of it still shines: a thin cloud lets some through, a thick one none) */
   float visS = smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.25, 0.5)).r), visM = smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.75, 0.5)).r);
@@ -1531,5 +1574,5 @@ void main(){
   /* (a fresh look is steadied a little by its neighbours' before it is blended in: the march's grain settles sooner) */
   gl_FragColor = fresh ? mix(hist, mix(now, m1, 0.3), uAlpha) : hist;
 }`;
-  return { MAXUW, MAXRIP, FLY, COMMON, SKY_FN, SKY_VS, SKY_FS, CLOUD_FS, CLOUDVIS_FS, CLOUD_RES_FS, CLOUDSHADOW, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
+  return { MAXUW, MAXRIP, FLY, COMMON, ISLE_SH, SKY_FN, SKY_VS, SKY_FS, CLOUD_FS, CLOUDVIS_FS, CLOUD_RES_FS, CLOUDSHADOW, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
 })();

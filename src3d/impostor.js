@@ -189,6 +189,7 @@ void main(){
 }`;
   const FS = `
 ${OCT}
+${GLSL.ISLE_SH}
 uniform sampler2D uCol, uNrm; uniform vec4 uAt;   /* cells across, down; the margin as a share of a cell; a cell's texels */
 uniform float uMaxLod;                             /* the smallest copy that still keeps the pictures apart */
 uniform vec2 uCellUV;                              /* a cell's size in the atlas's own units */
@@ -225,11 +226,13 @@ void main(){
   vec3 n = octD(N.rg); float ao = N.b;
   n = vec3(n.x*cy + n.z*sy, n.y, -n.x*sy + n.z*cy);
   vec3 V = normalize(cameraPosition - vW), L = uKeyDirT; float ndl = dot(n, L);
+  /* (the sun, or the moon, as much as gets past the island's hill and forest to this crown) */
+  vec3 kC = uKeyColT*isleSh(vW.xz);
   vec3 c = alb*uAmbF*(0.42 + 0.58*clamp(n.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao);
-  c += alb*uKeyColT*clamp((ndl + 0.2)/1.2, 0.0, 1.0)*mix(0.32, 1.0, ao);
+  c += alb*kC*clamp((ndl + 0.2)/1.2, 0.0, 1.0)*mix(0.32, 1.0, ao);
   /* (light through the leaves at the crown's edge, looking toward the sun) */
-  c += alb*vec3(1.08, 1.16, 0.42)*uKeyColT*clamp(-ndl, 0.0, 1.0)*pow(max(dot(-V, L), 0.0), 3.0)*0.35*ao*ao;
-  c += alb*uKeyColT*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao);
+  c += alb*vec3(1.08, 1.16, 0.42)*kC*clamp(-ndl, 0.0, 1.0)*pow(max(dot(-V, L), 0.0), 3.0)*0.35*ao*ao;
+  c += alb*kC*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao);
   float d = distance(vW, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
@@ -245,7 +248,7 @@ void main(){
       uPr: { value: Array.from({ length: MAXP }, (_, i) => { const p = atlas.info[i]; return p ? new T.Vector4(p.S, p.cy, p.cell0, p.hide || 0) : new T.Vector4(); }) },
       uNear: { value: new T.Vector3(o.near ?? 0, o.fade ?? 8, 0) }, uTime: Mats.U.uTime, uWindV: { value: (typeof FloraLeaf !== 'undefined' && FloraLeaf.U.uWindV.value) || new T.Vector4(0.55, -0.83, 0.5, 0.5) },
       uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog,
-      uTintA: { value: new T.Vector3(...(o.tintA || [0.88, 0.9, 0.86])) }, uTintB: { value: new T.Vector3(...(o.tintB || [1.1, 1.06, 1.0])) } };
+      uTintA: { value: new T.Vector3(...(o.tintA || [0.88, 0.9, 0.86])) }, uTintB: { value: new T.Vector3(...(o.tintB || [1.1, 1.06, 1.0])) }, ...Mats.shadeU() };
     if (typeof FloraLeaf !== 'undefined') u.uWindV = FloraLeaf.U.uWindV;
     return new T.ShaderMaterial({ uniforms: u, vertexShader: VS.replace('MAXP', String(MAXP)), fragmentShader: FS, side: T.DoubleSide, alphaToCoverage: o.a2c ?? false });
   }

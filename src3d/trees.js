@@ -562,7 +562,8 @@ void main(){
   vec3 nl = normalize(Tg*tn.x + Bt*tn.y + Nc*max(tn.z, 0.05))*face;
   vec3 nb = normalize(vN);
   float ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT);
-  float sh = leafShadow(vWPos);
+  /* (sh: the shadow map's, and round the island the shade of its hill and forest) */
+  float tsh = isleSh(vWPos.xz), sh = leafShadow(vWPos)*tsh;
   /* how much of the key light gets this far into the crown */
   float vis = mix(0.1, 1.0, smoothstep(-0.35, 0.6, cr))*mix(0.4, 1.0, ao)*sh;
   vec3 alb = tx.rgb*uTint*vTint*(0.88 + 0.24*vL.z);
@@ -575,7 +576,7 @@ void main(){
   c += uKeyColT*uLeafK.x*pow(max(dot(nl, normalize(uKeyDirT + V)), 0.0), uLeafK.y)*vis*step(0.0, ndl);
   c += uAmbF*uLeafK.x*0.25*pow(1.0 - max(dot(nl, V), 0.0), 4.0)*max(nl.y, 0.0)*(0.25 + 0.75*ao);
   /* and the light the crown scatters about inside itself, green from leaf to leaf */
-  c += alb*uKeyColT*vec3(0.8, 1.0, 0.6)*0.05*(0.4 + 0.6*ao)*(0.3 + 0.7*sh);
+  c += alb*uKeyColT*vec3(0.8, 1.0, 0.6)*0.05*(0.4 + 0.6*ao)*(0.3 + 0.7*sh)*tsh;
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));

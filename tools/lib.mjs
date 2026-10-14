@@ -25,10 +25,11 @@ let held = null;
 const release = () => { if (held) { try { fs.rmSync(held, { recursive: true, force: true }); } catch (e) { /* already free */ } held = null; } };
 process.on('exit', release); for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { release(); process.exit(1); });
 
-export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'file://' + path.join(root, 'dist/page-local.html'), enter = true, hour = 23, query = '', mobile = false, init } = {}) {
+export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'file://' + path.join(root, 'dist/page-local.html'), enter = true, hour = 23, query = '', mobile = false, init, tz } = {}) {
   held = await takeSlot();
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: mobile, isMobile: mobile });
+  /* (tz: the visitor's time zone, which the page places them by: the sky is theirs) */
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: mobile, isMobile: mobile }, tz ? { timezoneId: tz } : {}));
   const page = await ctx.newPage();
   const logs = [];
   page.on('console', m => { const t = m.text(); logs.push(`[${m.type()}] ${t}`); if (m.type() === 'error') console.log('  console error:', t.slice(0, 300)); });

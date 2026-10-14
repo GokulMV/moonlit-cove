@@ -71,6 +71,7 @@ void main(){
   const KELP_FS = `
 uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay;
 varying float vDepth, vH, vA, vShade, vT, vBulb, vX; varying vec3 vW, vN;
+${GLSL.ISLE_SH}
 void main(){
   /* (a blade's normal, turned between up and its own, can pass through nothing on the way: never normalise a zero) */
   vec3 n = vN*inversesqrt(max(dot(vN, vN), 1e-6)), V = normalize(cameraPosition - vW);
@@ -78,9 +79,9 @@ void main(){
   /* olive-brown, darker toward the holdfast, the bladders golden; lit through as well as on */
   vec3 alb = mix(vec3(0.045, 0.035, 0.011), vec3(0.105, 0.08, 0.026), 0.3 + 0.7*vH)*(0.8 + 0.4*vShade);
   alb = mix(alb, vec3(0.19, 0.145, 0.045), vBulb*0.6)*(0.85 + 0.3*abs(vX));   /* (thinner, and lighter, toward the margins) */
-  vec3 L = uAmbF*0.8 + uKeyColT*(abs(dot(n, uKeyDirT))*0.6 + 0.25)*tr;
+  vec3 kc = uKeyColT*isleSh(vW.xz), L = uAmbF*0.8 + kc*(abs(dot(n, uKeyDirT))*0.6 + 0.25)*tr;
   vec3 col = alb*L;
-  col = mix(vec3(0.025, 0.1, 0.1)*(uAmbF + uKeyColT*0.3), col, exp(-vDepth*0.9));
+  col = mix(vec3(0.025, 0.1, 0.1)*(uAmbF + kc*0.3), col, exp(-vDepth*0.9));
   float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
   /* (what reaches the top is drawn there by the canopy: these are only the fronds below it) */
   float a = vA*(0.35 + 0.65*exp(-vDepth*0.7))*(1.0 - 0.8*fres)*(0.35 + 0.65*uDay)*smoothstep(0.03, 0.12, vDepth);
@@ -112,6 +113,7 @@ void main(){
   const CANOPY_FS = `
 uniform float uTime, uDay; uniform vec3 uKeyDirT, uKeyColT, uAmbF;
 varying vec2 vQ; varying float vR, vRock, vSeed, vDeep; varying vec3 vW;
+${GLSL.ISLE_SH}
 /* (an integer hash of a cell and a salt: exact, the same in every pixel, where sin() of a big number need not be) */
 float hh(vec2 c, float k){
   uvec3 v = uvec3(uint(int(floor(c.x)) + 65536), uint(int(floor(c.y)) + 65536), uint(int(k) + int(vSeed*97.0)));
@@ -168,7 +170,7 @@ void main(){
   vec3 V = normalize(cameraPosition - vW), n = normalize(vec3(0.06*sin(p.x*21.0 + p.y*13.0), 1.0, 0.06*sin(p.y*17.0 - p.x*9.0)));
   /* (wet: the sun glints off it as off the water round it) */
   float gl = pow(max(dot(reflect(-uKeyDirT, n), V), 0.0), 40.0)*0.35;
-  vec3 col = alb*(uAmbF*0.85 + uKeyColT*(max(uKeyDirT.y, 0.0)*0.7 + 0.2)) + uKeyColT*gl*0.25*tm;
+  vec3 kc = uKeyColT*isleSh(vW.xz), col = alb*(uAmbF*0.85 + kc*(max(uKeyDirT.y, 0.0)*0.7 + 0.2)) + kc*gl*0.25*tm;
   gl_FragColor = vec4(col, cov*(0.4 + 0.6*uDay));
 }`;
 
@@ -199,11 +201,12 @@ void main(){
   const SHRIMP_FS = `
 uniform vec3 uKeyDirT, uKeyColT, uAmbF; uniform float uDay;
 varying vec3 vC, vN, vW; varying float vDepth;
+${GLSL.ISLE_SH}
 void main(){
-  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW);
+  vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vW), kc = uKeyColT*isleSh(vW.xz);
   float tr = exp(-vDepth*1.4);
-  vec3 col = vC*(uAmbF*0.9 + uKeyColT*max(dot(n, uKeyDirT), 0.0)*tr*1.1);
-  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + uKeyColT*0.3), col*1.1, exp(-vDepth*0.8));
+  vec3 col = vC*(uAmbF*0.9 + kc*max(dot(n, uKeyDirT), 0.0)*tr*1.1);
+  col = mix(vec3(0.03, 0.12, 0.13)*(uAmbF + kc*0.3), col*1.1, exp(-vDepth*0.8));
   float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
   float a = (0.3 + 0.7*exp(-vDepth*0.8))*(1.0 - 0.85*fres)*uDay;
   if (a < 0.02) discard;
