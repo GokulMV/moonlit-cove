@@ -366,12 +366,14 @@ uniform sampler2D uCB; uniform float uCBOn; uniform vec2 uCBInv;   /* the clouds
 uniform vec2 uHiDrift;      /* how far the wind has carried the clouds (m): the high cloud drifts the same way */
 uniform float uPix;         /* the angle one pixel covers (the discs' edges are smoothed by it: no derivatives, which
                                are undefined inside the branches they sit in and drew a dashed ring round the sun and moon) */
+${Layout.isle ? 'uniform sampler2D uHzP; uniform float uHzOn, uHzMist;   /* the far ranges round the island (horizon.js) */' : ''}
 varying vec3 vDir;
 ${CLOUD_FN}
 ${CATMULL}
 void main(){
   vec3 d = normalize(vDir);
   vec3 c = skyColor(d), sky0 = c;
+  float hzCov = 0.0; vec3 hzC = vec3(0.0);
   /* (all of it worked out for every pixel, below the horizon too, so the textures' own filtering, which looks at the
      pixels next door, always finds them doing the same: a branch at the horizon left it guessing along that line) */
   {
@@ -411,10 +413,43 @@ void main(){
       vec3 col = amb*1.7 + uCloudLit*1.6 + halo*1.1 + uGlow*0.9*pow(az, 1.5);
       c = mix(c, col, den); cover += den*0.3;
     }
+    ${Layout.isle ? `
+    /* the coast of Borneo across the sea (horizon.js's profile): the Crocker Range, fold behind fold, and Kinabalu out of
+       it, each layer's crest as high over the horizon as it stands from here, less what the earth's curve hides; the
+       nearest that reaches this high drawn, its slopes lit from the side the sun is on, hazed by how far off it is */
+    if (uHzOn > 0.5 && e < 0.1 && e > -0.08){
+      float u = fract(a/6.2831853 + 0.25), du = 1.0/4096.0;
+      vec4 P0 = texture2D(uHzP, vec2(u, 0.25)), P1 = texture2D(uHzP, vec2(u, 0.75));
+      vec4 Q0 = texture2D(uHzP, vec2(u + du*2.0, 0.25)), Q1 = texture2D(uHzP, vec2(u + du*2.0, 0.75));
+      float hc = max(cameraPosition.y, 0.0);
+      vec3 Lv = normalize(uSunDirV); float day = smoothstep(-0.05, 0.1, Lv.y);
+      for (int k = 0; k < 3; k++){
+        vec2 L = k == 0 ? P0.xy : k == 1 ? P0.zw : P1.xy, Lq = k == 0 ? Q0.xy : k == 1 ? Q0.zw : Q1.xy;
+        if (L.x < 1.0) continue;
+        float D = L.y*1000.0, dr = D*D/14.8e6, top = atan(L.x - hc - dr, D), foot = atan(-hc - dr, D);
+        if (e > top || e < foot - 0.0015) continue;
+        /* (how far down from its crest, as a share of its height over the sea; and its slope along the crest) */
+        float q = clamp((top - e)/max(top - foot, 1e-4), 0.0, 1.0), sl = (Lq.x - L.x)/max(D*du*6.2831853*2.0, 1.0);
+        vec3 nrm = normalize(vec3(-hd.x, 0.0, -hd.y)*0.8 + vec3(0.0, 0.55, 0.0) + vec3(hd.y, 0.0, -hd.x)*clamp(-sl, -1.5, 1.5)*0.6);
+        float ndl = max(dot(nrm, Lv), 0.0);
+        /* (forest down its slopes, darker in the folds; Kinabalu's upper walls bare granite) */
+        float fold = 0.75 + 0.5*texture2D(uNoise, vec2(u*180.0, q*3.0 + float(k)*0.37)).r;
+        vec3 alb = vec3(0.035, 0.05, 0.03)*fold;
+        if (k == 2) alb = mix(alb, vec3(0.16, 0.155, 0.15)*(0.8 + 0.4*fold), smoothstep(0.42, 0.18, q)*smoothstep(2600.0, 3400.0, L.x));
+        vec3 lit = alb*(mix(uZen, uHor, 0.6)*1.1 + uCloudLit*ndl*1.3*day);
+        float hz = 1.0 - exp(-D/(40000.0/max(uHzMist, 0.25)));
+        /* (low down it is seen through more of the air over the sea) */
+        hz = mix(hz, 1.0 - (1.0 - hz)*0.75, q);
+        hzC = mix(lit, sky0, clamp(hz, 0.0, 0.96)); hzCov = 1.0;
+        break;
+      }
+    }` : ''}
     /* the altocumulus and the cumulus (or, in rain, a deck of stratus), in front of the cirrus */
     { vec4 cl = uCBOn > 0.5 && uEnv < 0.5 ? texelFetch(uCB, ivec2(gl_FragCoord.xy), 0) : cloudLayer(d, Ld, sky0, 0.5 + 0.7*(hash12(gl_FragCoord.xy) - 0.5));
       cl = vec4(max(cl.rgb, vec3(0.0)), clamp(cl.a, 0.0, 1.0));
       c = c*cl.a + cl.rgb; cover = max(cover, 1.0 - cl.a); }
+    /* (the far ranges in front of the clouds seen as low as they are: clouds that low over the horizon are further off) */
+    if (hzCov > 0.5) c = hzC;
     {
       /* a lightning bolt: jagged, from the cloud base to the sea */
       if (uBolt.w > 0.001){
@@ -441,7 +476,7 @@ void main(){
         float m1 = textureLod(uNoise, q*0.21 + vec2(0.31, 0.62), 0.0).r, m2 = textureLod(uNoise, q*0.55 + vec2(0.13, 0.27), 0.0).a;
         float alb = 0.98 - 0.3*smoothstep(0.42, 0.68, m1) - 0.1*smoothstep(0.45, 0.8, m2);
         vec3 moonC = uMoonDisc*(alb*(0.78 + 0.22*nn.z)*lit + 0.03*(1.0 - lit));
-        cov *= (1.0 - cover)*(1.0 - max(uStratus, uStorm));
+        cov *= (1.0 - cover)*(1.0 - max(uStratus, uStorm))*(1.0 - hzCov);
         c = c*(1.0 - cov*0.35*lit*uStars) + moonC*cov;
       }
     }
@@ -451,10 +486,10 @@ void main(){
       float r = acos(min(cs, 1.0))/uSunR;
       float aa = 1.4*uPix/uSunR;
       float limb = 0.55 + 0.45*sqrt(max(0.0, 1.0 - r*r));      /* darker toward its edge, as the real one is */
-      c += uSunDisc*(1.0 - smoothstep(1.0 - aa, 1.0 + aa, r))*0.9*limb*(1.0 - cover)*(1.0 - max(uStratus, uStorm));   /* (never through rain or a storm) */
+      c += uSunDisc*(1.0 - smoothstep(1.0 - aa, 1.0 + aa, r))*0.9*limb*(1.0 - cover)*(1.0 - max(uStratus, uStorm))*(1.0 - hzCov);   /* (never through rain or a storm) */
     }
   }
-  if (d.y <= -0.004) c = uEnv > 0.5 ? mix(uHor*0.5, uHor*0.08 + uZen*0.15, smoothstep(0.0, 0.3, -d.y)) : uHor;
+  if (d.y <= -0.004${Layout.isle ? ' && hzCov < 0.5' : ''}) c = uEnv > 0.5 ? mix(uHor*0.5, uHor*0.08 + uZen*0.15, smoothstep(0.0, 0.3, -d.y)) : uHor;
   gl_FragColor = vec4(c, 1.0);
 }`;
 

@@ -26,6 +26,10 @@ const Rig = (() => {
   const lin = h => { const c = new T.Color(h); return [c.r, c.g, c.b]; };
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const h1 = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  /* (how finely the creatures are made: 1 in the studio, where they are looked at from a hand away; coarser in the
+     world, where each is built while the visitor waits and drawn among a forest — cell: the sculpting's grid, times;
+     shells: the fur's layers, times) */
+  const Q = { cell: 1, shells: 1 };
 
   /* ── the skeleton: bones given parents first, each at its joint in the rest pose; its tail (where it points, for
      binding by nearness) its one child's joint unless given ── */
@@ -185,7 +189,7 @@ const Rig = (() => {
   const rec = { on: false, list: [] };
   function sculpt(list, o = {}) {
     if (rec.on) rec.list.push({ list, o });
-    const cell = o.cell || 0.003, Bk = 4, tau = o.tau || 0.006, disp = o.disp;
+    const cell = (o.cell || 0.003) * Q.cell, Bk = 4, tau = o.tau || 0.006, disp = o.disp;
     const P = list.map(shape), U = P.filter(p => !p.sub && !p.after), D = P.filter(p => p.sub), A = P.filter(p => p.after && !p.sub);
     const field = (x, y, z, Ul, Dl, Al) => {
       let d = 1e9; for (const p of Ul) d = smin(d, p.d(x, y, z), p.k);
@@ -501,7 +505,7 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     const g = new T.Group(); g.add(mesh);
     let shells = null;
     if (o.fur && fidx.length && !rec.furDebug && !rec.noShells) {
-      const n = o.fur.shells || 16, sg = new T.InstancedBufferGeometry();
+      const n = Math.max(3, Math.round((o.fur.shells || 16) * Q.shells)), sg = new T.InstancedBufferGeometry();
       for (const k of Object.keys(geo.attributes)) sg.setAttribute(k, geo.attributes[k]);
       sg.setIndex(nv > 65535 ? new T.Uint32BufferAttribute(fidx, 1) : new T.Uint16BufferAttribute(fidx, 1));
       sg.setAttribute('aShellI', new T.InstancedBufferAttribute(Float32Array.from({ length: n }, (_, i) => i), 1)); sg.instanceCount = n;
@@ -704,5 +708,5 @@ uniform sampler2D uFurT; uniform float uFurD, uRootK, uSparse; uniform vec3 uTip
     return g;
   }
 
-  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, glass, eye, lid, chainTo, ccd, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex };
+  return { skeleton, sides, rigid, chain, near, blend, tube, sculpt, field, rec, mirror, body, glass, eye, lid, chainTo, ccd, strands, Pose, ik2, reach, qE, frameTo, wave, blink, stride, every, creature, PAT, lin, mix, sst, clamp, h1, furTex, Q };
 })();

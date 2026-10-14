@@ -32,6 +32,10 @@ const IsleTrails = (() => {
   const ptsOf = D => (typeof TRAIL_ROUTES !== 'undefined' && TRAIL_ROUTES[D.id]) || D.pts || D.via;
   /* (a smooth curve through the points, a point every metre or so) */
   function curve(P, step = 1) {
+    /* (the points first set no further apart than a few metres along their straight runs: the curve's tangent at a point
+       is half the way from the point before to the point after, and a long run beside a short one would throw it out
+       in a loop) */
+    { const Q = [P[0]]; for (let i = 1; i < P.length; i++) { const a = P[i - 1], b = P[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]), m = Math.max(1, Math.ceil(L / 8)); for (let k = 1; k <= m; k++) Q.push([a[0] + (b[0] - a[0]) * k / m, a[1] + (b[1] - a[1]) * k / m]); } P = Q; }
     const out = [];
     for (let i = 0; i < P.length - 1; i++) {
       const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)], L = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), m = Math.max(2, Math.round(L / step));
@@ -86,6 +90,13 @@ const IsleTrails = (() => {
       const k = 1 - sm(bw / 2 + 0.3, bw / 2 + 4.5, best);
       return h + (by - h) * k;
     }
+    /* how much of a point is the trodden tread of a trail (0..1) */
+    function tread(x, z) {
+      const L = grid.get(Math.floor(x / CELL) * 65536 + Math.floor(z / CELL)); if (!L) return 0;
+      let best = 1e9, bw = 1;
+      for (let k = 0; k < L.length; k += 2) { const t = L[k], i = L[k + 1]; if (t.id === 'creek') continue; const ax = t.X[i], az = t.Z[i], ex = t.X[i + 1] - ax, ez = t.Z[i + 1] - az, ll = ex * ex + ez * ez || 1, u = clamp(((x - ax) * ex + (z - az) * ez) / ll, 0, 1), d = Math.hypot(x - ax - ex * u, z - az - ez * u); if (d < best) { best = d; bw = t.w; } }
+      return 1 - sm(bw / 2, bw / 2 + 1.4, best);
+    }
     /* the trail nearest a point, and how far: { t, i, d } (for the walk) */
     function nearest(x, z) {
       const L = grid.get(Math.floor(x / CELL) * 65536 + Math.floor(z / CELL)); if (!L) return null;
@@ -93,7 +104,7 @@ const IsleTrails = (() => {
       for (let k = 0; k < L.length; k += 2) { const t = L[k], i = L[k + 1], d = Math.hypot(x - t.X[i], z - t.Z[i]); if (!out || d < out.d) out = { t, i, d }; }
       return out;
     }
-    return { trails, clear, ground, nearest };
+    return { trails, clear, ground, nearest, tread };
   }
 
   /* ── drawn: the tread, a strip of earth laid on the ground along each, its edges ragged into the litter; the steps; the
@@ -127,7 +138,7 @@ const IsleTrails = (() => {
           const hw = t.w / 2;
           /* (across it: the litter at its outer edge, the tread's two edges, and out again) */
           [-(hw + 0.55), -hw * 0.45, hw * 0.45, hw + 0.55].forEach((off, j) => {
-            const x = t.X[i] + nx * off, z = t.Z[i] + nz * off, y = land(x, z) + 0.06, v = (k * A + j) * 3;
+            const x = t.X[i] + nx * off, z = t.Z[i] + nz * off, y = land(x, z) + 0.1, v = (k * A + j) * 3;
             pos[v] = x; pos[v + 1] = y; pos[v + 2] = z;
             const c = (k * A + j) * 4, edge = j === 0 || j === 3 ? 0 : 1; col[c] = col[c + 1] = col[c + 2] = 1; col[c + 3] = edge;
           });
@@ -148,6 +159,17 @@ const IsleTrails = (() => {
         const pts = []; for (let i = a; i <= b; i += 3) pts.push([t.X[i] - t.X[a], t.Z[i] - t.Z[a]]); if (pts.length < 2) continue;
         const bw = Models.make('struct/boardwalk', { seed: a + 3, path: pts, h: 1.05, width: 1.25 });
         bw.position.set(t.X[a], 0, t.Z[a]); group.add(bw);
+      }
+    }
+    /* where a trail crosses a stream, a footbridge over it: a short span of the boardwalk's build, railings either side */
+    if (o.streams) for (const t of P.trails) {
+      let last = -99;
+      for (let i = 3; i < t.n - 3; i++) {
+        const q = o.streams.nearest(t.X[i], t.Z[i]); if (!q || q.d > q.t.W[q.i] / 2 + 0.8 || i - last < 20 || q.t.BCH[q.i] > 0.5) continue;
+        last = i;
+        const a = Math.max(0, i - 4), b = Math.min(t.n - 1, i + 4), wy = q.t.Y[q.i], pts = []; for (let k = a; k <= b; k += 2) pts.push([t.X[k] - t.X[a], t.Z[k] - t.Z[a]]);
+        const br = Models.make('struct/boardwalk', { seed: i + 11, path: pts, h: Math.max(0.65, t.Y[i] - wy + 0.45), width: 1.25 });
+        br.position.set(t.X[a], wy - 0.05, t.Z[a]); group.add(br);
       }
     }
     /* the signposts: at each trail's ends, pointing along the trails that leave from there, with how far */

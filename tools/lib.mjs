@@ -42,7 +42,7 @@ export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'fi
   await page.waitForFunction(() => !document.getElementById('enterQuiet').disabled, null, { timeout: 180000 });
   if (enter) {
     await page.evaluate(() => document.getElementById('enterQuiet').click());
-    await page.waitForFunction(() => window.__cove && window.__cove.st.entered, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__cove && window.__cove.st.entered, null, { timeout: 150000 }).catch(e => { console.log("  (not entered:", logs.filter(l => /error/i.test(l)).slice(0, 6).join(" | ").slice(0, 1500), ")"); throw e; });
     /* headless software GL starves CSS transitions; the intro's fade never runs there, so take it away */
     await page.addStyleTag({ content: '#hud .intro.gone{display:none!important}' });
     await page.waitForTimeout(1500);

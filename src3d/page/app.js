@@ -1146,8 +1146,34 @@
   }
   /* bumping into things: pushed out round them (so a walk slides along a rock instead of sticking), kept out of the
      sea past the shallows and out of the forest, and off the headlands' rock, back down onto the sand */
+  /* round the island: pushed out of things as on the coast, and kept to where a walker can go there (the beaches, the
+     trails, the jetty and the boardwalk, the clearings): a step that would leave it slides along its edge, or is not
+     taken */
+  function walkCollideIsle() {
+    const W = Engine.world;
+    for (let it = 0; it < 3; it++) {
+      let moved = false;
+      for (let j = 0; j < GO.n; j++) {
+        const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
+        if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
+      }
+      if (!moved) break;
+    }
+    if (!W.walk(wk.x, wk.z).ok && wk.ox !== undefined) {
+      /* (off the side of a trail: back onto it, sliding along it, as a path keeps a walker to itself) */
+      const q = W.trails && W.trails.nearest(wk.x, wk.z);
+      if (q && q.d < q.t.w / 2 + 3) {
+        const t = q.t, a = Math.max(0, q.i - 1), b = Math.min(t.n - 1, q.i + 1), ex = t.X[b] - t.X[a], ez = t.Z[b] - t.Z[a], el = Math.hypot(ex, ez) || 1, ux = ex / el, uz = ez / el;
+        const px = wk.x - t.X[q.i], pz = wk.z - t.Z[q.i], al = px * ux + pz * uz, ac = -px * uz + pz * ux, lim = t.w / 2 + 0.4, ac2 = Math.max(-lim, Math.min(lim, ac));
+        wk.x = t.X[q.i] + ux * al - uz * ac2; wk.z = t.Z[q.i] + uz * al + ux * ac2;
+      }
+      if (!W.walk(wk.x, wk.z).ok) { if (W.walk(wk.x, wk.oz).ok) wk.z = wk.oz; else if (W.walk(wk.ox, wk.z).ok) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; wk.blocked = (wk.blocked || 0) + 1; }
+      else wk.blocked = 0;
+    } else wk.blocked = 0;
+  }
   function walkCollide() {
     const W = Engine.world;
+    if (Layout.isle && W && W.walk) return walkCollideIsle();
     for (let it = 0; it < 3; it++) {
       let moved = false;
       for (let j = 0; j < GO.n; j++) {
@@ -1231,7 +1257,46 @@
     /* and never quite still */
     ai.gy += 0.05 * Math.sin(t * 0.21); ai.gp += 0.02 * Math.sin(t * 0.17 + 1.3);
   }
+  /* on Auto round the island: along the trail it is on, toward one end, and at the end on along whichever trail meets it
+     there (or back); along a beach, mid-way up the sand, turning back where the sand ends; out along the jetty and back */
+  const iw = { trail: null, i: 0, dir: 1, beachDir: 1, until: 0 };
+  function autoSteerIsle(dt) {
+    const sp = PACE[wk.pace], W = Engine.world, I = Layout.island(), now = st.t;
+    if (wk.odo > ai.nextPause && !ai.turnSign) { ai.nextPause = wk.odo + 90 + Math.random() * 140; ai.pause = 5 + Math.random() * 5; pickGaze('sea'); ai.gazeT = ai.pause + 1; }
+    if (ai.pause > 0) ai.pause -= dt;
+    let tx = wk.x, tz = wk.z;
+    const q = W.trails && W.trails.nearest(wk.x, wk.z);
+    if (q && q.d < q.t.w / 2 + 2) {
+      /* (on a trail: a point some metres on along it) */
+      if (iw.trail !== q.t) { iw.trail = q.t; iw.dir = q.i > q.t.n / 2 ? -1 : 1; }
+      const t = q.t, j = Math.max(0, Math.min(t.n - 1, q.i + iw.dir * Math.round(4 + 2 * sp)));
+      if ((j === 0 || j === t.n - 1) && Math.hypot(t.X[j] - wk.x, t.Z[j] - wk.z) < 3) {
+        /* (at its end: on along another that starts here, or back) */
+        const next = W.trails.trails.find(o => o !== t && (Math.hypot(o.X[0] - wk.x, o.Z[0] - wk.z) < 30 || Math.hypot(o.X[o.n - 1] - wk.x, o.Z[o.n - 1] - wk.z) < 30) && Math.random() < 0.7);
+        if (next) { iw.trail = next; iw.dir = Math.hypot(next.X[0] - wk.x, next.Z[0] - wk.z) < 30 ? 1 : -1; } else iw.dir = -iw.dir;
+      }
+      tx = t.X[j]; tz = t.Z[j];
+    } else {
+      /* (on a beach or a deck: along the shore, half way up the sand; or along the jetty) */
+      iw.trail = null;
+      const a = I.uAt(wk.x, wk.z), SQ = {}, sh = I.shore(a, SQ), L = I.data.line, P = L.P || L.n;
+      const u2 = a + iw.beachDir * (5 + 2 * sp), k = ((Math.round((u2 + L.u0) / (L.ds || 1)) % L.n) + L.n) % L.n, tl = Math.hypot(L.TX[k], L.TZ[k]) || 1;
+      let nx = L.TZ[k] / tl, nz = -L.TX[k] / tl; if (I.sdf(L.X[k] + nx * 6, L.Z[k] + nz * 6) < I.sdf(L.X[k] - nx * 6, L.Z[k] - nz * 6)) { nx = -nx; nz = -nz; }
+      const up = Math.max(1.5, sh.W * (0.3 + 0.2 * Math.sin(wk.odo * 0.02)));
+      tx = L.X[k] - nx * up; tz = L.Z[k] - nz * up;
+      if (!W.walk(tx, tz).ok || wk.blocked > 8) { iw.beachDir = -iw.beachDir; wk.blocked = 0; }
+      void P;
+    }
+    let hd = Math.atan2(-(tx - wk.x), -(tz - wk.z));
+    if (ai.pause > 0) hd = ai.gy;
+    const err = wrapA(hd - wk.hT), R = 0.55 + 0.15 * sp;
+    wk.turn += (clamp(err * 1.4, -R, R) - wk.turn) * (1 - Math.exp(-dt / 0.35));
+    wk.hT += wk.turn * dt;
+    void now;
+    return ai.pause > 0 ? 0 : 0.55 + 0.45 * Math.max(0, Math.cos(wrapA(hd - wk.h)));
+  }
   function autoSteer(dt) {
+    if (Layout.isle && Engine.world && Engine.world.walk) return autoSteerIsle(dt);
     const sp = PACE[wk.pace];
     /* now and then: turn back (a long way from the camp, always toward it), or stop a while and look */
     if (wk.odo > ai.nextTurn) {
@@ -1287,7 +1352,7 @@
       wk.hT += wk.turn * dt;
     }
     /* the pace eases up and down as a body's does; wading slows it */
-    const sz = Layout.shoreZ(wk.x), wade = wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
+    const sz = Layout.shoreZ(wk.x), wade = Layout.isle && Engine.world && Engine.world.walk ? Engine.world.walk(wk.x, wk.z).wade : wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
     want *= 1 - 0.45 * wade;
     wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
     wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
@@ -1329,7 +1394,7 @@
   function walkCamera() {
     const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
     const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
-    const sway = 0.6 * bob * Math.sin(ph), g0 = Math.max(0, W ? W.land(wk.x, wk.z) : 0), p = wk.cam.pos, l = wk.cam.look;
+    const sway = 0.6 * bob * Math.sin(ph), g0 = Math.max(0, W ? (Layout.isle && W.walk ? W.walk(wk.x, wk.z).y : W.land(wk.x, wk.z)) : 0), p = wk.cam.pos, l = wk.cam.look;
     /* (the ground underfoot, eased: stepping from one block of a groyne up or down onto the next lifts the eye or lowers it
        over a moment, as a step does, rather than all at once) */
     const now = performance.now(), gdt = Math.min(0.1, (now - (wk.gT || now)) / 1000); wk.gT = now;
@@ -1371,7 +1436,12 @@
       const ok = sd => { const qx = P.x + vs * sd * 1.9, qz = P.z + vc * sd * 1.9; return qz > Layout.shoreZ(qx) - 0.5 && qz < Layout.vegZ(qx) + 1 && !(Engine.world && Engine.world.massif(qx, qz) > 0.4); };
       const sd = ok(1) ? 1 : -1; x = P.x + vs * sd * 1.9; z = P.z + vc * sd * 1.9; h = Math.atan2(-vc, vs);
     }
-    Object.assign(wk, { on: true, x, z, h, hT: h, turn: 0, v: 0, my: 0, mp: 0, pitchT: -0.05 });
+    /* (round the island, if that is somewhere no one can stand, the nearest place that isn't: a beach, a trail, a deck) */
+    if (Layout.isle && Engine.world && Engine.world.walk && !Engine.world.walk(x, z).ok) {
+      let best = null; for (let r = 2; r < 90 && !best; r += 2) for (let k = 0; k < 24; k++) { const a = k / 24 * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (Engine.world.walk(px, pz).ok) { best = [px, pz]; break; } }
+      if (best) { x = best[0]; z = best[1]; }
+    }
+    Object.assign(wk, { on: true, x, z, h, hT: h, turn: 0, v: 0, my: 0, mp: 0, pitchT: -0.05, ox: x, oz: z });
     wk.hy.v = wk.hy.d = wk.hp.d = 0; wk.hp.v = -0.05;
     gather(x, z, 6); walkCollide(); walkCamera();
     keys.clear(); orb.keys.clear(); touch.x = touch.y = 0;

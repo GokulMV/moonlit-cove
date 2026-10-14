@@ -140,8 +140,8 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud; varying float vCov, vMud;' : ''))
-        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud;' : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud, aPath; varying float vCov, vMud, vPath;' : ''))
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud; vPath = aPath;' : ''))
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
   vec4 wpp = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -235,6 +235,11 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
         /* (in the mangroves, their mud: grey-brown, wet, the leaves fallen on it, the light coming through in flecks) */
         vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.45 + 0.8*fleck, smoothstep(0.1, 0.55, vCov));
         vegC = mix(vegC, mudC, vMud*flN);
+        /* (a trail's tread: red-brown earth trodden bare, roots across it, the forest's shade on it) */
+        vec3 earth = mix(vec3(0.24, 0.125, 0.065), vec3(0.19, 0.115, 0.07), l2)*(0.82 + 0.22*l3 + 0.1*l4)*mix(1.0, 0.5 + 0.7*fleck, smoothstep(0.1, 0.55, vCov));
+        /* (its edges ragged into the litter, a root across it now and then) */
+        float pe = smoothstep(0.25, 0.75, vPath + 0.35*(l3 - 0.5) + 0.2*(l4 - 0.5)), root = smoothstep(0.86, 0.92, vnz(vec3(vWPos.x*0.8, 0.0, vWPos.z*0.8) + vec3(0.0, l2*0.5, 0.0)));
+        vegC = mix(vegC, mix(earth, vec3(0.07, 0.05, 0.035), root*0.65), pe*flN);
       } }` : ''}
     diffuseColor.rgb = mix(vegC, rockC, vRock);
     float sea = smoothstep(5.0, -0.5, -shoreS(vWPos.xz));
@@ -272,7 +277,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};
@@ -289,6 +294,9 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     outgoingLight += vec3(1.0, 0.22, 0.035)*heat*(0.04 + 0.8*cracks*cracks)*pulse*uFire.x*0.24; }` : ''}
   ${key === 'pot' ? `outgoingLight += C_FIRE*uFire.x*(0.8 + 0.3*uFire.y)*0.045*pow(1.0 - abs(dot(nW, normalize(cameraPosition - vWPos))), 2.5);` : ''}
   outgoingLight = fogIt(outgoingLight, vWPos);
+  /* (never a colour that is not one — a specular gone to infinity on a creature's wet eye, a normal of nothing: such a
+     pixel blooms into a white blot round a black hole) */
+  if (!(outgoingLight.r >= 0.0 && outgoingLight.g >= 0.0 && outgoingLight.b >= 0.0 && outgoingLight.r < 1e4 && outgoingLight.g < 1e4 && outgoingLight.b < 1e4)) outgoingLight = vec3(0.0);
   #include <opaque_fragment>`);
     };
     m.customProgramCacheKey = () => 'art-' + (key || '');

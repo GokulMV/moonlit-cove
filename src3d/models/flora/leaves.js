@@ -341,7 +341,11 @@ float leafShadow(vec3 wp){
 void main(){
   vec4 tx = texture2D(map, vUv);
   if (tx.a < uCut) discard;
-  vec3 V = normalize(cameraPosition - vWPos), Tg = normalize(vT), Bt = normalize(vB), Nc = normalize(cross(Tg, Bt))*vL.w;
+  /* (the leaf's frame, guarded: where a blade narrows to its tip its two edges' directions can meet, and a frame of
+     nothing would draw a pixel of nothing, or of everything, there) */
+  float lt = dot(vT, vT), lb = dot(vB, vB);
+  vec3 V = normalize(cameraPosition - vWPos), Tg = lt > 1e-12 ? vT*inversesqrt(lt) : vec3(1.0, 0.0, 0.0), Bt = lb > 1e-12 ? vB*inversesqrt(lb) : vec3(0.0, 0.0, 1.0), cx = cross(Tg, Bt);
+  vec3 Nc = (dot(cx, cx) > 1e-10 ? cx*inversesqrt(dot(cx, cx)) : normalize(vN + vec3(0.0, 1e-6, 0.0)))*vL.w;
   float face = dot(Nc, V) >= 0.0 ? 1.0 : -1.0;
   vec3 tn = texture2D(nmap, vUv).xyz*2.0 - 1.0;
   vec3 nl = normalize(Tg*tn.x + Bt*tn.y + Nc*max(tn.z, 0.05))*face;
@@ -370,6 +374,8 @@ void main(){
   float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
+  /* (and never a colour that is not one: a pixel gone to infinity blooms into a white blot round a black hole) */
+  if (!(c.r >= 0.0 && c.g >= 0.0 && c.b >= 0.0 && c.r < 1e4 && c.g < 1e4 && c.b < 1e4)) c = vec3(0.02, 0.03, 0.015);
   gl_FragColor = vec4(c, 1.0);
   /* (no more than the renderer's own finish: nothing where the frame is drawn to a target, as the engine's is) */
   #include <tonemapping_fragment>

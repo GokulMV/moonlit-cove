@@ -9,7 +9,7 @@ const Engine = (() => {
   const api = {};
   let R, scene, camera, keyLight, hemi, camp, nature, fx, post, canvas, cloudNoiseMs = 0;
   let skyMat, groundMat, skyU, gU, uBulb, uFairy, shadowReady = false;
-  let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null, stars = null;
+  let horizon = null, isFauna = null, isFaunaT = null, fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null, stars = null;
   let uncork = null;
   /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
   /* (round the island it reaches further out: the swell breaks out on the reefs' edges, a hundred metres off the rocks) */
@@ -700,17 +700,20 @@ const Engine = (() => {
 
     const V3 = () => new T.Vector3();
     skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() } };
+    /* (round the island, the far ranges across the sea: drawn by the sky, from horizon.js's profile of them) */
+    const hzP = Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false ? IsleHorizon.profile() : null;
     skyMat = new T.ShaderMaterial({
       uniforms: Object.assign({}, skyU, { uEnv: { value: 0 }, uCloudLit: { value: new T.Vector3() }, uStars: { value: 1 }, uTime: { value: 0 }, uPhaseC: { value: 1 }, uPhaseSign: { value: 1 }, uCloud: { value: 0.85 }, uMoonR: { value: 0.0175 }, uSunR: { value: 0.016 }, uNoise: { value: noiseTex },
         uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.93, -0.37) }, uCloudT: { value: 0 }, uDriftW: { value: new T.Vector2() }, uDriftS: { value: new T.Vector3() }, uDriftT: { value: new T.Vector3() }, uHiDrift: { value: new T.Vector2() }, uAltoD: { value: new T.Vector4() }, uPix: { value: 0.0015 },
         uCO: { value: new T.Vector3() }, uCQ: { value: 1 }, uCB: { value: null }, uCBOn: { value: 0 }, uCBInv: { value: new T.Vector2(1, 1) },
-        uShape: { value: null }, uDetail: { value: null }, uWeather: { value: null }, uLdM: { value: new T.Vector3(0, 1, 0) }, uPxA: { value: 0.004 } }),
+        uShape: { value: null }, uDetail: { value: null }, uWeather: { value: null }, uLdM: { value: new T.Vector3(0, 1, 0) }, uPxA: { value: 0.004 },
+        uHzP: { value: hzP ? hzP.tex : null }, uHzOn: { value: hzP ? 1 : 0 }, uHzMist: { value: 1 } }),
       vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false
     });
     const sky = new T.Mesh(new T.SphereGeometry(5000, 48, 24), skyMat); sky.renderOrder = 1000; sky.frustumCulled = false; scene.add(sky); skyMesh = sky;
     /* the real night sky (stars.js): the stars and planets drawn just after the sky, behind its clouds; the Milky Way and the
        moon's lit side drawn by the sky itself */
-    stars = Stars.build(scene, { uCB: skyMat.uniforms.uCB, uCBOn: skyMat.uniforms.uCBOn });
+    stars = Stars.build(scene, { uCB: skyMat.uniforms.uCB, uCBOn: skyMat.uniforms.uCBOn, uHzP: skyMat.uniforms.uHzP, uHzOn: skyMat.uniforms.uHzOn });
     Object.assign(skyMat.uniforms, { uEqT: { value: stars.eqT }, uMW: { value: stars.milky }, uMWK: { value: 0.011 }, uSunM: { value: new T.Vector3() } });
     Object.assign(api, { stars });
     /* environment: the same sky, rendered into a prefiltered cube map so every glossy surface reflects it */
@@ -781,6 +784,13 @@ const Engine = (() => {
     /* (the forest's and the fruit trees' bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
     FloraKit.Q.tex = opts.texQ ?? 0.5;
     world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest }) : World.build(natG, gU, noiseTex);
+    /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
+    if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false) {
+      horizon = IsleHorizon.build(scene, { sky: skyU, U: Mats.U, mist: gU.uMist }); Object.assign(api, { horizon });
+      skyMat.uniforms.uHzMist = gU.uMist; envSkyMat.uniforms.uHzMist = gU.uMist;
+    }
+    /* (and its animals, round the eye) */
+    if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [] }); Object.assign(api, { isFauna }); }
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
@@ -1067,6 +1077,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       fi.dens = o.dens; fi.pxScale = pxScale; fi.van = camp.vanGroup.position; fi.swash = swashFront; fi.calm = !!o.calm;
       for (const sp of fauna.update(fi)) { surge.ripples.push({ x: sp.x, z: sp.z, t0: wt, A: sp.k }); }
     }
+    if (isFauna) { const dt = isFaunaT === null ? 0 : Math.max(0, Math.min(0.25, t - isFaunaT)); isFaunaT = t; isFauna.update(dt, t, camera.position, { day: S.day, dens: o.dens }); }
     if (shacks) shacks.update(S, t, wt, swashFront);
     const fireLit = 0.05 * F.i, A = S.amb, K = S.keyCol;
     fxP.t = t; fxP.fireI = F.i; fxP.fireFlick = ff; fxP.flies = (o.flies ?? 1) * S.night; fxP.moths = Math.max(L.lantern, L.string) * S.night; fxP.insects = o.dens ? o.dens.insects : 0.5;

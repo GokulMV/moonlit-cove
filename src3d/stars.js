@@ -27,6 +27,7 @@ const Stars = (() => {
 uniform mat3 uEq;                 /* a direction among the stars (equatorial) → the world's (by the sidereal time and latitude) */
 uniform float uK, uPx, uTime, uMoonR;
 uniform vec3 uMoonDir;
+${Layout.isle ? 'uniform sampler2D uHzP; uniform float uHzOn;   /* the far ranges round the island (horizon.js) */' : ''}
 attribute float aMag, aSeed, aTw;
 attribute vec3 aCol;
 varying vec3 vC; varying float vA;
@@ -44,9 +45,15 @@ void main(){
   vA = uK*flux*2.2/(sz*sz);
   vC = mix(aCol, aCol*vec3(1.0, 0.78, 0.55), smoothstep(0.3, 0.02, alt));
   /* (behind the moon's disc there is nothing to see) */
-  if (dot(d, uMoonDir) > cos(uMoonR*1.2)) vA = 0.0;
+  if (dot(d, uMoonDir) > cos(uMoonR*1.2)) vA = 0.0;${Layout.isle ? `
+  /* (round the island, none behind the far ranges: below a crest, as the sky draws it) */
+  if (uHzOn > 0.5 && alt < 0.1){
+    float a = atan(d.x, -d.z), u = fract(a/6.2831853 + 0.25), hc = max(cameraPosition.y, 0.0), e = asin(clamp(alt, -1.0, 1.0));
+    vec4 P0 = textureLod(uHzP, vec2(u, 0.25), 0.0), P1 = textureLod(uHzP, vec2(u, 0.75), 0.0);
+    for (int k = 0; k < 3; k++){ vec2 L = k == 0 ? P0.xy : k == 1 ? P0.zw : P1.xy; if (L.x < 1.0) continue; float D = L.y*1000.0; if (e < atan(L.x - hc - D*D/14.8e6, D)) vA = 0.0; }
+  }` : ''}
   vec4 p = projectionMatrix*viewMatrix*vec4(cameraPosition + d*1000.0, 1.0);
-  p.z = p.w*0.99998;      /* (just in front of the sky dome: drawn on it, and under everything nearer) */
+  p.z = p.w*${Layout.isle ? '0.999989' : '0.99998'};      /* (just in front of the sky dome: drawn on it, and under everything nearer; round the island, behind its neighbours ten kilometres off) */
   gl_Position = alt > -0.03 && vA > 1e-5 ? p : vec4(2.0, 2.0, 2.0, 1.0);
   gl_PointSize = sz;
 }`;
@@ -105,7 +112,7 @@ void main(){
     g.setAttribute('aSeed', new T.BufferAttribute(seed, 1)); g.setAttribute('aTw', new T.BufferAttribute(tw, 1));
     g.boundingSphere = new T.Sphere(new T.Vector3(), 1e9);
     const U = { uEq: { value: new T.Matrix3() }, uK: { value: 0 }, uPx: { value: 1 }, uTime: { value: 0 }, uMoonR: { value: 0.0175 }, uMoonDir: { value: new T.Vector3(0, -1, 0) },
-      uCB: shared.uCB, uCBOn: shared.uCBOn, uCov: { value: 0 } };
+      uCB: shared.uCB, uCBOn: shared.uCBOn, uCov: { value: 0 }, uHzP: shared.uHzP || { value: null }, uHzOn: shared.uHzOn || { value: 0 } };
     const m = new T.ShaderMaterial({ uniforms: U, vertexShader: VS, fragmentShader: FS, transparent: false, depthWrite: false, depthTest: true,
       blending: T.CustomBlending, blendEquation: T.AddEquation, blendSrc: T.OneFactor, blendDst: T.OneFactor });
     const pts = new T.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 1001; scene.add(pts);

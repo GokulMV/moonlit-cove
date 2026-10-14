@@ -234,7 +234,9 @@ const IsleForest = (() => {
     }
     const stats = () => ({ protos: protos.length, atlases: atlases.map(a => a && [a.W, a.H]), bakeMs: Math.round(bakeMs), growMs: Math.round(protos.reduce((a, p) => a + p.ms, 0)), near: near.reduce((n, P) => n + (P[0] ? P[0].im.count : 0), 0) });
     /* how closed the forest's canopy is over a point (for the shade on the ground under it) */
-    const cover = (x, z) => (kept(x, z) ? 0 : odds(GRIDS[3], x, z, W4));
+    /* (only a clearing opens the canopy over the ground: a path or a stream through the forest is still under it) */
+    const clearings = keepOut.filter(c => c[2] > 4.6), inClearing = (x, z) => { for (const [cx, cz, r] of clearings) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; };
+    const cover = (x, z) => (inClearing(x, z) ? 0 : odds(GRIDS[3], x, z, W4));
     return { plan, cards, nearUpdate, mats, atlases, protos, stats, setNear, cover, get NEAR() { return NEAR; } };
   }
   return { build, KINDS, GRIDS };

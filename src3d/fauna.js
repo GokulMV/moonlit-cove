@@ -28,6 +28,8 @@ ${GLSL.COMMON}
 ${GLSL.ART}
 uniform vec3 uAmbF, uKeyDirT, uKeyColT; uniform vec4 uFog;
 vec3 fogIt(vec3 c, vec3 wp){
+  /* (never a colour that is not one: a pixel gone to infinity blooms into a white blot round a black hole) */
+  if (!(c.r >= 0.0 && c.g >= 0.0 && c.b >= 0.0 && c.r < 1e4 && c.g < 1e4 && c.b < 1e4)) c = vec3(0.0);
   float d = distance(wp, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);

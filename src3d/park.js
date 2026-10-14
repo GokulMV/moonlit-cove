@@ -16,7 +16,7 @@ const IslePark = (() => {
 
   /* where the park's things stand: worked out from the island's line alone (no drawing), so the forest can keep clear of
      them before it is planted */
-  function plan(I) {
+  function plan(I, avoid = []) {
     const L = I.data.line;
     let i0 = 0, bd = 1e18;
     for (let i = 0; i < L.n; i++) { const d = (L.X[i] - COVE.x) ** 2 + (L.Z[i] - COVE.z) ** 2; if (d < bd && L.K[i * 4] > 0.8) { bd = d; i0 = i; } }
@@ -33,7 +33,9 @@ const IslePark = (() => {
     const bed = d => { const [x, z] = along(d); return Math.min(0, I.height(x, z)); };
     const jetty = { x: rx, z: rz, nx, nz, yaw: Math.atan2(-nz, nx), len: len - 4.8, deck: COVE.deck, ramp: COVE.ramp, bed };
     /* the hut: up the beach and under the first trees, to one side of the jetty's line, facing the water */
-    const side = 1, hd = W + 6, hs = 15, hx = ex - nx * hd + tx * hs * side, hz = ez - nz * hd + tz * hs * side;
+    /* (on whichever side of the jetty keeps it furthest from any stream crossing the beach) */
+    const hd = W + 6, hs = 15, at = sd => [ex - nx * hd + tx * hs * sd, ez - nz * hd + tz * hs * sd], far = q => Math.min(1e9, ...avoid.map(a => Math.hypot(q[0] - a[0], q[1] - a[1])));
+    const side = avoid.length && far(at(-1)) > far(at(1)) ? -1 : 1, [hx, hz] = at(side);
     const hut = { x: hx, z: hz, yaw: Math.atan2(nx, nz) };
     /* the boat: alongside the jetty's head on the side its ladder is (the jetty's own +z, turned as it is), bow out to sea */
     const zx = -nz, zz = nx, bx = rx + nx * (len - 2.4) + zx * 4.55, bz = rz + nz * (len - 2.4) + zz * 4.55;
@@ -47,7 +49,7 @@ const IslePark = (() => {
   }
 
   function build(root, I, o) {
-    const P = plan(I), land = o.land, group = new T.Group(); group.name = 'park'; root.add(group);
+    const P = plan(I, o.avoid), land = o.land, group = new T.Group(); group.name = 'park'; root.add(group);
     const t0 = performance.now();
     /* the jetty, its line out from the beach (its own +x) */
     const jt = Models.make('struct/jetty', { seed: 3, len: P.jetty.len, deck: P.jetty.deck, ramp: P.jetty.ramp, foot: 0.28, bed: P.jetty.bed, head: true });
