@@ -24,7 +24,7 @@ const IsleWorld = (() => {
     const SQ = {};
     function rockAt(x, z, ny) {
       const s = I.sdf(x, z), q = I.shore(I.uAt(x, z), SQ), rs = (q.rock + q.cliff * 1.2) * (1 - sm(q.W + 3, q.W + 16, -s));
-      return Math.min(1, Math.max(rs, sm(0.56, 0.4, ny)));
+      return Math.min(1, Math.max(rs, sm(0.48, 0.34, ny)));
     }
     const landMat = Mats.lit({ vertexColors: true, roughness: 0.95 }, 'land');
     const group = new T.Group(); group.name = 'island'; group.matrixAutoUpdate = false; root.add(group);

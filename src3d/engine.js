@@ -12,7 +12,8 @@ const Engine = (() => {
   let fireS, canS, canDone = false, depthOnly, paper = null, world = null, life = null, lifeT = null, nearMesh = null, nearX = NaN, nearZ = NaN, skyMesh = null, groundMesh = null, stars = null;
   let uncork = null;
   /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
-  const NEAR = { W: 192, D: 100, CELL: 0.4 };
+  /* (round the island it reaches further out: the swell breaks out on the reefs' edges, a hundred metres off the rocks) */
+  const NEAR = { W: 192, D: Layout.isle ? 140 : 100, CELL: 0.4 };
   let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
@@ -402,7 +403,8 @@ const Engine = (() => {
     /* (how open the shore is to the swell, and how much breaks out on a reef: as the shaders have it) */
     const I = Layout.isle ? Layout.Shore.info(x, _shi) : null, ex = I ? I.ex : 1, rk = I ? Math.min(1, I.rock + 0.6 * I.cliff) : 0, R = I ? I.reef : 0;
     let h = 0;
-    for (const W of gU.uWv.value) { if (W.y <= 0) continue; const sb0 = 3 + 7 * nA * W.y; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w), W.y * ex, 1.55, sb0 + (Math.max(R, 4) + 1.5 * W.y - sb0) * rk); }
+    const lag = rk * Math.max(R - 6, 0) / 1.55;
+    for (const W of gU.uWv.value) { if (W.y <= 0) continue; const sb0 = 3 + 7 * nA * W.y; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w) - lag, W.y * ex, 1.55, sb0 + (Math.max(R, 4) + 1.5 * W.y - sb0) * rk); }
     for (const w of surge.waves) {
       const amp = userAmpJS(w, x, wt) * smJ(w.x - w.s0 / CU, w.x - w.s0 / CU + 1.8, wt); if (amp < 0.01) continue;
       h += swellJS(s, wt - w.x, amp, CU, Math.min((3 + 4.6 * amp) * (0.88 + 0.24 * nA), Math.max(4, 0.5 * w.s0 * (0.9 + 0.2 * nA))));

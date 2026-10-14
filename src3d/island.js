@@ -446,7 +446,7 @@ const Island = (() => {
        ground the sea is drawn with, at the sea's own level: the land stays just under it there, as the coast's hills
        always did); the mud of the mangroves level too; behind, the land rises as steeply as the kind of shore says, and
        a cliff stands straight up out of the water */
-    const W = sh.W, flat = W + 9 * sh.sand + 6 * sh.mangrove + 1.5 * sh.rock, slopeL = sh.sand * 60 + sh.rock * 28 + sh.cliff * (7 + 10 * vn1(u / 31, 87)) + sh.mangrove * 80;
+    const W = sh.W, flat = W + 9 * sh.sand + 6 * sh.mangrove + 1.5 * sh.rock, slopeL = sh.sand * 60 + sh.rock * 44 + sh.cliff * (7 + 10 * vn1(u / 31, 87)) + sh.mangrove * 80;
     let k = sm(flat, flat + slopeL, d);
     /* (a cliff: the lower part of the land's rise, sheer, in ledges, each step of rock a little back from the one below;
        above it the slope goes on up, less steeply, under the forest) */

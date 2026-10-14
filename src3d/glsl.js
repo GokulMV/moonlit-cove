@@ -581,6 +581,10 @@ float userSb(float amp, float nA, vec4 U){ return min((3.0 + 4.6*amp)*(0.88 + 0.
 /* where a tide swell of amplitude amp breaks: off a beach a few metres out, sooner or later along it (nA); over a reef at
    its edge, as far out as the reef runs (rk how much of the shore is rock, with its reef; R how far the reef runs out) */
 float tideSb(float amp, float nA, float rk, float R){ return mix(3.0 + 7.0*nA*amp, max(R, 4.0) + 1.5*amp, rk); }
+/* (a tide swell is timed to the line it breaks on: off a beach that is a few metres out, so its time is when it comes
+   ashore; off the rocks it breaks out on the reef's edge, so its time is when it gets there, and it is that much further
+   out before it: the swells kept about are the ones arriving round now, wherever they break) */
+float tideLag(float rk, float R){ return rk*max(R - 6.0, 0.0)/WC; }
 /* the sea's height at p, and (lean) how far its crests there are thrown toward the beach as they break */
 float waveHL(vec2 p, out float lean){
   lean = 0.0;
@@ -592,7 +596,7 @@ float waveHL(vec2 p, out float lean){
   float h = 0.0;
   for (int j = 0; j < 6; j++){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
-    float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w);
+    float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w) - tideLag(rk, q.k2.w);
     h += swellL(s, tau, W.y*ex, WC, tideSb(W.y, nA, rk, q.k2.w), lean);
   }
   for (int k = 0; k < ${MAXUW}; k++){
@@ -841,7 +845,7 @@ Wv waves(float s, float a, float t, vec2 p, vec4 k1, vec4 k2){
      (not from its slot, which shifts as swells come and go) */
   for (int j = 0; j < 6; j++){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
-    float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w);
+    float tau = t - (W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w) - tideLag(rk, k2.w);
     wave1(w, s, a, t, p, tau, W.y*ex, WC, tideSb(W.y, nA, rk, k2.w), W.z*3.7, nB, uint(W.z*4096.0), rv);
   }
   for (int k = 0; k < ${MAXUW}; k++){
@@ -916,7 +920,7 @@ void main(){
   float sUp = 4.0;
   for (int j = 0; j < 6; j++) sUp = max(sUp, 1.85*(0.85 + 0.75*uWv[j].y) + 0.3);
   sUp = max(sUp, 1.85*(0.85 + 0.9*uUwMax) + 0.3);
-  if ((uDbgG & 1) == 0 && s > -sUp && s < 70.0) w = waves(s, a, t, wq, sq.k1, sq.k2);
+  if ((uDbgG & 1) == 0 && s > -sUp && s < ${Layout.isle ? 'max(70.0, sq.k2.w + 30.0)' : '70.0'}) w = waves(s, a, t, wq, sq.k1, sq.k2);
 
   /* ocean surface: four octaves of directional chop; what the pixel can't resolve becomes roughness */
   vec3 Nw = vec3(0.0, 1.0, 0.0);
@@ -1072,13 +1076,26 @@ void main(){
     if (clar > 0.01){
       vec2 bp = p + (Nw.xz/max(Nw.y, 0.3))*0.25*${Layout.isle ? 'clamp(dep*3.0, 0.0, 6.0)' : 'clamp(s, 0.0, 4.0)'};
       vec3 sandB = vec3(0.56, 0.48, 0.34)*(0.84 + 0.28*tN(bp, 18.6).r);${Layout.isle ? `
-      /* (over the reef flat off the rocks: coral rubble, the darker heads of living coral, and pockets of sand between) */
-      { float onR = sq.k2.x*(1.0 - smoothstep(sq.k2.w - 4.0, sq.k2.w + 16.0, s))*smoothstep(0.5, 3.0, s);
+      /* (over the reef flat off the rocks, zoned out from the shore as a fringing reef is: sand and rubble by the shore, then
+         heads of coral in sand, thicker toward the reef's crest, which is a band of pale rubble the waves break over; past
+         it, the coral of the reef's front going down into the blue) */
+      { float R = max(sq.k2.w, 8.0), onR = sq.k2.x*(1.0 - smoothstep(R + 6.0, R + 34.0, s))*smoothstep(0.5, 3.0, s);
         if (onR > 0.01){
-          vec4 n1 = tN(bp, 7.5), n2 = tN(bp + 13.7, 2.4), n3 = tN(bp, 29.0);
-          float coral = smoothstep(0.47, 0.6, n1.r*0.62 + n2.g*0.38), pock = smoothstep(0.58, 0.72, n3.b)*(1.0 - coral);
-          vec3 rub = vec3(0.34, 0.31, 0.24)*(0.78 + 0.44*n2.r), live = mix(vec3(0.17, 0.16, 0.09), vec3(0.26, 0.17, 0.12), n2.a)*(0.75 + 0.5*n1.g);
-          sandB = mix(sandB, mix(mix(rub, live, coral), sandB, pock), onR);
+          float q = s/R;
+          /* (patterns at three sizes, each turned from the last and pushed about by a slower one, so none of them repeats) */
+          vec2 bw = bp + 9.0*(tN(bp*0.37 + 3.1, 41.0).rg - 0.5);
+          vec4 n1 = tN(mat2(0.8, 0.6, -0.6, 0.8)*bw, 11.0), n2 = tN(bw + 13.7, 3.1), n3 = tN(mat2(0.6, -0.8, 0.8, 0.6)*bw, 37.0), n4 = tN(bw*1.7 + 5.3, 1.3);
+          float dens = mix(0.25, 0.75, smoothstep(0.15, 0.85, q))*(0.7 + 0.6*n3.r);
+          float coral = smoothstep(0.62 - 0.3*dens, 0.7 - 0.3*dens, n1.r*0.55 + n2.g*0.3 + n4.b*0.15);
+          float crest = smoothstep(0.78, 0.95, q)*(1.0 - smoothstep(1.02, 1.15, q));
+          float sandP = (1.0 - coral)*smoothstep(0.42, 0.62, n3.b + 0.25*(1.0 - q))*(1.0 - crest);
+          vec3 rub = vec3(0.4, 0.37, 0.3)*(0.8 + 0.35*n2.r)*(0.9 + 0.2*n4.a);
+          vec3 live = mix(mix(vec3(0.16, 0.15, 0.085), vec3(0.24, 0.16, 0.11), n2.a), vec3(0.13, 0.15, 0.13), smoothstep(0.6, 0.8, n3.g))*(0.72 + 0.5*n1.g)*(0.85 + 0.3*n4.r);
+          vec3 front = mix(live, vec3(0.1, 0.12, 0.1), 0.4);
+          vec3 bed = mix(mix(rub, live, coral), sandB*(0.95 + 0.1*n4.g), sandP);
+          bed = mix(bed, rub*(1.05 + 0.1*n2.b), crest*(1.0 - 0.6*coral));
+          bed = mix(bed, front*(0.8 + 0.3*n1.b), smoothstep(1.05, 1.3, q));
+          sandB = mix(sandB, bed, onR);
         } }` : ''}
       float caus = 0.0;
       if (uDay > 0.01){ float c1 = tW(bp + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(bp - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a; caus = pow(c1*c2, 1.4)*uDay; }
