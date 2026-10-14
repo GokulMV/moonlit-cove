@@ -155,7 +155,8 @@
     const B = coconutSites(top, R, { share, Hp, phase: o.phase, u: o.u });
     for (const st of B.stalks) bark.push(part(FloraKit.tube(new T.CatmullRomCurve3(st.pts), t => 0.025 * (1 - 0.3 * t), { segs: 5, radial: 6, tile, col: () => [0.9, 0.82, 0.55] }), [st.ph, 0.03, share, Hp]));
     assemble(g, bark, 'coconut', blades, { leaves: [...FloraBlade.material('coconut', tex, [0.26, 24, 1.2]).leaves, FloraBlade.material('coconut-dry', dry, [0.06, 10, 0.5]).leaves[0]], depth: [...FloraBlade.material('coconut', tex).depth, FloraBlade.material('coconut-dry', dry).depth[0]] }, { H: Hp });
-    live(g, 'coconut', B.sites, o);
+    /* (a palm of the forest, one of many drawn from one: no round of its own) */
+    if (o.fruit !== false) live(g, 'coconut', B.sites, o);
     return g;
   });
 })();

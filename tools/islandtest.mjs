@@ -23,8 +23,11 @@ try {
     top: [[-150, 3200, 700], [-150, 0, 690], 50, 6, 200], west: [[-200, 300, 2600], [-100, 30, 900], 50, 6, 200],
     rocky: [[-700, 22, -170], [-610, 2, -10]], jetty: [[470, 30, -60], [640, 4, 160]], creek: [[1060, 70, 1120], [800, 0, 920]],
     summit: [[-740, 266, 640], [0, 40, -40], 55], westbeach: [[-130, 6, 1330], [150, 2, 1300]], cliffs: [[1240, 60, 300], [1060, 30, 520]],
-    reef: [[-560, 45, -140], [-560, 0, 0], 55], reeflow: [[-640, 3, -110], [-560, 0, -20], 55]
+    reef: [[-560, 45, -140], [-560, 0, 0], 55], reeflow: [[-640, 3, -110], [-560, 0, -20], 55],
+    edge: [[-48, 1.8, -8], [-48, 6, 40], 60], campsea: [[10, 7, -95], [0, 22, 80], 55], inland: [[300, 14, 40], [300, 20, 200], 60]
   };
+  /* (argv[6]: how far off the forest's trees stand as themselves) */
+  if (process.argv[6] !== undefined) await page.evaluate(r => { const f = Engine.world.forest; if (f) f.setNear(r); }, +process.argv[6]);
   const only = (process.argv[5] || 'camp,beach,east,south,top,west').split(',');
   for (const k of only) { const v = V[k]; if (v) await view(k, ...v); }
   const c = await page.evaluate(() => Engine.world.counts); console.log('  ', JSON.stringify(c));

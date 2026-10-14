@@ -16,7 +16,7 @@ const IsleWorld = (() => {
   /* the land's surface as drawn: the island's ground, sunk a little where it is low, so that off the beach it rises out of
      the sand along a clean line (the sand is the ground the sea is drawn with, at 0), never lies flush with it */
   const SINK = 0.22;
-  function build(root, U) {
+  function build(root, U, o = {}) {
     const I = Layout.island(), G = I.data.grid, LEVEL = I.LEVEL;
     const drawnH = (x, z) => { const h = I.height(x, z); return h - SINK * (1 - sm(1, 5, h)); };
     /* what is bare rock: the shore's rocks and cliffs and the few metres of land the spray keeps bare behind them, and
@@ -36,7 +36,7 @@ const IsleWorld = (() => {
     for (let tz = z0; tz < z1 + 8; tz += TS) for (let tx = x0; tx < x1 + 8; tx += TS) {
       /* (a tile all under the sea is left out) */
       let any = false; for (let z = tz; z <= tz + TS && !any; z += 4) for (let x = tx; x <= tx + TS; x += 4) if (I.height(x, z) > 0.05) { any = true; break; }
-      if (any) tiles.push({ x: tx, z: tz, lod: -1, want: -1, m: [null, null, null], job: null });
+      if (any) tiles.push({ x: tx, z: tz, TS, lod: -1, want: -1, m: [null, null, null], job: null, trees: null, tjob: null, cards: null });
     }
     const stat = { built: 0, worst: 0, ms: 0 };
     let due = Infinity; const late = () => performance.now() > due;
@@ -92,9 +92,18 @@ const IsleWorld = (() => {
       let L = t.want; if (!has(L)) { const alt = [L + 1, L - 1, L + 2, L - 2].find(k => k >= 0 && k < LODS.length && has(k)); L = alt === undefined ? -1 : alt; }
       t.m.forEach((m, k) => { if (m && m !== 'none') m.visible = k === L; });
     }
-    let camX = 0, camZ = 0;
-    function update(cx, budget = 4, cz) {
-      camX = cx; camZ = cz ?? camZ;
+    /* ── the forest over it (forest.js): every tile's trees planned and carded, nearest tiles first; near the eye the
+       trees themselves ── */
+    const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z) }) : null;
+    function treeStep(t, slice) {
+      if (!t.tjob) t.tjob = forest.plan(t.x, t.z, TS, late);
+      const t0 = performance.now(); due = t0 + slice; const r = t.tjob.next(); due = Infinity; stat.worst = Math.max(stat.worst, performance.now() - t0);
+      if (!r.done) return false;
+      t.trees = r.value; t.tjob = null; t.cards = forest.cards(t.trees); stat.trees = (stat.trees || 0) + t.trees.length; return true;
+    }
+    let camX = 0, camZ = 0, camY = 2;
+    function update(cx, budget = 4, cz, cy) {
+      camX = cx; camZ = cz ?? camZ; camY = cy ?? camY;
       for (const t of tiles) {
         t.want = lodFor(distTo(t, camX, camZ));
         /* (a fine level not wanted any more, far behind, is thrown away) */
@@ -103,14 +112,21 @@ const IsleWorld = (() => {
       }
       const t0 = performance.now();
       while (performance.now() - t0 < budget) {
-        let best = null, bd = 1e18;
-        for (const t of tiles) { if (t.m[t.want]) continue; const d = distTo(t, camX, camZ); if (d < bd) { bd = d; best = t; } }
+        let best = null, bd = 1e18, kind = 0;
+        for (const t of tiles) { const d = distTo(t, camX, camZ); if (!t.m[t.want] && d < bd) { bd = d; best = t; kind = 0; } if (forest && !t.trees && d - 40 < bd) { bd = d - 40; best = t; kind = 1; } }
         if (!best) break;
-        if (step(best, best.want, Math.max(0.5, budget - (performance.now() - t0)))) show(best);
+        const slice = Math.max(0.5, budget - (performance.now() - t0));
+        if (kind === 1) treeStep(best, slice); else if (step(best, best.want, slice)) show(best);
       }
+      if (forest) forest.nearUpdate(camX, camY, camZ, tiles);
     }
     /* the tiles round the camp, at once, so the first frame is whole */
-    function prime() { const t0 = performance.now(); update(Layout.camp.x, 0, Layout.camp.z); for (const t of tiles) { const L = t.want; while (L === 0 && !t.m[L]) step(t, L, 1e9); show(t); } stat.prime = performance.now() - t0; }
+    function prime() {
+      const t0 = performance.now(); update(Layout.camp.x, 0, Layout.camp.z);
+      for (const t of tiles) { const L = t.want; while (L === 0 && !t.m[L]) step(t, L, 1e9); show(t); if (forest && L === 0) while (!t.trees) treeStep(t, 1e9); }
+      if (forest) forest.nearUpdate(Layout.camp.x, 2, Layout.camp.z, tiles);
+      stat.prime = performance.now() - t0;
+    }
     /* the land's height at a world point, as drawn (on the sand and over the sea, the sand's level) */
     const land = (x, z) => Math.max(drawnH(x, z), LEVEL);
     const massif = (x, z) => { const h = land(x, z); return h > 0.1 ? h * rockAt(x, z, 1) : -9; };
@@ -119,7 +135,9 @@ const IsleWorld = (() => {
       land, hill: land, massif, reefTop: () => -9, reefLines: () => none, obstaclesNear: () => none, wetNear: () => none,
       /* (nothing yet lives along the island's shore in chunks: what asks to be told of them is kept for when they do) */
       place: () => {}, decorate: () => {},
-      get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0) }; },
+      get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0),
+        treeTiles: tiles.filter(t => t.trees).length, trees: stat.trees || 0, forest: forest ? forest.stats() : null }; },
+      forest,
       get chunks() { return none; }, chunkAt: () => null, resetWorst: () => { stat.worst = 0; }, tiles };
   }
   return { build, LODS, TS };

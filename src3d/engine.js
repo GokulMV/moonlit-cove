@@ -777,8 +777,10 @@ const Engine = (() => {
        and the small lives of the shore, its shells laid along every chunk of it as the chunk is built.
        The chunk round the camp is built now, the rest a little at a time as the camera comes near */
     coastFollow(Layout.cameras.wide.pos[0]);
-    /* (or the island's land, when the page is asked for the island) */
-    world = Layout.isle ? IsleWorld.build(natG, gU) : World.build(natG, gU, noiseTex);
+    /* (or the island's land, when the page is asked for the island, and its forest) */
+    /* (the forest's and the fruit trees' bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
+    FloraKit.Q.tex = opts.texQ ?? 0.5;
+    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest }) : World.build(natG, gU, noiseTex);
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
@@ -789,9 +791,7 @@ const Engine = (() => {
     world.prime();
     /* and the wildlife of the whole coast: fireflies all along the forest edge, gulls, sandpipers, crabs, bats, dolphins */
     fauna = Fauna.build(natG, world); Object.assign(api, { fauna });
-    /* the fruit round the camp, flowering and fruiting on their own round, and the coconuts on its palms (orchard.js);
-       (their bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
-    FloraKit.Q.tex = opts.texQ ?? 0.5;
+    /* the fruit round the camp, flowering and fruiting on their own round, and the coconuts on its palms (orchard.js) */
     orchard = Orchard.build(natG, world, { palms: nature.palms }); Object.assign(api, { orchard });
     /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js); and the fruit */
     inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
@@ -975,7 +975,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
     if (Layout.isle) groundMesh.position.z = Math.round(camera.position.z / 100) * 100;
     coastFollow(camera.position.x);
-    if (world) world.update(camera.position.x, o.buildMs ?? 4, camera.position.z);
+    if (world) world.update(camera.position.x, o.buildMs ?? 4, camera.position.z, camera.position.y);
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;
       const sc = o.shadowC || (away ? [Math.round(lk[0]), Math.round(lk[2])] : [Layout.camp.x, Layout.camp.z]);

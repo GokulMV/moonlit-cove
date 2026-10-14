@@ -220,6 +220,35 @@ const Studio = (() => {
     x.fillStyle = '#000'; let ty = H - 6; for (const t in tagC) { x.fillStyle = '#' + tagC[t].getHexString(); x.fillRect(W - 110, ty - 9, 10, 10); x.fillStyle = '#000'; x.fillText(t, W - 96, ty); ty -= 14; }
     return { url: c.toDataURL('image/png'), size: [W, H] };
   }
-  return { sheet, hero, lineup, slice, R, scene };
+  /* the far trees' cards (impostor.js) beside the trees they are drawn from: each tree, and next to it its card; and the
+     atlas of pictures the cards come from (colour above, normals and shade below) */
+  function impostors(items, o = {}) {
+    clear();
+    const protos = items.map(it => { const m = Models.make(it.name, it.opts || {}); m.updateMatrixWorld(true); return { obj: m }; });
+    const t0 = performance.now(), atlas = Impostor.bake(R, protos, { cell: o.cell || 176 }), bakeMs = performance.now() - t0;
+    const mat = Impostor.material(atlas, { near: 0 }); window.__lastAtlas = atlas;
+    let x = 0; const gap = o.gap ?? 4, list = [];
+    protos.forEach((p, i) => {
+      const b = new T.Box3().setFromObject(p.obj), w = Math.max(b.max.x - b.min.x, b.max.z - b.min.z);
+      p.obj.position.x = x + w / 2; p.obj.rotation.y = o.yaw || 0; p.obj.traverse(k => { if (k.isMesh) { k.castShadow = true; k.receiveShadow = true; } }); scene.add(p.obj); cur.push(p.obj); p.obj.updateMatrixWorld(true);
+      list.push({ x: x + w * 1.5 + gap * 0.5, y: 0, z: 0, s: 1, yaw: o.yaw || 0, p: i, tint: 0.5 });
+      x += w * 2 + gap * 2;
+    });
+    const cardsM = Impostor.cards(list, mat); cardsM.frustumCulled = false; scene.add(cardsM); cur.push(cardsM);
+    const box = new T.Box3(); for (const m of cur) if (m !== cardsM) box.expandByObject(m); box.expandByPoint(new T.Vector3(x, 0, 0));
+    const L = daylight(box, o.sun, o.light);
+    setGround(o.ground ?? 'grass', Math.max(60, L.rad * 40), L.c.x, L.c.z);
+    const c = o.centre ? new T.Vector3(...o.centre) : L.c, w = Math.min(MAXW, o.w || 2400), h = Math.min(MAXH, o.h || 1100);
+    frame(c, L.rad, Object.assign({ view: [Math.PI / 2 - 0.06, 0.1] }, o), w, h);
+    const url = shoot(w, h);
+    /* (the atlas, read back: colour over normals) */
+    const W = atlas.W, H = atlas.H, a = document.createElement('canvas'); a.width = W; a.height = H * 2; const x2 = a.getContext('2d');
+    for (const [px, oy] of [[atlas.pc, 0], [atlas.pn, H]]) { const im = x2.createImageData(W, H);
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const s = ((H - 1 - j) * W + i) * 4, d = (j * W + i) * 4; for (let k = 0; k < 3; k++) im.data[d + k] = px[s + k]; im.data[d + 3] = 255; }
+      x2.putImageData(im, 0, oy); }
+    scene.remove(cardsM);
+    return { url, atlas: a.toDataURL('image/png'), size: [W, H], tris: trisOf(cur), bakeMs: Math.round(bakeMs) };
+  }
+  return { sheet, hero, lineup, slice, impostors, R, scene };
 })();
 window.Studio = Studio;
