@@ -18,7 +18,10 @@ const IsleWorld = (() => {
   const SINK = 0.22;
   function build(root, U, o = {}) {
     const I = Layout.island(), G = I.data.grid, LEVEL = I.LEVEL;
-    const drawnH = (x, z) => { const h = I.height(x, z); return h - SINK * (1 - sm(1, 5, h)); };
+    /* (the trails (trails.js): where they run the ground is worked to their treads, so it is the drawn ground everything
+       here stands on) */
+    const trails = typeof IsleTrails !== 'undefined' && o.trails !== false ? IsleTrails.plan(I) : null;
+    const drawnH = (x, z) => { let h = I.height(x, z); if (trails) h = trails.ground(x, z, h); return h - SINK * (1 - sm(1, 5, h)); };
     /* what is bare rock: the shore's rocks and cliffs and the few metres of land the spray keeps bare behind them, and
        whatever is too steep to hold soil (a rainforest holds on to slopes of forty degrees and more: only a cliff is bare) */
     const SQ = {};
@@ -43,14 +46,21 @@ const IsleWorld = (() => {
     /* one tile at one level: a grid of the ground, its normals from the height field, its colours (the forest floor and
        its scrub, bare rock), and a skirt hanging from its edges so the tiles of different levels meet without a crack */
     function* tileGeo(t, L) {
-      const c = LODS[L].cell, n = Math.round(TS / c) + 1, NV = n * n + 4 * n, P = new Float32Array(NV * 3), N = new Float32Array(NV * 3), C = new Float32Array(NV * 3), RK = new Float32Array(NV);
+      const c = LODS[L].cell, n = Math.round(TS / c) + 1, NV = n * n + 4 * n, P = new Float32Array(NV * 3), N = new Float32Array(NV * 3), C = new Float32Array(NV * 3), RK = new Float32Array(NV), CV = new Float32Array(NV), MD = new Float32Array(NV);
       for (let j = 0; j < n; j++) {
         for (let i = 0; i < n; i++) {
           const x = t.x + i * c, z = t.z + j * c, k = j * n + i, h = drawnH(x, z), e = Math.max(1, c * 0.5);
           const gx = (drawnH(x + e, z) - drawnH(x - e, z)) / (2 * e), gz = (drawnH(x, z + e) - drawnH(x, z - e)) / (2 * e), l = Math.hypot(gx, 1, gz);
           P[k * 3] = x; P[k * 3 + 1] = Math.max(h, -2.5); P[k * 3 + 2] = z; N[k * 3] = -gx / l; N[k * 3 + 1] = 1 / l; N[k * 3 + 2] = -gz / l;
-          const ny = 1 / l, rk = rockAt(x, z, ny), nn = 0.5 + 0.5 * Math.sin(x * 0.11 + z * 0.07) * Math.sin(x * 0.043 - z * 0.061), a = 0.7 + 0.6 * nn, b = 0.75 + 0.5 * (1 - nn);
-          C[k * 3] = 0.024 * a + (0.14 * b - 0.024 * a) * rk; C[k * 3 + 1] = 0.042 * a + (0.128 * b - 0.042 * a) * rk; C[k * 3 + 2] = 0.017 * a + (0.112 * b - 0.017 * a) * rk; RK[k] = rk;
+          /* (the ground's own colour: in the open, at the forest's edge and in a clearing, grass and herbs over sandy soil, the
+             olive of the coast's; under the closed canopy, as it is seen between the crowns from afar, the dark of the
+             forest's lower storeys in their shade) */
+          const ny = 1 / l, rk = rockAt(x, z, ny), nn = 0.5 + 0.5 * Math.sin(x * 0.11 + z * 0.07) * Math.sin(x * 0.043 - z * 0.061), cv = forest ? forest.cover(x, z) : 1, a = 0.7 + 0.6 * nn, b = 0.75 + 0.5 * (1 - nn);
+          /* (and in the mangroves, their mud: SQ is the shore rockAt just looked up) */
+          const md = SQ.mangrove * (1 - sm(SQ.W + 16, SQ.W + 42, -I.sdf(x, z)));
+          let gr = (0.095 + (0.024 * 0.75 - 0.095) * cv) * a, gg = (0.108 + (0.042 * 0.75 - 0.108) * cv) * a, gb = (0.052 + (0.017 * 0.75 - 0.052) * cv) * a;
+          gr += (0.05 * a - gr) * md; gg += (0.045 * a - gg) * md; gb += (0.034 * a - gb) * md;
+          C[k * 3] = gr + (0.108 * b - gr) * rk; C[k * 3 + 1] = gg + (0.1 * b - gg) * rk; C[k * 3 + 2] = gb + (0.09 * b - gb) * rk; RK[k] = rk; CV[k] = cv; MD[k] = md;
         }
         if (late()) yield;
       }
@@ -58,7 +68,7 @@ const IsleWorld = (() => {
       let v = n * n; const edge = [];
       for (let i = 0; i < n; i++) edge.push(i, (n - 1) * n + i, i * n, i * n + n - 1);
       const skirt = new Int32Array(n * n).fill(-1);
-      for (const k of edge) { if (skirt[k] >= 0) continue; skirt[k] = v; P.set([P[k * 3], P[k * 3 + 1] - (1 + c * 0.6), P[k * 3 + 2]], v * 3); N.set(N.subarray(k * 3, k * 3 + 3), v * 3); C.set(C.subarray(k * 3, k * 3 + 3), v * 3); RK[v] = RK[k]; v++; }
+      for (const k of edge) { if (skirt[k] >= 0) continue; skirt[k] = v; P.set([P[k * 3], P[k * 3 + 1] - (1 + c * 0.6), P[k * 3 + 2]], v * 3); N.set(N.subarray(k * 3, k * 3 + 3), v * 3); C.set(C.subarray(k * 3, k * 3 + 3), v * 3); RK[v] = RK[k]; CV[v] = CV[k]; MD[v] = MD[k]; v++; }
       const idx = [], up = k => P[k * 3 + 1] > 0.0;
       for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
         const a = j * n + i, b = a + 1, cc = a + n, d = cc + 1;
@@ -71,6 +81,7 @@ const IsleWorld = (() => {
       const g = new T.BufferGeometry();
       g.setAttribute('position', new T.BufferAttribute(P.subarray(0, v * 3), 3)); g.setAttribute('normal', new T.BufferAttribute(N.subarray(0, v * 3), 3));
       g.setAttribute('color', new T.BufferAttribute(C.subarray(0, v * 3), 3)); g.setAttribute('aRock', new T.BufferAttribute(RK.subarray(0, v), 1));
+      g.setAttribute('aCov', new T.BufferAttribute(CV.subarray(0, v), 1)); g.setAttribute('aMud', new T.BufferAttribute(MD.subarray(0, v), 1));
       g.setIndex(new T.BufferAttribute(v > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), 1));
       g.computeBoundingSphere();
       return g;
@@ -94,7 +105,15 @@ const IsleWorld = (() => {
     }
     /* ── the forest over it (forest.js): every tile's trees planned and carded, nearest tiles first; near the eye the
        trees themselves ── */
-    const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z) }) : null;
+    /* ── what the park has built (park.js): the jetty, the hut, the boat; the forest keeps clear of them ── */
+    const park = typeof IslePark !== 'undefined' && o.park !== false ? IslePark.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL) }) : null;
+    const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z), keep: (park ? park.plan.clear : []).concat(trails ? trails.clear : []) }) : null;
+    /* (with the island's map on boards where the trails start: at the camp's back and by the jetty's foot) */
+    const maps = [[12, 30, Math.PI]];
+    if (park) { const j = park.plan.jetty, t = park.plan.tangent, mx = j.x - j.nx * 4 - t[0] * 4, mz = j.z - j.nz * 4 - t[1] * 4; maps.push([mx, mz, Math.atan2(j.nx, j.nz)]); }
+    const trailsG = trails ? IsleTrails.build(group, I, trails, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), maps }) : null;
+    /* ── the rocky shores' boulders (stones.js) ── */
+    const stones = typeof IsleStones !== 'undefined' && typeof StoneKit !== 'undefined' && o.stones !== false ? IsleStones.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), TS }) : null;
     function treeStep(t, slice) {
       if (!t.tjob) t.tjob = forest.plan(t.x, t.z, TS, late);
       const t0 = performance.now(); due = t0 + slice; const r = t.tjob.next(); due = Infinity; stat.worst = Math.max(stat.worst, performance.now() - t0);
@@ -119,26 +138,55 @@ const IsleWorld = (() => {
         if (kind === 1) treeStep(best, slice); else if (step(best, best.want, slice)) show(best);
       }
       if (forest) forest.nearUpdate(camX, camY, camZ, tiles);
+      if (stones) stones.update(camX, camY, camZ, tiles);
+      if (park) park.update(performance.now() / 1000);
+      bayUpdate(camX, camZ);
     }
     /* the tiles round the camp, at once, so the first frame is whole */
     function prime() {
       const t0 = performance.now(); update(Layout.camp.x, 0, Layout.camp.z);
       for (const t of tiles) { const L = t.want; while (L === 0 && !t.m[L]) step(t, L, 1e9); show(t); if (forest && L === 0) while (!t.trees) treeStep(t, 1e9); }
       if (forest) forest.nearUpdate(Layout.camp.x, 2, Layout.camp.z, tiles);
+      if (stones) for (let k = 0; k < 12; k++) stones.update(Layout.camp.x, 2, Layout.camp.z, tiles);
       stat.prime = performance.now() - t0;
     }
+    /* ── the camp's bay, along x as it always was: its chunks, for what is laid along the coast in each as it comes near
+       (flora.js's grass and flowers at the forest's edge, life.js's shells along the tide line, shallows.js's kelp and
+       shrimp round the stones standing in the water); built when first near, shown within LOD.tiny ── */
+    const CW = 128, X0 = -64, BAYC = [-1, 0, 1], bay = new Map(), tinyHooks = [], LODt = 45;
+    const hashC = c => { let h = Math.imul((c | 0) + 7919, 0x9e3779b1); h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
+    function bayChunk(c) {
+      let ch = bay.get(c); if (ch) return ch;
+      const x0 = X0 + c * CW;
+      ch = { c, X0: x0, x0, x1: x0 + CW, camp: Layout.camp.x >= x0 && Layout.camp.x < x0 + CW, seed: 1 + Math.floor(hashC(c) * 1e9), tiny: new T.Group(), wet: [], built: false, own: [] };
+      ch.rng = k => Textures.rng(ch.seed + 101 * (k || 0)); ch.keep = g => { ch.own.push(g); return g; }; ch.obstacle = () => {}; ch.near = ch.far = ch.tiny;
+      ch.tiny.matrixAutoUpdate = false; ch.tiny.visible = false; group.add(ch.tiny); bay.set(c, ch);
+      /* (the stones of its stretch that stand in the water) */
+      if (stones) for (const st of stones.all) if (st.wet && st.x >= x0 && st.x < x0 + CW && st.z < 60) ch.wet.push({ x: st.x, z: st.z, top: st.y + st.s * st.sy * 0.8, rad: st.s * 0.9, id: c * 100000 + st.id });
+      return ch;
+    }
+    const bayD = (ch, cx, cz) => Math.hypot(Math.max(0, ch.x0 - cx, cx - ch.x1), Math.max(0, Math.abs(cz - 8) - 34));
+    function bayUpdate(cx, cz) {
+      for (const c of BAYC) {
+        const ch = bayChunk(c), d = bayD(ch, cx, cz);
+        if (!ch.built && d < LODt + 40) { ch.built = true; for (const fn of tinyHooks) fn(ch); }
+        ch.tiny.visible = ch.built && d < LODt;
+      }
+    }
+    const decorate = (fn, lod = 'near') => { if (lod !== 'tiny') return; tinyHooks.push(fn); for (const ch of bay.values()) if (ch.built) fn(ch); };
+    const wetOut = [], wetNear = (x, z, r) => { wetOut.length = 0; if (stones) for (const st of stones.near(x, z, r)) if (st.wet) wetOut.push({ x: st.x, z: st.z, top: st.y + st.s * st.sy * 0.8, rad: st.s * 0.9, id: st.id }); return wetOut; };
     /* the land's height at a world point, as drawn (on the sand and over the sea, the sand's level) */
     const land = (x, z) => Math.max(drawnH(x, z), LEVEL);
     const massif = (x, z) => { const h = land(x, z); return h > 0.1 ? h * rockAt(x, z, 1) : -9; };
     const none = [];
-    return { update, prime, reset: prime, LOD: { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 3400, keep: 3800 }, CW: 128, X0: -64,
-      land, hill: land, massif, reefTop: () => -9, reefLines: () => none, obstaclesNear: () => none, wetNear: () => none,
-      /* (nothing yet lives along the island's shore in chunks: what asks to be told of them is kept for when they do) */
-      place: () => {}, decorate: () => {},
+    return { update, prime, reset: prime, LOD: { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 3400, keep: 3800 }, CW, X0,
+      land, hill: land, massif, reefTop: () => -9, reefLines: () => none, obstaclesNear: () => none, wetNear,
+      /* (what is laid along the coast in chunks is laid along the camp's bay; nothing claims ground before the stones) */
+      place: () => {}, decorate,
       get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0),
-        treeTiles: tiles.filter(t => t.trees).length, trees: stat.trees || 0, forest: forest ? forest.stats() : null }; },
-      forest,
-      get chunks() { return none; }, chunkAt: () => null, resetWorst: () => { stat.worst = 0; }, tiles };
+        treeTiles: tiles.filter(t => t.trees).length, trees: stat.trees || 0, forest: forest ? forest.stats() : null, stones: stones ? stones.stats() : null }; },
+      forest, stones, park, trails, trailsG,
+      get chunks() { return [...bay.values()].filter(ch => ch.built); }, chunkAt: x => bay.get(Math.floor((x - X0) / CW)) || null, resetWorst: () => { stat.worst = 0; }, tiles };
   }
   return { build, LODS, TS };
 })();

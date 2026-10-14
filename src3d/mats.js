@@ -140,8 +140,8 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : ''))
-        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud; varying float vCov, vMud;' : ''))
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud;' : ''))
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
   vec4 wpp = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -188,14 +188,20 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
       #undef RKL
       vec3 gv = mat3(viewMatrix)*(g*vRock*smoothstep(90.0, 20.0, rkD2));
       normal = normalize(normal - (gv - dot(gv, normal)*normal)); } }
-  ${key === 'land' ? '{ vec3 gv = mat3(viewMatrix)*(cnGrad*(1.0 - vRock)); normal = normalize(normal - (gv - dot(gv, normal)*normal)); }' : ''}`);
+  ${key === 'land' ? `{ vec3 gv = mat3(viewMatrix)*(cnGrad*(1.0 - vRock)${Layout.isle ? '*(1.0 - flN)' : ''}); normal = normalize(normal - (gv - dot(gv, normal)*normal)); }` : ''}`);
       /* hills and headlands: rock on the steep and seaward parts, leaf litter and scrub elsewhere */
       if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  float wetK = 0.0;
+  float wetK = 0.0, flN = 0.0;
   { float n1 = vnz(vWPos*0.9), n2 = vnz(vWPos*3.7 + 2.0), n3 = vnz(vWPos*13.0);
     vec3 rockC = diffuseColor.rgb*(0.72 + 0.42*n2 + 0.16*n3 - 0.14*smoothstep(0.6, 0.85, vnz(vWPos*vec3(1.2, 4.0, 1.2))));
     float lich = smoothstep(0.64, 0.8, vnz(vWPos*1.7 + 9.0))*smoothstep(2.0, 4.0, vWPos.y);
-    rockC = mix(rockC, vec3(0.5, 0.48, 0.38)*0.6, lich*0.35);
+    rockC = mix(rockC, vec3(0.5, 0.48, 0.38)*0.6, lich*0.35);${key === 'land' && Layout.isle ? `
+    /* (round the island a bare face of granite in the forest is streaked black down its slope where the rain runs off it,
+       a film of algae; green with moss and ferns in its hollows and along its joints) */
+    { float stk = smoothstep(0.5, 0.78, vnz(vec3(vWPos.x*0.55, vWPos.y*0.045, vWPos.z*0.55))*0.75 + vnz(vec3(vWPos.x*2.1, vWPos.y*0.12, vWPos.z*2.1))*0.25);
+      rockC *= 1.0 - 0.5*stk;
+      float mos = smoothstep(0.58, 0.74, vnz(vWPos*0.33 + 4.0)*0.7 + vnz(vWPos*1.3)*0.3);
+      rockC = mix(rockC, vec3(0.035, 0.05, 0.022)*(0.8 + 0.4*n3), mos*0.75); }` : ''}
     /* the bare rock up close as the boulders are: its crystals' speckle, its cracks (and wider joints between the
        blocks, seen from further off), iron stains and crusts of lichen */
     if (vRock > 0.02){
@@ -213,14 +219,30 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     /* (under the trees and on the hills the ground is thick with shrubs and saplings, crown against crown, shade in
        between: from above it is no lawn) */
     ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}
-    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;
+    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;${key === 'land' && Layout.isle ? `
+    /* (round the island, near the eye, the ground as it is underfoot: under the trees the forest's floor, its fallen
+       leaves brown and grey, a seedling's green here and there, the light through the canopy in flecks; out in the open,
+       at the forest's edge and in a clearing, grass and herbs) */
+    { float fd = distance(vWPos, cameraPosition); flN = smoothstep(78.0, 26.0, fd)*(1.0 - vRock);
+      if (flN > 0.0){
+        float l1 = vnz(vWPos*0.45 + 3.0), l2 = vnz(vWPos*2.3), l3 = vnz(vWPos*9.0 + 1.0), l4 = vnz(vWPos*31.0);
+        vec3 litter = mix(vec3(0.12, 0.08, 0.045), vec3(0.085, 0.075, 0.06), l2)*(0.62 + 0.42*l3 + 0.22*l4);
+        litter = mix(litter, vec3(0.045, 0.07, 0.025)*(0.75 + 0.5*l4), smoothstep(0.58, 0.78, l1*0.6 + l3*0.4)*0.55);
+        float fleck = smoothstep(0.7, 0.78, vnz(vWPos*0.8 + 11.0)*0.65 + l3*0.35);
+        float shade = mix(1.0, 0.26 + 0.9*fleck, smoothstep(0.1, 0.55, vCov));
+        vec3 grass = mix(vec3(0.07, 0.1, 0.035), vec3(0.1, 0.105, 0.05), l2)*(0.72 + 0.4*l1 + 0.22*l4);
+        vegC = mix(vegC, mix(grass, litter, smoothstep(0.1, 0.5, vCov))*shade, flN);
+        /* (in the mangroves, their mud: grey-brown, wet, the leaves fallen on it, the light coming through in flecks) */
+        vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.45 + 0.8*fleck, smoothstep(0.1, 0.55, vCov));
+        vegC = mix(vegC, mudC, vMud*flN);
+      } }` : ''}
     diffuseColor.rgb = mix(vegC, rockC, vRock);
     float sea = smoothstep(5.0, -0.5, -shoreS(vWPos.xz));
     wetK = smoothstep(${key === 'reef' ? '0.75, 0.0' : '1.8, 0.1'}, vWPos.y)*sea*vRock;
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.09, 0.04), smoothstep(0.35, 0.0, abs(vWPos.y - 0.15))*smoothstep(0.4, 0.7, vnz(vWPos*4.0))*sea*vRock*0.7);
   }`).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);`);
+  roughnessFactor *= mix(1.0, ${key === 'reef' ? '0.62' : '0.35'}, wetK);${key === 'land' && Layout.isle ? '\n  roughnessFactor *= mix(1.0, 0.6, vMud*flN);' : ''}`);
       /* packed sand (the sand castles): its grain, a few tenths of a millimetre of relief in specks, lighter and darker */
       if (key === 'sandc') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   diffuseColor.rgb *= 0.95 + 0.07*vnz(vWPos*61.0) + 0.05*vnz(vWPos*173.0 + 5.0);`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -250,7 +272,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     diffuseColor.rgb *= mix(0.82, 1.0, smoothstep(0.25, 0.6, lp.y));
   }`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};

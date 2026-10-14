@@ -50,7 +50,7 @@ varying vec2 vUv; varying vec3 vN; varying vec3 vC;
 void main(){
   vec3 c = vC*uColor; if (uHasMap > 0.5) c *= texture2D(map, vUv).rgb;
   if (uPass < 0.5){ gl_FragColor = vec4(sqrt(clamp(c, 0.0, 1.0)), 1.0); return; }
-  gl_FragColor = vec4(octE(normalize(vN)), 1.0, 1.0);
+  gl_FragColor = vec4(octE(normalize(vN)), 1.0, 0.0);
 }`;
   /* the photographer's stand-in for each of a model's materials: its leaves' cards (their colour, their normal map, how
      they are cut out), or its bark and anything else (its colour, its map) */
@@ -112,13 +112,13 @@ void main(){
      the colour of what is next to it, so its edges never darken ── */
   function mips(pc, pn, W, H, cell, cols, rows) {
     const CUT = 127, outC = [{ data: pc, width: W, height: H }], outN = [{ data: pn, width: W, height: H }];
-    const dil = (D, A, w, h, it) => { for (let n = 0; n < it; n++) { let moved = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (A[i]) continue; let r = 0, g = 0, b = 0, k = 0;
+    const dil = (D, A, w, h, it, four) => { for (let n = 0; n < it; n++) { let moved = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (A[i]) continue; let r = 0, g = 0, b = 0, k = 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; const j = yy * w + xx; if (!A[j]) continue; r += D[j * 4]; g += D[j * 4 + 1]; b += D[j * 4 + 2]; k++; }
-      if (k) { D[i * 4] = r / k; D[i * 4 + 1] = g / k; D[i * 4 + 2] = b / k; moved++; } }
+      if (k) { D[i * 4] = r / k; D[i * 4 + 1] = g / k; D[i * 4 + 2] = b / k; if (four) { let a4 = 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; const j = yy * w + xx; if (A[j]) a4 += D[j * 4 + 3]; } D[i * 4 + 3] = a4 / k; } moved++; } }
       if (!moved) break; } };
     /* (the raw cover of each texel, apart from the cover kept up: the next copy is made from the raw) */
     let A = new Uint8Array(W * H); for (let i = 0; i < W * H; i++) A[i] = pc[i * 4 + 3];
-    const mark0 = new Uint8Array(A); dil(pc, mark0, W, H, 3); dil(pn, new Uint8Array(A), W, H, 3);
+    const mark0 = new Uint8Array(A); dil(pc, mark0, W, H, 3); dil(pn, new Uint8Array(A), W, H, 3, true);
     /* how much of each picture is leaf (or bark), full size */
     const nc = cols * rows, c0 = new Float32Array(nc);
     for (let y = 0; y < rows * cell; y++) for (let x = 0; x < cols * cell; x++) if (A[y * W + x] > CUT) c0[Math.floor(y / cell) * cols + Math.floor(x / cell)]++;
@@ -127,14 +127,14 @@ void main(){
     while ((w > 1 || h > 1) && cs >= 2) {
       const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), C2 = new Uint8Array(nw * nh * 4), N2 = new Uint8Array(nw * nh * 4), A2 = new Uint8Array(nw * nh);
       for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
-        let a = 0, r = 0, g = 0, b = 0, nx = 0, ny = 0, nz = 0, ru = 0, gu = 0, bu = 0, nxu = 0, nyu = 0, nzu = 0;
+        let a = 0, r = 0, g = 0, b = 0, nx = 0, ny = 0, nz = 0, lf = 0, ru = 0, gu = 0, bu = 0, nxu = 0, nyu = 0, nzu = 0, lfu = 0;
         for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) { const xx = Math.min(w - 1, x * 2 + i), yy = Math.min(h - 1, y * 2 + j), q = yy * w + xx, al = A[q];
-          a += al; r += C[q * 4] * al; g += C[q * 4 + 1] * al; b += C[q * 4 + 2] * al; nx += N[q * 4] * al; ny += N[q * 4 + 1] * al; nz += N[q * 4 + 2] * al;
-          ru += C[q * 4]; gu += C[q * 4 + 1]; bu += C[q * 4 + 2]; nxu += N[q * 4]; nyu += N[q * 4 + 1]; nzu += N[q * 4 + 2]; }
+          a += al; r += C[q * 4] * al; g += C[q * 4 + 1] * al; b += C[q * 4 + 2] * al; nx += N[q * 4] * al; ny += N[q * 4 + 1] * al; nz += N[q * 4 + 2] * al; lf += N[q * 4 + 3] * al;
+          ru += C[q * 4]; gu += C[q * 4 + 1]; bu += C[q * 4 + 2]; nxu += N[q * 4]; nyu += N[q * 4 + 1]; nzu += N[q * 4 + 2]; lfu += N[q * 4 + 3]; }
         const o = (y * nw + x) * 4;
-        if (a > 0) { C2[o] = r / a; C2[o + 1] = g / a; C2[o + 2] = b / a; N2[o] = nx / a; N2[o + 1] = ny / a; N2[o + 2] = nz / a; }
-        else { C2[o] = ru / 4; C2[o + 1] = gu / 4; C2[o + 2] = bu / 4; N2[o] = nxu / 4; N2[o + 1] = nyu / 4; N2[o + 2] = nzu / 4; }
-        A2[y * nw + x] = (a + 2) >> 2; N2[o + 3] = 255;
+        if (a > 0) { C2[o] = r / a; C2[o + 1] = g / a; C2[o + 2] = b / a; N2[o] = nx / a; N2[o + 1] = ny / a; N2[o + 2] = nz / a; N2[o + 3] = lf / a; }
+        else { C2[o] = ru / 4; C2[o + 1] = gu / 4; C2[o + 2] = bu / 4; N2[o] = nxu / 4; N2[o + 1] = nyu / 4; N2[o + 2] = nzu / 4; N2[o + 3] = lfu / 4; }
+        A2[y * nw + x] = (a + 2) >> 2;
       }
       cs >>= 1; lvl++;
       /* (each picture's cover made up again, as much as its full-size picture had) */
@@ -161,7 +161,7 @@ uniform vec3 uNear;       /* within uNear.x of the eye the tree itself stands (i
 uniform float uTime; uniform vec4 uWindV;
 attribute vec4 aP;        /* the foot of the tree (x, y, z), how big */
 attribute vec4 aQ;        /* how it is turned, its shape, its tint, a die */
-varying vec2 vUv; varying vec3 vK; varying float vTop, vNearK, vCell0, vYaw, vTint, vDie; varying vec3 vW;
+varying vec2 vUv; varying vec3 vK; varying float vTop, vNearK, vCell0, vYaw, vTint, vDie, vHide; varying vec3 vW;
 void main(){
   vec4 P = uPr[int(aQ.y + 0.5)]; float S = P.x*aP.w;
   vec3 c = aP.xyz + vec3(0.0, P.y*aP.w, 0.0), toC = cameraPosition - c; float dist = length(toC); vec3 f = toC/max(dist, 1e-3);
@@ -172,6 +172,9 @@ void main(){
   float az = atan(toC.x, toC.z) - aQ.x, k = mod(az/(6.2831853/${VIEWS}.0), ${VIEWS}.0), k0 = floor(k);
   vK = vec3(k0, mod(k0 + 1.0, ${VIEWS}.0), k - k0);
   vTop = smoothstep(0.55, 1.15, asin(clamp(f.y, -1.0, 1.0)));
+  /* (a forest tree's trunk, seen from above, is under its own crown and its neighbours': its picture's bark goes as the
+     eye rises; an open-grown one's, a palm's on the beach, stays) */
+  vHide = P.w*smoothstep(0.2, 0.46, f.y);
   vNearK = smoothstep(uNear.x, uNear.x + uNear.y, dist);
   vUv = position.xy + 0.5; vCell0 = P.z; vYaw = aQ.x; vTint = aQ.z; vDie = aQ.w; vW = wp;
   gl_Position = vNearK <= 0.0 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*viewMatrix*vec4(wp, 1.0);
@@ -183,7 +186,7 @@ uniform float uMaxLod;                             /* the smallest copy that sti
 uniform vec2 uCellUV;                              /* a cell's size in the atlas's own units */
 uniform float uCovCut;                             /* how much of a pixel must be covered to be drawn (a half, unless the samples share it) */
 uniform vec3 uAmbF, uKeyDirT, uKeyColT; uniform vec4 uFog; uniform vec3 uTintA, uTintB;
-varying vec2 vUv; varying vec3 vK; varying float vTop, vNearK, vCell0, vYaw, vTint, vDie; varying vec3 vW;
+varying vec2 vUv; varying vec3 vK; varying float vTop, vNearK, vCell0, vYaw, vTint, vDie, vHide; varying vec3 vW;
 vec2 cellUV(float ci, vec2 uv){ float cy = floor((ci + 0.5)/uAt.x), cx = ci - cy*uAt.x; return (vec2(cx, cy) + uAt.z + uv*(1.0 - 2.0*uAt.z))*uCellUV; }
 void main(){
   /* (into the margin no picture reaches) */
@@ -204,7 +207,13 @@ void main(){
   /* (its edge soft over the samples of a pixel: the cover's own edge, sharpened to it) */
   float cov = clamp((C.a - 0.5)/max(fwidth(C.a), 1e-3) + 0.5, 0.0, 1.0);
   if (cov < uCovCut) discard;
-  vec3 alb = C.rgb*C.rgb*mix(uTintA, uTintB, vTint);
+  /* (each tree its own green, from yellower to bluer, lighter or darker; one in fifty in new leaf, bronze or pink, and
+     now and then one in flower: on its leaves only, not its bark) */
+  float leaf = N.a, die = vDie;
+  if (vHide > 0.0 && vHide*(1.0 - smoothstep(0.25, 0.6, leaf)) > fract(sin(dot(gl_FragCoord.xy, vec2(39.346, 11.135)))*43758.5453)) discard;
+  vec3 tint = mix(uTintA, uTintB, vTint)*mix(vec3(1.06, 1.02, 0.84), vec3(0.9, 1.0, 1.1), fract(die*7.31));
+  if (die < 0.012) tint = vec3(1.25, 0.82, 0.5); else if (die < 0.02) tint = vec3(1.3, 0.75, 0.72); else if (die < 0.026) tint = vec3(1.6, 0.5, 0.25); else if (die < 0.031) tint = vec3(1.45, 1.25, 0.35);
+  vec3 alb = C.rgb*C.rgb*mix(vec3(1.0), tint, leaf);
   vec3 n = octD(N.rg); float ao = N.b;
   n = vec3(n.x*cy + n.z*sy, n.y, -n.x*sy + n.z*cy);
   vec3 V = normalize(cameraPosition - vW), L = uKeyDirT; float ndl = dot(n, L);
@@ -225,7 +234,7 @@ void main(){
   function material(atlas, o = {}) {
     const MAXP = Math.max(4, atlas.info.length);
     const u = { uCol: { value: atlas.col }, uNrm: { value: atlas.nrm }, uAt: { value: new T.Vector4(atlas.cols, atlas.rows, atlas.pad / atlas.cell, atlas.cell) }, uMaxLod: { value: Math.max(0, Math.min(atlas.maxLod - 1, 4.5)) }, uCovCut: { value: o.a2c ? 0.02 : 0.5 }, uCellUV: { value: new T.Vector2(atlas.cell / atlas.W, atlas.cell / atlas.H) },
-      uPr: { value: Array.from({ length: MAXP }, (_, i) => { const p = atlas.info[i]; return p ? new T.Vector4(p.S, p.cy, p.cell0, 0) : new T.Vector4(); }) },
+      uPr: { value: Array.from({ length: MAXP }, (_, i) => { const p = atlas.info[i]; return p ? new T.Vector4(p.S, p.cy, p.cell0, p.hide || 0) : new T.Vector4(); }) },
       uNear: { value: new T.Vector3(o.near ?? 0, o.fade ?? 8, 0) }, uTime: Mats.U.uTime, uWindV: { value: (typeof FloraLeaf !== 'undefined' && FloraLeaf.U.uWindV.value) || new T.Vector4(0.55, -0.83, 0.5, 0.5) },
       uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog,
       uTintA: { value: new T.Vector3(...(o.tintA || [0.88, 0.9, 0.86])) }, uTintB: { value: new T.Vector3(...(o.tintB || [1.1, 1.06, 1.0])) } };

@@ -173,7 +173,7 @@
     const g = new T.Group(), K = S(), R = Models.rng((o.seed || 1) * 149 + 17), B = K.Builder(), bd = mk(R, B);
     for (const x of [-0.75, 0.75]) bd('timber', V(x, -0.5, 0), V(x, 2.15, 0), 0.12, 0.12);
     const board = new T.Group(); board.position.set(0, 1.35, 0.08); board.rotation.x = -0.12; g.add(board);
-    const face = new T.Mesh(new T.PlaneGeometry(1.3, 0.97), Mats.lit({ map: mapTex(), roughness: 0.6 })); face.position.z = 0.025; board.add(face);
+    const face = new T.Mesh(new T.PlaneGeometry(1.3, 0.97), Mats.lit({ map: o.map || mapTex(), roughness: 0.6 })); face.position.z = 0.025; board.add(face);
     const back = new T.Mesh(new T.BoxGeometry(1.4, 1.07, 0.04), Mats.lit({ color: new T.Color(0.09, 0.06, 0.035), roughness: 0.8 })); back.castShadow = true; board.add(back);
     for (const [x, y, w, hh] of [[0, 0.52, 1.44, 0.05], [0, -0.52, 1.44, 0.05], [-0.7, 0, 0.05, 1.09], [0.7, 0, 0.05, 1.09]]) { const f = new T.Mesh(new T.BoxGeometry(w, hh, 0.06), Mats.lit({ color: new T.Color(0.07, 0.045, 0.028), roughness: 0.8 })); f.position.set(x, y, 0.02); board.add(f); }
     shadeRoof(B, R, bd, -0.85, 0.85, -0.35, 0.35, 2.15, 0.5, 0.18);

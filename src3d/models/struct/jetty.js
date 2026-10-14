@@ -12,7 +12,8 @@
    shelter (a green iron roof on four posts, benches either side),
    bollards at its corners, old tyres hung as fenders, a timber
    ladder down to the water, a life ring on its post, a solar lamp.
-   o: { len (to the head, m), width, deck (its height), head }
+   o: { len (to the head, m), width, deck (its height), head, ramp (m: over its first stretch the deck comes down to the
+   ground, foot its height there, for a jetty built out from a beach) }
    ───────────────────────────────────────────────────────────── */
 (() => {
   const T = THREE, S = () => StructKit, TAU = Math.PI * 2, V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
@@ -44,58 +45,66 @@
     const g = new T.Group(), K = S(), R = Models.rng((o.seed || 1) * 101 + 7), B = K.Builder();
     const L = o.len ?? 36, W = o.width ?? 2.4, deck = o.deck ?? 2.0, span = 3, nB = Math.max(2, Math.round(L / span)), sp = L / nB;
     const head = o.head ?? true, Lh = 4.8, Wh = 6.4, bed = o.bed || (x => mix(0.25, -2.4, clamp(x / (L + Lh))));
-    const pT = 0.045, jH = 0.15, hH = 0.2, yJ = deck - pT, yH = yJ - jH, yP = yH - hH;   /* (deck top, joists' top, headstocks' top, piles' top) */
+    const pT = 0.045, jH = 0.15, hH = 0.2;
+    /* (the deck's top along it: level, or down its ramp at the shore end to the ground; and under it the joists' top, the
+       headstocks' top, the piles' top) */
+    const ramp = Math.min(o.ramp || 0, L * 0.6), foot = o.foot ?? bed(0) + 0.3, dk = x => (ramp > 0 && x < ramp ? mix(foot, deck, Math.max(0, x) / ramp) : deck);
+    const yJ = x => dk(x) - pT, yH = x => yJ(x) - jH, yP = x => yH(x) - hH;
+    /* (a run from a to b split where the ramp meets the level, so each straight piece lies along the deck) */
+    const runs = (a, b) => (ramp > a + 0.05 && ramp < b - 0.05 ? [[a, ramp], [ramp, b]] : [[a, b]]);
     const tone = () => { const k = 0.82 + 0.3 * R(); return [k, k * (0.98 + 0.04 * R()), k * (0.95 + 0.06 * R())]; };
     /* ── the bents: piles, headstocks, bracing ── */
     const bents = []; for (let i = 0; i <= nB; i++) bents.push(i * sp);
     for (const x of bents) {
       const zs = [-W / 2 + 0.12, W / 2 - 0.12];
-      for (const z of zs) pileBands(B, x + (R() - 0.5) * 0.04, z, 0.13 + 0.015 * R(), bed(x) - 1.2, yP + 0.02, R);
-      K.boardAB(B, 'timber', V(x, yP + hH / 2, -W / 2 - 0.15), V(x, yP + hH / 2, W / 2 + 0.15), hH, 0.16, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+      for (const z of zs) pileBands(B, x + (R() - 0.5) * 0.04, z, 0.13 + 0.015 * R(), bed(x) - 1.2, yP(x) + 0.02, R);
+      K.boardAB(B, 'timber', V(x, yP(x) + hH / 2, -W / 2 - 0.15), V(x, yP(x) + hH / 2, W / 2 + 0.15), hH, 0.16, { tone: tone(), u0: R() * 4, v0: R() * 4 });
       /* (an X of bracing on the bent's face, bolted to the piles, where it is deep enough) */
-      const yb = Math.max(bed(x) + 0.25, -0.2), yt = yP - 0.25;
+      const yb = Math.max(bed(x) + 0.25, -0.2), yt = yP(x) - 0.25;
       if (yt - yb > 0.9) { for (const [z0, z1] of [[zs[0], zs[1]], [zs[1], zs[0]]]) K.boardAB(B, 'timber', V(x + 0.17, yt, z0), V(x + 0.17, yb, z1), 0.05, 0.18, { tone: tone(), u0: R() * 4, v0: R() * 4, up: V(1, 0, 0) }); }
     }
     /* (and along the jetty, every third span, a diagonal brace between bents, each side) */
     for (let i = 0; i + 1 <= nB; i += 3) for (const z of [-W / 2 - 0.01, W / 2 + 0.01]) {
       const x0 = bents[i], x1 = bents[i + 1], yb = Math.max(Math.min(bed(x0), bed(x1)) + 0.4, -0.1);
-      if (yP - 0.3 - yb > 0.8) K.boardAB(B, 'timber', V(x0, yP - 0.3, z), V(x1, yb, z), 0.18, 0.05, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+      if (yP(x0) - 0.3 - yb > 0.8) K.boardAB(B, 'timber', V(x0, yP(x0) - 0.3, z), V(x1, yb, z), 0.18, 0.05, { tone: tone(), u0: R() * 4, v0: R() * 4 });
     }
     /* ── the stringers: five lines, in lengths of two spans, their joints staggered ── */
     const nJ = 5, joistZ = []; for (let k = 0; k < nJ; k++) joistZ.push(-W / 2 + 0.15 + (W - 0.3) * k / (nJ - 1));
     const xEnd = head ? L + Lh : L;
-    joistZ.forEach((z, k) => { for (let x = -(k % 2) * sp; x < L; x += 2 * sp) { const a = Math.max(0, x), b = Math.min(L + (head ? 0.3 : 0), x + 2 * sp); if (b - a > 0.3) K.boardAB(B, 'timber', V(a, yH + jH / 2, z), V(b, yH + jH / 2, z), jH, 0.075, { tone: tone(), u0: R() * 4, v0: R() * 4 }); } });
+    joistZ.forEach((z, k) => { for (let x = -(k % 2) * sp; x < L; x += 2 * sp) { const a0 = Math.max(0, x), b0 = Math.min(L + (head ? 0.3 : 0), x + 2 * sp); for (const [a, b] of runs(a0, b0)) if (b - a > 0.3) K.boardAB(B, 'timber', V(a, yH(a) + jH / 2, z), V(b, yH(b) + jH / 2, z), jH, 0.075, { tone: tone(), u0: R() * 4, v0: R() * 4 }); } });
     /* ── the deck: boards across, a centimetre and a half apart, each its own tone, the odd one new ── */
     const plankW = 0.19, gap = 0.014;
     for (let x = 0.02; x + plankW < L; x += plankW + gap) {
       const kind = R() < 0.04 ? 'timberNew' : 'timber', L2 = W + 0.06 + (R() - 0.5) * 0.03, zc = (R() - 0.5) * 0.02, ang = (R() - 0.5) * 0.006;
-      K.boardAB(B, kind, V(x + plankW / 2 - Math.sin(ang) * L2 / 2, yJ + pT / 2, zc - L2 / 2), V(x + plankW / 2 + Math.sin(ang) * L2 / 2, yJ + pT / 2 + (R() - 0.5) * 0.004, zc + L2 / 2), pT, plankW, { tone: tone(), u0: R() * 4, v0: R() * 4, roll: 0 });
+      const yb = yJ(x + plankW / 2) + pT / 2;
+      K.boardAB(B, kind, V(x + plankW / 2 - Math.sin(ang) * L2 / 2, yb, zc - L2 / 2), V(x + plankW / 2 + Math.sin(ang) * L2 / 2, yb + (R() - 0.5) * 0.004, zc + L2 / 2), pT, plankW, { tone: tone(), u0: R() * 4, v0: R() * 4, roll: 0 });
     }
     /* (kerbs along both edges, on the boards) */
-    for (const z of [-W / 2 + 0.05, W / 2 - 0.05]) for (let x = 0; x < L - 0.1; x += 6) K.boardAB(B, 'timber', V(x, deck + 0.05, z), V(Math.min(L, x + 6), deck + 0.05, z), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+    for (const z of [-W / 2 + 0.05, W / 2 - 0.05]) for (let x = 0; x < L - 0.1; x += 6) for (const [a, b] of runs(x, Math.min(L, x + 6))) K.boardAB(B, 'timber', V(a, dk(a) + 0.05, z), V(b, dk(b) + 0.05, z), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
     /* ── the railing: a post at every bent and halfway between, outside the stringers; a mid rail and a handrail ── */
     const rail = (x0, x1, z, side) => {
-      for (let x = x0; x <= x1 + 1e-6; x += sp / 2) K.boardAB(B, 'timber', V(x, yH - 0.25, z + side * 0.06), V(x, deck + 1.02, z + side * 0.06), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
-      for (let x = x0; x < x1 - 0.05; x += 6) { const b = Math.min(x1, x + 6);
-        K.boardAB(B, 'timber', V(x, deck + 1.05, z + side * 0.06), V(b, deck + 1.05, z + side * 0.06), 0.05, 0.15, { tone: tone(), u0: R() * 4, v0: R() * 4 });
-        K.boardAB(B, 'timber', V(x, deck + 0.52, z + side * 0.12), V(b, deck + 0.52, z + side * 0.12), 0.1, 0.04, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
+      for (let x = x0; x <= x1 + 1e-6; x += sp / 2) K.boardAB(B, 'timber', V(x, Math.max(yH(x) - 0.25, foot - 0.4), z + side * 0.06), V(x, dk(x) + 1.02, z + side * 0.06), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+      for (let x = x0; x < x1 - 0.05; x += 6) for (const [a, b] of runs(x, Math.min(x1, x + 6))) {
+        K.boardAB(B, 'timber', V(a, dk(a) + 1.05, z + side * 0.06), V(b, dk(b) + 1.05, z + side * 0.06), 0.05, 0.15, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+        K.boardAB(B, 'timber', V(a, dk(a) + 0.52, z + side * 0.12), V(b, dk(b) + 0.52, z + side * 0.12), 0.1, 0.04, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
     };
     rail(0, L, -W / 2, -1); rail(0, L, W / 2, 1);
 
     /* ── the head ── */
     if (head) {
       const x0 = L, x1 = L + Lh, zh = Wh / 2, hx = [x0, x0 + Lh / 2, x1], hz = [-zh + 0.12, 0, zh - 0.12];
-      for (const x of hx) { for (const z of hz) pileBands(B, x + (R() - 0.5) * 0.04, z + (R() - 0.5) * 0.04, 0.14 + 0.015 * R(), bed(x) - 1.2, yP + 0.02, R);
-        K.boardAB(B, 'timber', V(x, yP + hH / 2, -zh - 0.15), V(x, yP + hH / 2, zh + 0.15), hH, 0.16, { tone: tone(), u0: R() * 4, v0: R() * 4 });
-        const yb = Math.max(bed(x) + 0.25, -0.2), yt = yP - 0.25; if (yt - yb > 0.9) for (const [za, zb] of [[hz[0], hz[1]], [hz[1], hz[0]], [hz[1], hz[2]], [hz[2], hz[1]]]) K.boardAB(B, 'timber', V(x + 0.17, yt, za), V(x + 0.17, yb, zb), 0.05, 0.18, { tone: tone(), u0: R() * 4, v0: R() * 4, up: V(1, 0, 0) }); }
-      for (let k = 0; k < 9; k++) { const z = -zh + 0.15 + (Wh - 0.3) * k / 8; K.boardAB(B, 'timber', V(x0 - 0.3, yH + jH / 2, z), V(x1 + 0.1, yH + jH / 2, z), jH, 0.075, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
+      const yPh = yP(L), yHh = yH(L), yJh = yJ(L);
+      for (const x of hx) { for (const z of hz) pileBands(B, x + (R() - 0.5) * 0.04, z + (R() - 0.5) * 0.04, 0.14 + 0.015 * R(), bed(x) - 1.2, yPh + 0.02, R);
+        K.boardAB(B, 'timber', V(x, yPh + hH / 2, -zh - 0.15), V(x, yPh + hH / 2, zh + 0.15), hH, 0.16, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+        const yb = Math.max(bed(x) + 0.25, -0.2), yt = yPh - 0.25; if (yt - yb > 0.9) for (const [za, zb] of [[hz[0], hz[1]], [hz[1], hz[0]], [hz[1], hz[2]], [hz[2], hz[1]]]) K.boardAB(B, 'timber', V(x + 0.17, yt, za), V(x + 0.17, yb, zb), 0.05, 0.18, { tone: tone(), u0: R() * 4, v0: R() * 4, up: V(1, 0, 0) }); }
+      for (let k = 0; k < 9; k++) { const z = -zh + 0.15 + (Wh - 0.3) * k / 8; K.boardAB(B, 'timber', V(x0 - 0.3, yHh + jH / 2, z), V(x1 + 0.1, yHh + jH / 2, z), jH, 0.075, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
       for (let x = x0 + 0.02; x + plankW < x1 + 0.08; x += plankW + gap) { const kind = R() < 0.05 ? 'timberNew' : 'timber', L2 = Wh + 0.06 + (R() - 0.5) * 0.03;
-        K.boardAB(B, kind, V(x + plankW / 2, yJ + pT / 2, -L2 / 2), V(x + plankW / 2, yJ + pT / 2 + (R() - 0.5) * 0.004, L2 / 2), pT, plankW, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
+        K.boardAB(B, kind, V(x + plankW / 2, yJh + pT / 2, -L2 / 2), V(x + plankW / 2, yJh + pT / 2 + (R() - 0.5) * 0.004, L2 / 2), pT, plankW, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
       /* (its railing round the three sea sides, a gap on the north side for the ladder) */
-      const railZ = (z, xa, xb, side) => { for (let x = xa; x <= xb + 1e-6; x += (xb - xa) / Math.max(1, Math.round((xb - xa) / 1.5))) K.boardAB(B, 'timber', V(x, yH - 0.25, z + side * 0.06), V(x, deck + 1.02, z + side * 0.06), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+      const railZ = (z, xa, xb, side) => { for (let x = xa; x <= xb + 1e-6; x += (xb - xa) / Math.max(1, Math.round((xb - xa) / 1.5))) K.boardAB(B, 'timber', V(x, yHh - 0.25, z + side * 0.06), V(x, deck + 1.02, z + side * 0.06), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
         K.boardAB(B, 'timber', V(xa, deck + 1.05, z + side * 0.06), V(xb, deck + 1.05, z + side * 0.06), 0.05, 0.15, { tone: tone(), u0: R() * 4, v0: R() * 4 }); K.boardAB(B, 'timber', V(xa, deck + 0.52, z + side * 0.12), V(xb, deck + 0.52, z + side * 0.12), 0.1, 0.04, { tone: tone(), u0: R() * 4, v0: R() * 4 }); };
       railZ(-zh, x0, x1, -1); railZ(zh, x0 + 2.0, x1, 1);
-      for (let z = -zh; z <= zh + 1e-6; z += Wh / 4) K.boardAB(B, 'timber', V(x1 + 0.06, yH - 0.25, z), V(x1 + 0.06, deck + 1.02, z), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+      for (let z = -zh; z <= zh + 1e-6; z += Wh / 4) K.boardAB(B, 'timber', V(x1 + 0.06, yHh - 0.25, z), V(x1 + 0.06, deck + 1.02, z), 0.1, 0.1, { tone: tone(), u0: R() * 4, v0: R() * 4 });
       K.boardAB(B, 'timber', V(x1 + 0.06, deck + 1.05, -zh), V(x1 + 0.06, deck + 1.05, zh), 0.05, 0.15, { tone: tone(), u0: R() * 4, v0: R() * 4 });
       K.boardAB(B, 'timber', V(x1 + 0.12, deck + 0.52, -zh), V(x1 + 0.12, deck + 0.52, zh), 0.1, 0.04, { tone: tone(), u0: R() * 4, v0: R() * 4 });
       /* (the shelter: four posts, a beam round their tops, a gable roof of green iron, benches between the posts) */
@@ -122,7 +131,7 @@
         for (const x of [sx0 + 0.4, (sx0 + sx1) / 2, sx1 - 0.4]) K.boardAB(B, 'timber', V(x, deck, z), V(x, deck + 0.425, z), 0.08, 0.08, { tone: tone(), u0: R() * 4, v0: R() * 4 }); }
       /* (bollards at the corners: thick posts, a cap on each, a rope worn round one) */
       for (const [x, z] of [[x1 - 0.25, -zh + 0.25], [x1 - 0.25, zh - 0.25], [x0 + 0.3, -zh + 0.25]]) {
-        B.add('pile', K.pile(0.12, yH, deck + 0.42, { seed: Math.floor(R() * 99) }), K.M(x, 0, z));
+        B.add('pile', K.pile(0.12, yHh, deck + 0.42, { seed: Math.floor(R() * 99) }), K.M(x, 0, z));
         B.add('pile', K.pile(0.155, deck + 0.42, deck + 0.48, { seed: 3 }), K.M(x, 0, z));
       }
       /* (fenders on the seaward face) */
@@ -142,10 +151,10 @@
         const panel = new T.Mesh(new T.BoxGeometry(0.42, 0.025, 0.3), [Mats.lit({ color: new T.Color(0.3, 0.3, 0.3), metalness: 0.5, roughness: 0.4 }), Mats.lit({ color: new T.Color(0.3, 0.3, 0.3) }), Mats.lit({ color: new T.Color(0.02, 0.03, 0.06), roughness: 0.15, metalness: 0.3 }), Mats.lit({ color: new T.Color(0.3, 0.3, 0.3) }), Mats.lit({ color: new T.Color(0.3, 0.3, 0.3) }), Mats.lit({ color: new T.Color(0.3, 0.3, 0.3) })]);
         panel.position.set(lx, deck + 3.4, lz); panel.rotation.z = 0.25; panel.castShadow = true; g.add(panel); }
     }
-    /* (at the shore end a step down onto the sand) */
-    K.boardAB(B, 'timber', V(-0.35, deck - 0.4, -W / 2), V(-0.35, deck - 0.4, W / 2), 0.05, 0.3, { tone: tone(), u0: R() * 4, v0: R() * 4 });
+    /* (at the shore end a step down onto the sand, unless its ramp comes down to it) */
+    if (!ramp) K.boardAB(B, 'timber', V(-0.35, dk(0) - 0.4, -W / 2), V(-0.35, dk(0) - 0.4, W / 2), 0.05, 0.3, { tone: tone(), u0: R() * 4, v0: R() * 4 });
     B.build(g);
-    g.userData.info = { len: xEnd, width: W, deck, headW: head ? Wh : W };
+    g.userData.info = { len: xEnd, width: W, deck, headW: head ? Wh : W, ramp, foot, deckAt: dk };
     return g;
   });
 })();

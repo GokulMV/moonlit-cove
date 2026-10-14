@@ -398,6 +398,8 @@ const Island = (() => {
     return clamp((a * 0.75 + b * 0.35 * sm(120, 420, dc)) * amp, -1, 1);
   }
   /* streams: from the sea up their valleys, the depth they cut (m) at their upper end, the width of the valley */
+  /* (the creek's reach, as a box round its line, out as far as its valley goes) */
+  const CREEKB = (() => { let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const p of CREEK) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); } const m = 300; return [a - m, b + m, c - m, d + m]; })();
   const STREAMS = [
     { pts: [[-262, -6], [-318, 140], [-352, 300], [-342, 470], [-300, 610]], cut: 34, w: 95 },
     { pts: [[-58, 1384], [-74, 1200], [-62, 1010], [-92, 850]], cut: 30, w: 90 },
@@ -442,11 +444,18 @@ const Island = (() => {
       const qq = ds / w, depth = S.cut * (0.25 + 0.75 * ts), v = 1 - qq * qq;
       H -= Math.min(H * 0.8, depth * v * v * (1 - 0.5 * sm(0.7, 1, ts)));
     }
+    /* the creek's own valley: low ground either side of it, the mangroves' mud and then the forest's floor, rising gently
+       to the hills a couple of hundred metres off (a tidal creek winds through the low ground it has filled; it cuts no
+       gorge) */
+    if (x > CREEKB[0] && x < CREEKB[1] && z > CREEKB[2] && z < CREEKB[3]) {
+      const st = onLine(CREEK, x, z), hw = st[2], f = 0.04 + 0.96 * sm(hw + 6, hw + 230, st[0]) ** 1.3;
+      H *= f;
+    }
     /* down to the coast. A beach is level sand from the water up to the forest and some metres into it (the sand is the
        ground the sea is drawn with, at the sea's own level: the land stays just under it there, as the coast's hills
        always did); the mud of the mangroves level too; behind, the land rises as steeply as the kind of shore says, and
        a cliff stands straight up out of the water */
-    const W = sh.W, flat = W + 9 * sh.sand + 6 * sh.mangrove + 1.5 * sh.rock, slopeL = sh.sand * 60 + sh.rock * 44 + sh.cliff * (7 + 10 * vn1(u / 31, 87)) + sh.mangrove * 80;
+    const W = sh.W, flat = W + 9 * sh.sand + 12 * sh.mangrove + 1.5 * sh.rock, slopeL = sh.sand * 60 + sh.rock * 44 + sh.cliff * (7 + 10 * vn1(u / 31, 87)) + sh.mangrove * 110;
     let k = sm(flat, flat + slopeL, d);
     /* (a cliff: the lower part of the land's rise, sheer, in ledges, each step of rock a little back from the one below;
        above it the slope goes on up, less steeply, under the forest) */
