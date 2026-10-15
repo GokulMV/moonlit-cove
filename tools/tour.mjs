@@ -49,7 +49,7 @@ try {
       /* (where to start may be worked out in the page: { js: "…returns {x, z, heading}…" }) */
       const w = s.walk.js ? Object.assign({}, s.walk, await page.evaluate(s.walk.js)) : s.walk;
       await page.evaluate(() => { const C = window.__cove; if (!C.wk.on) document.getElementById('bWalk').click(); });
-      await page.waitForFunction(() => window.__cove.wk.camK >= 1, null, { timeout: 120000 });
+      await page.waitForFunction(() => window.__cove.wk.camK >= 1, null, { timeout: 900000, polling: 2000 });
       await page.evaluate(w => { const c = window.__cove, k = c.wk; if (!!k.auto !== !!w.auto) document.getElementById('bWalkAuto').click(); k.x = w.x; k.z = w.z; k.h = k.hT = Math.atan2(Math.cos(w.heading * Math.PI / 180), Math.sin(w.heading * Math.PI / 180)); }, w);   /* (facing (-sin h, -cos h): heading 0 north, 90 east) */
       if (!w.auto) await page.keyboard.down('w');
       const until = Date.now() + (w.secs || 4) * 1000; while (Date.now() < until) await frames(2);

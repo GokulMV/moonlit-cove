@@ -980,7 +980,11 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     { const TD = o.tide === false ? { dz: 0, hi: 0 } : S.tide; Layout.tide.dz = TD.dz; Layout.tide.hi = TD.hi; Mats.U.uTideZ.value = TD.dz; if (gU) gU.uTideHi.value = TD.hi; }
     /* under a deck of cloud the sun no longer lights the scene directly: its light dims and its shadows soften away */
     { const ov = o.sky ? Math.min(1, Math.max(o.sky.stratus, o.sky.storm)) : 0;
-      if (ov > 0) { const k = 1 - 0.75 * ov; S.keyCol = S.keyCol.map(v => v * k); S.shadowK *= 1 - 0.85 * ov; } }
+      if (ov > 0) { const k = 1 - 0.75 * ov; S.keyCol = S.keyCol.map(v => v * k); S.shadowK *= 1 - 0.85 * ov; }
+      /* (snow lying brightens a grey day: the sky's light comes back up off it, and the eye, as on any snowy day, opens up
+         for the soft light rather than staying stopped down for the sun) */
+      const sk = Math.min(1, o.snow || 0);
+      if (sk > 0.01 && Array.isArray(S.amb)) { S.amb = S.amb.map(v => v * (1 + 0.45 * sk)); S.exposure = Math.min(16, S.exposure * (1 + 0.55 * sk * ov * S.day)); } }
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
@@ -1044,7 +1048,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     /* the snow lying (how much, how deep) for every shader that lays it, and the flakes in the air */
     Mats.U.uSnow.value.set(o.snow || 0, o.snowD || 0, o.snowFall || 0, 0);
     if (snowFx) { const now = performance.now() / 1000, dtS = snowT === null ? 0 : Math.max(0, Math.min(0.1, now - snowT)); snowT = now; snowFx.update(dtS, camera.position, camera, { fall: o.snowFall || 0, wind: o.wind ?? 1, height: post.height() }); if (snowmen) snowmen.update(dtS, o.snowD || 0); }
-    if (grass) grass.update(camera.position, { ground: world ? world.land(camera.position.x, camera.position.z) : 0, wind: o.wind ?? 1, gust: Mats.U.uWindK.value.y, push: o.push || null, snow: o.snow || 0, snowD: o.snowD || 0 });
+    if (grass) grass.update(camera.position, { ground: world ? world.land(camera.position.x, camera.position.z) : 0, wind: o.wind ?? 1, gust: Mats.U.uWindK.value.y, push: o.push || null, snow: o.snow || 0, snowD: o.snowD || 0, q: o.grassQ ?? 1 });
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc); skyU.uAnti.value.set(S.anti[0], S.anti[1], S.anti[2], 0);

@@ -132,7 +132,7 @@ ${GLSL.COMMON}
 ${GLSL.ART}
 uniform vec3 uAmbF, uKeyDirT, uKeyColT;
 uniform sampler2D uLeafShM; uniform mat4 uLeafShX; uniform vec4 uLeafShA; uniform vec2 uLeafShS;
-uniform vec4 uFog, uForF;
+uniform vec4 uFog, uForF, uSnowG;
 varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vT; varying float vAO; varying float vSnow;
 vec3 fogIt(vec3 c, vec3 wp){
   float d = distance(wp, cameraPosition);
@@ -154,7 +154,8 @@ void main(){
   float ndl = dot(n, uKeyDirT), sh = shadowHere(vWPos)*isleShAt(vWPos);
   vec3 alb = mix(vC, vec3(0.86, 0.89, 0.93), vSnow);
   /* (a blade is thin: lit from either side, the light from behind coming through it yellower; a sheen along it) */
-  vec3 L = uAmbF*isleSky3(vWPos)*(0.6 + 0.4*max(n.y, 0.0))*vAO + uKeyColT*sh*(0.25 + max(ndl, 0.0)*0.75 + max(-ndl, 0.0)*0.6*vec3(0.9, 1.05, 0.45)*(1.0 - vSnow))*(0.45 + 0.55*vAO);
+  /* (and in snow, the light off the snow all round it, from below as much as above) */
+  vec3 L = uAmbF*isleSky3(vWPos)*((0.6 + 0.4*max(n.y, 0.0))*vAO + 0.55*uSnowG.x) + uKeyColT*sh*(0.25 + max(ndl, 0.0)*0.75 + max(-ndl, 0.0)*0.6*vec3(0.9, 1.05, 0.45)*(1.0 - vSnow))*(0.45 + 0.55*vAO);
   vec3 c = alb*L + uKeyColT*sh*0.22*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 20.0)*vAO*(1.0 - 0.6*vSnow);
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || torchNear(vWPos)) c += alb*artLight(vWPos, n)*vAO;
   gl_FragColor = vec4(fogIt(c, vWPos), 1.0);
@@ -191,7 +192,7 @@ void main(){
       if (has.size > 20000) has.clear();
       has.set(key, v); return v;
     }
-    let lastX = 1e9, lastZ = 1e9;
+    let lastX = 1e9, lastZ = 1e9, lastQ = 1;
     function update(cam, o2 = {}) {
       const cx = cam.x, cz = cam.z, high = cam.y - Math.max(0, o2.ground ?? 0);
       group.visible = high < 60;
@@ -199,13 +200,15 @@ void main(){
       U.uGW.value.set(Layout.wind[0], Layout.wind[1], o2.wind ?? 1, o2.gust ?? 0);
       if (o2.push) U.uPush.value.set(o2.push[0], 0, o2.push[1], 1); else U.uPush.value.w = 0;
       U.uSnowG.value.set(o2.snow || 0, o2.snowD || 0, 0, 0);
-      if (Math.hypot(cx - lastX, cz - lastZ) < 1.5) return;
-      lastX = cx; lastZ = cz;
-      const n = levels.map(() => 0), g0x = Math.floor((cx - REACH) / PATCH), g1x = Math.floor((cx + REACH) / PATCH), g0z = Math.floor((cz - REACH) / PATCH), g1z = Math.floor((cz + REACH) / PATCH);
+      /* (on a machine that is struggling, the levels drawn nearer: q from the frame-rate ladder, 0.55..1) */
+      const qk = Math.max(0.5, Math.min(1, o2.q ?? 1)), D = LODS.map(L => L.d * qk), RQ = REACH * qk;
+      if (Math.hypot(cx - lastX, cz - lastZ) < 1.5 && qk === lastQ) return;
+      lastX = cx; lastZ = cz; lastQ = qk;
+      const n = levels.map(() => 0), g0x = Math.floor((cx - RQ) / PATCH), g1x = Math.floor((cx + RQ) / PATCH), g0z = Math.floor((cz - RQ) / PATCH), g1z = Math.floor((cz + RQ) / PATCH);
       for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
         const px = gx * PATCH, pz = gz * PATCH, d = Math.hypot(px + PATCH / 2 - cx, pz + PATCH / 2 - cz);
-        if (d > REACH + PATCH * 0.7) continue;
-        const L = LODS.findIndex(q => d < q.d), li = L < 0 ? 2 : L, lv = levels[li];
+        if (d > RQ + PATCH * 0.7) continue;
+        const L = D.findIndex(q => d < q), li = L < 0 ? 2 : L, lv = levels[li];
         if (n[li] >= lv.cap || !patchHas(px, pz)) continue;
         lv.A.set([px, pz, li], n[li] * 3); n[li]++;
       }

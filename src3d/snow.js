@@ -10,7 +10,9 @@
    ───────────────────────────────────────────────────────────── */
 const Snow = (() => {
   const T = THREE;
-  const N = 14000, BOX = [64, 30, 64];
+  /* (two layers of flakes: a dense one close round the eye, where each flake is seen, and a sparser, wider one beyond it,
+     the snow's grey veil in the distance) */
+  const LAYERS = [{ n: 16000, box: [18, 12, 18], seed: 9091 }, { n: 14000, box: [64, 30, 64], seed: 9097 }];
   const VS = `
 ${GLSL.ISLE_SH}
 attribute vec4 aSeed;
@@ -46,7 +48,8 @@ void main(){
   /* (its quad: as big as the flake, never less than a pixel and a half across, fading a little as it shrinks below
      that; turned to the eye) */
   float minS = 1.5*uPx*d, s = max(size, minS);
-  vA = on*smoothstep(0.4, 2.0, d)*(1.0 - smoothstep(BOXR*0.8, BOXR, length(p.xz - uCam.xz)))*clamp(size/minS, 0.25, 1.0);
+  float rh = length(p.xz - uCam.xz);
+  vA = on*smoothstep(0.4, 2.0, d)*(1.0 - smoothstep(BOXR*0.8, BOXR, rh))*smoothstep(NEARR, NEARR + 1.5, rh)*clamp(size/minS, 0.25, 1.0);
   vQ = position.xy; vW = p;
   vp.xy += position.xy*s;
   gl_Position = projectionMatrix*vp;
@@ -64,23 +67,30 @@ void main(){
   gl_FragColor = vec4(c, a);
 }`;
   function build(root) {
-    const q = new T.PlaneGeometry(1, 1), g = new T.InstancedBufferGeometry();
-    g.setIndex(q.index); g.setAttribute('position', q.attributes.position); g.setAttribute('uv', q.attributes.uv);
-    const S = new Float32Array(N * 4), r = Textures.rng(9091); for (let i = 0; i < S.length; i++) S[i] = r();
-    g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 4)); g.instanceCount = N; g.boundingSphere = new T.Sphere(new T.Vector3(), 1e9);
-    const U = Object.assign({}, Mats.shadeU(), { uTime: { value: 0 }, uFall: { value: 0 }, uBox: { value: new T.Vector3(...BOX) }, uCam: { value: new T.Vector3() }, uWindS: { value: new T.Vector4(0.55, -0.83, 0.4, 0.2) }, uPx: { value: 0.002 },
-      uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uHutB: Mats.U.uHutB, uHutS: Mats.U.uHutS });
-    const mat = new T.ShaderMaterial({ uniforms: U, vertexShader: VS.replace(/BOXR/g, (BOX[0] / 2).toFixed(1)), fragmentShader: FS, transparent: true, depthWrite: false });
-    const m = new T.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 8; m.visible = false; m.name = 'snow'; root.add(m);
+    const q = new T.PlaneGeometry(1, 1);
+    const shared = { uTime: { value: 0 }, uFall: { value: 0 }, uCam: { value: new T.Vector3() }, uWindS: { value: new T.Vector4(0.55, -0.83, 0.4, 0.2) }, uPx: { value: 0.002 } };
+    const meshes = LAYERS.map((L, li) => {
+      const g = new T.InstancedBufferGeometry();
+      g.setIndex(q.index); g.setAttribute('position', q.attributes.position); g.setAttribute('uv', q.attributes.uv);
+      const S = new Float32Array(L.n * 4), r = Textures.rng(L.seed); for (let i = 0; i < S.length; i++) S[i] = r();
+      g.setAttribute('aSeed', new T.InstancedBufferAttribute(S, 4)); g.instanceCount = L.n; g.boundingSphere = new T.Sphere(new T.Vector3(), 1e9);
+      const U = Object.assign({}, Mats.shadeU(), shared, { uBox: { value: new T.Vector3(...L.box) },
+        uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uHutB: Mats.U.uHutB, uHutS: Mats.U.uHutS });
+      /* (the near layer's flakes kept out of the far one's reach: the far layer draws only what lies beyond the near box) */
+      const vs = VS.replace(/BOXR/g, (L.box[0] / 2).toFixed(1)).replace(/NEARR/g, li ? (LAYERS[0].box[0] / 2 - 1).toFixed(1) : '-10.0');
+      const mat = new T.ShaderMaterial({ uniforms: U, vertexShader: vs, fragmentShader: FS, transparent: true, depthWrite: false });
+      const m = new T.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 8; m.visible = false; m.name = 'snow' + li; root.add(m);
+      return m;
+    });
     let t = 0;
     function update(dt, cam, camera, o = {}) {
-      const fall = o.fall || 0; m.visible = fall > 0.01;
-      if (!m.visible) return;
-      t += dt; U.uTime.value = t; U.uFall.value = fall; U.uCam.value.copy(cam);
-      const w = o.wind ?? 1; U.uWindS.value.set(Layout.wind[0], Layout.wind[1], 0.25 + 0.6 * (w - 1), 0.15 + 0.35 * (w - 1));
-      if (camera) U.uPx.value = 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, o.height || 900);
+      const fall = o.fall || 0, on = fall > 0.01; meshes.forEach(m => { m.visible = on; });
+      if (!on) return;
+      t += dt; shared.uTime.value = t; shared.uFall.value = fall; shared.uCam.value.copy(cam);
+      const w = o.wind ?? 1; shared.uWindS.value.set(Layout.wind[0], Layout.wind[1], 0.25 + 0.6 * (w - 1), 0.15 + 0.35 * (w - 1));
+      if (camera) shared.uPx.value = 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, o.height || 900);
     }
-    return { update, mesh: m };
+    return { update, mesh: meshes[0], meshes };
   }
   return { build };
 })();

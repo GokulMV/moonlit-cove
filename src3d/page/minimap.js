@@ -96,8 +96,15 @@ const Minimap = (() => {
       const h = plan.hut, [u, v] = P(h.x, h.z);
       cx.save(); cx.translate(u, v); cx.rotate(-(h.yaw || 0)); cx.fillStyle = KEY.hut; cx.strokeStyle = 'rgba(20, 20, 18, 0.8)'; cx.lineWidth = 1; cx.fillRect(-2.6, -2, 5.2, 4); cx.strokeRect(-2.6, -2, 5.2, 4); cx.restore();
     }
+    /* the beach huts (huts.js), each a little roof; the work hut named */
+    const HU = Engine.huts;
+    if (HU) for (const h of HU.huts) {
+      const [u, v] = P(h.p.x, h.p.z);
+      cx.save(); cx.translate(u, v); cx.rotate(-h.p.ry); cx.fillStyle = KEY.hut; cx.strokeStyle = 'rgba(20, 20, 18, 0.85)'; cx.lineWidth = 1; cx.fillRect(-3, -2.4, 6, 4.8); cx.strokeRect(-3, -2.4, 6, 4.8); cx.restore();
+    }
     /* (the places to name on the whole map) */
     const labels = [['Camp', Layout.camp.x, Layout.camp.z, 'camp']];
+    if (HU) for (const h of HU.huts) if (h.p.kind === 'work') labels.push(['Work hut', h.p.x, h.p.z, 'below']);
     if (plan && plan.jetty) labels.push(['Jetty', plan.jetty.x, plan.jetty.z]);
     if (plan && plan.hut) labels.push(['Ranger hut', plan.hut.x, plan.hut.z]);
     for (const t of trails) if (t.n > 10) { const i = Math.floor(t.n * 0.5); labels.push([t.name, t.X[i], t.Z[i], 'trail']); }
@@ -183,7 +190,7 @@ const Minimap = (() => {
   /* the names on the whole map */
   function names(c, V) {
     if (!base || !base.labels) { const [cu, cv2] = toMap(V, Layout.camp.x, Layout.camp.z); label(c, V, 'Camp', cu, cv2 - 12 * V.dpr, true); return; }
-    for (const [t, x, z, kind] of base.labels) { const [u, v] = toMap(V, x, z); label(c, V, t, u, v - (kind === 'trail' ? 0 : 12 * V.dpr), kind === 'camp', kind === 'trail'); }
+    for (const [t, x, z, kind] of base.labels) { const [u, v] = toMap(V, x, z); label(c, V, t, u, v + (kind === 'trail' ? 0 : kind === 'below' ? 13 * V.dpr : -12 * V.dpr), kind === 'camp', kind === 'trail'); }
   }
   function label(c, V, t, u, v, strong, small) {
     c.font = `${small ? 500 : 600} ${(small ? 10.5 : 12) * V.dpr}px 'JetBrains Mono', ui-monospace, monospace`; c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -257,7 +264,7 @@ const Minimap = (() => {
     btn = document.getElementById('map'); cv = document.getElementById('mapC'); g = cv.getContext('2d');
     dlg = document.getElementById('mapBig'); bcv = document.getElementById('mapBC'); bg = bcv.getContext('2d');
     document.getElementById('mbTitle').textContent = isle ? 'The island' : 'The coast';
-    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Beach', rgb(COL.sand), 'bar'], ['Forest', rgb(COL.forest), 'bar']] : [['Headland', rgb(COL.rock), 'bar'], ['Beach', rgb(COL.sand), 'bar']]);
+    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Huts', KEY.hut, 'bar'], ['Beach', rgb(COL.sand), 'bar'], ['Forest', rgb(COL.forest), 'bar']] : [['Beach', rgb(COL.sand), 'bar']]);
     document.getElementById('mbKey').innerHTML = key.map(([t, c, s]) => `<li><i class="${s}" style="--c:${c}"></i>${t}</li>`).join('');
     btn.addEventListener('click', () => setOpen(!open));
     document.getElementById('mbClose').addEventListener('click', () => setOpen(false));

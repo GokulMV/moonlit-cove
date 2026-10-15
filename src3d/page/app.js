@@ -446,7 +446,7 @@
     storm: { cirrus: 0, alto: 0.05, cumulus: 0.55, stratus: 1, storm: 1, rain: 1, snow: 0 },
     /* (snow on a tropical island: as a dream has it. A soft grey sky, flakes on the wind, the beach and the trees going
        white; deep enough, a snowman) */
-    snow: { cirrus: 0, alto: 0.25, cumulus: 0.4, stratus: 0.95, storm: 0, rain: 0, snow: 1 }
+    snow: { cirrus: 0, alto: 0.3, cumulus: 0.3, stratus: 0.8, storm: 0, rain: 0, snow: 1 }
   };
   /* (and now and then, by itself, snow) */
   const AUTO = ['puffy', 'wispy', 'mackerel', 'clear', 'puffy', 'mackerel', 'wispy', 'overcast', 'snow'];
@@ -1906,7 +1906,7 @@
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     /* (the sun and moon swing over to the other path in a second or so, rather than jumping) */
     st.frontK += ((st.skyPath === 'front' ? 1 : 0) - st.frontK) * (1 - Math.exp(-dtR / 0.45)); if (Math.abs(st.frontK - (st.skyPath === 'front' ? 1 : 0)) < 1e-3) st.frontK = st.skyPath === 'front' ? 1 : 0;
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: MS[Math.min(st.rsI, msTop())] || 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: MS[Math.min(st.rsI, msTop())] || 0, grassQ: 0.55 + 0.45 * Math.min(1, st.rsI / (RS.length - 2)), fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1), forestFog: st.forFs = (st.forFs || 0) + ((st.forF || 0) - (st.forFs || 0)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.2)),
       push: wk.on ? [wk.x, wk.z] : null,
