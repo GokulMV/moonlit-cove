@@ -994,15 +994,16 @@ Wv waves(float s, float a, float t, vec2 p, vec4 k1, vec4 k2, float lg){
    dark down into the gaps between it and the next): (its hash, its hash, how far inside it from the gap, how far from its
    middle), the cells a little irregular */
 vec2 pbH(vec2 p){ p = mod(p, 1024.0); vec3 q = fract(vec3(p.xyx)*vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz)*q.zy); }
-vec4 pebbles(vec2 p){
-  vec2 g = floor(p), f = p - g; float d1 = 8.0, d2 = 8.0; vec2 h1 = vec2(0.0);
+vec4 pebbles(vec2 p, out vec2 rv){
+  vec2 g = floor(p), f = p - g; float d1 = 8.0, d2 = 8.0; vec2 h1 = vec2(0.0); rv = vec2(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
     vec2 o = vec2(float(i), float(j)), h = pbH(g + o), r = o + 0.12 + 0.76*h - f; float d = dot(r, r);
-    if (d < d1){ d2 = d1; d1 = d; h1 = h; } else if (d < d2) d2 = d;
+    if (d < d1){ d2 = d1; d1 = d; h1 = h; rv = r; } else if (d < d2) d2 = d;
   }
   d1 = sqrt(d1); d2 = sqrt(d2);
   return vec4(h1, d2 - d1, d1);
 }
+
 /* (one texel's say, lit or not; and between four of them, weighed by how near each is, so the shadow's edge is a
    smooth ramp across a texel instead of the texels' own stairs) */
 float shT(vec2 uv, float z){ return step(z, unpackRGBAToDepth(texture2D(uShadowMap, uv))); }
@@ -1158,20 +1159,29 @@ void main(){
       if (ns > 0.01){
         vec4 pb = tS(p*1.9, 1.3);
         vec3 shing = vec3(0.31, 0.29, 0.26)*(0.66 + 0.5*nb.g)*(0.8 + 0.4*pb.a)*mix(vec3(1.0), vec3(1.08, 0.98, 0.86), smoothstep(0.4, 0.8, nm.b));
+        /* (seen from further off: drifts of coarse sand among the stones, paler; the stones darker where they lie thick) */
+        float csF = smoothstep(0.55, 0.7, nb.b*0.6 + nm.r*0.4);
+        shing = mix(shing*(0.82 + 0.3*smoothstep(0.3, 0.7, nm.g)), vec3(0.42, 0.38, 0.31)*(0.9 + 0.15*nb.r), csF*0.8);
         /* (near the eye, its stones themselves: cobbles and pebbles, gravel between them, here and there a patch of coarse
            sand; further off their average) */
         float pk = smoothstep(26.0, 7.0, dist);
         if (pk > 0.0){
-          vec4 P1 = pebbles(p*9.0), P2 = pebbles(p*23.0 + 7.3);
+          /* (each stone round, lying a little apart from the next, gravel and coarse sand between them; domed, so the light
+             falls on its sunward side, and it is dark at its foot) */
+          vec2 r1, r2; vec4 P1 = pebbles(p*9.0, r1), P2 = pebbles(p*23.0 + 7.3, r2);
+          float R1 = 0.32 + 0.16*P1.y, R2 = 0.34 + 0.14*P2.y, big = step(0.3, pbH(floor(p*9.0) + 3.7).x);
+          float on1 = smoothstep(R1, R1 - 0.07, P1.w)*big, on2 = smoothstep(R2, R2 - 0.09, P2.w)*(1.0 - on1);
+          float h1 = sqrt(max(1.0 - P1.w*P1.w/(R1*R1), 0.0)), h2 = sqrt(max(1.0 - P2.w*P2.w/(R2*R2), 0.0));
+          vec2 t1 = -r1*0.5/(R1*R1*max(h1, 0.3)), t2 = -r2*0.45/(R2*R2*max(h2, 0.3));
           vec3 c1 = mix(vec3(0.3, 0.285, 0.26), vec3(0.4, 0.355, 0.3), P1.x)*(0.8 + 0.4*P1.y);
           c1 = mix(c1, vec3(0.6, 0.58, 0.54), step(0.9, P1.y)*0.8); c1 = mix(c1, vec3(0.15, 0.145, 0.135), step(0.82, P1.x)*0.7);
-          float big = step(0.35, pbH(floor(p*9.0) + 3.7).x);
           vec3 c2 = mix(vec3(0.34, 0.32, 0.29), vec3(0.45, 0.41, 0.35), P2.x)*(0.78 + 0.44*P2.y);
-          float e1 = smoothstep(0.0, 0.16, P1.z), e2 = smoothstep(0.0, 0.2, P2.z);
-          /* (each stone rounded: pale on its crown, darker down its sides into the gap) */
-          vec3 st = mix(c2*(0.6 + 0.4*e2)*(1.08 - 0.25*P2.w), c1*(0.55 + 0.45*e1)*(1.18 - 0.42*P1.w*P1.w), big*e1);
+          vec3 sg = vec3(0.38, 0.35, 0.3)*(0.8 + 0.3*grain)*(0.72 + 0.28*smoothstep(R2 + 0.02, R2 + 0.2, P2.w));
+          vec3 st = mix(mix(sg, c2, on2), c1, on1);
           float cs = smoothstep(0.55, 0.7, nb.b*0.6 + nm.r*0.4);
           st = mix(st, vec3(0.42, 0.38, 0.31)*(0.86 + 0.24*grain), cs*0.85);
+          vec2 tl = (t1*on1 + t2*on2)*(1.0 - cs*0.85)*pk*ns;
+          N = normalize(N + vec3(tl.x, 0.0, tl.y));
           shing = mix(shing, st, pk);
         }
         vec3 mud = vec3(0.105, 0.092, 0.07)*(0.82 + 0.3*nb.r)*(0.9 + 0.2*nm.b);
