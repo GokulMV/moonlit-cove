@@ -132,9 +132,10 @@ const Layout = (() => {
      shoreMeanZ where it does at the mean of the tide, which is what the coast's things are laid out from */
   const tide = { dz: 0, hi: 0 };
 
-  /* ── the round island (island.js), when the page is asked for it (?round): the camp's beach is its east shore, the camp's
-     own as it always was, and the rest of the beach goes on round the island. (Built the first time anything asks) ── */
-  const isle = typeof window !== 'undefined' && !!(window.__coveIsle || (window.location && /[?&](round|island)\b/.test(window.location.search)));
+  /* ── the round island (island.js), the cove's world: the camp's beach is its east shore, the camp's own as it always was,
+     and the rest of the beach goes on round the island. The endless coast it was before is still there, asked for
+     (?classic). (Built the first time anything asks) ── */
+  const isle = typeof window !== 'undefined' && (window.__coveIsle !== undefined ? !!window.__coveIsle : !(window.location && /[?&](classic|coast)\b/.test(window.location.search)));
   let isleUp = false;
   const ISL = () => { if (!isleUp) { Island.build(); isleUp = true; } return Island; };
   /* (how far up each kind of shore the tide moves the water's edge: island.js) */

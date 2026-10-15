@@ -4,7 +4,7 @@
    node tools/nancheck.mjs [island|coast] */
 import { open } from './lib.mjs';
 const isle = (process.argv[2] || 'island') === 'island';
-const { browser, page, logs } = await open({ w: 640, h: 400, rs: 0.4, hour: 10, dtCap: 0.25, query: isle ? '?island' : '' });
+const { browser, page, logs } = await open({ w: 640, h: 400, rs: 0.4, hour: 10, dtCap: 0.25, query: isle ? '' : '?classic' });
 try {
   await page.waitForFunction(() => window.__cove.st.camT >= 1, null, { timeout: 180000 });
   const r = await page.evaluate(() => {

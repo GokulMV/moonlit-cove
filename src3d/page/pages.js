@@ -207,17 +207,22 @@ const Pages = (() => {
         items.forEach(([t, l], i) => d.box(220 + i * (w + gap), y, w, h, t, l ? [l] : [], { center: true, ts: 19, ls: 14.5 })); };
       row(178, 'PAGE', [['app.js', 'camera · input · chapters'], ['pages.js', 'typesetting'], ['content.js', 'the words']]);
       row(300, 'RUN', [['engine.js', 'render loop · post · shadows'], ['audio.js', 'Web Audio · field recordings']]);
-      row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the endless coast'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
-      row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['shacks.js', 'shacks · huts · boats']], 78);
+      if (Layout.isle) {
+        row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['island.js', 'the round island'], ['forest.js', 'the rainforest'], ['huts.js', 'the beach huts'], ['isfauna.js', 'pigs · macaques · birds']], 78);
+        row(512, '', [['grass.js', 'grass, blade by blade'], ['snow.js', 'snow · snowmen'], ['fx.js', 'fire · smoke · moths'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth']], 78);
+      } else {
+        row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the endless coast'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
+        row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['shacks.js', 'shacks · huts · boats']], 78);
+      }
       row(626, 'LOOK', [['sky.js', 'sky colours'], ['glsl.js', 'every shader'], ['mats.js', 'materials'], ['paint.js', 'painted textures'], ['textures.js', 'noise · water · sand']], 78);
-      row(738, 'FACTS', [['astro.js', 'sun & moon, after SunCalc'], ['layout.js', 'the cove in metres · the coast’s dice']], 84);
+      row(738, 'FACTS', [['astro.js', 'sun & moon, after SunCalc'], ['layout.js', Layout.isle ? 'the cove in metres · the island’s shore' : 'the cove in metres · the coast’s dice']], 84);
       for (const x of [480, 1054]) { d.arrow([[x, 262], [x, 300]], { soft: true }); d.arrow([[x, 384], [x, 422]], { soft: true }); }
       for (const x of [330, 767, 1204]) { d.arrow([[x, 590], [x, 626]], { soft: true }); }
       for (const x of [480, 1054]) d.arrow([[x, 704], [x, 738]], { soft: true });
     }, ['the page owns the camera and the input', 'the engine owns the scene and the frame', 'shaders live in one file, glsl.js', 'no framework, no bundler: one build script']],
     ['One frame, pass by pass', 'What the graphics card does, about sixty times a second.', d => {
       d.box(86, 196, 260, 168, 'SHADOWS', ['sun or moon · 2048²', 'campfire · 256²', 'string lights · 1024²']);
-      d.box(400, 196, 260, 168, 'SCENE', ['high precision', 'sea, sky, coast, camp', 'depth kept for later']);
+      d.box(400, 196, 260, 168, 'SCENE', ['high precision', Layout.isle ? 'sea, sky, island, camp' : 'sea, sky, coast, camp', 'depth kept for later']);
       d.box(714, 196, 260, 168, 'OCCLUSION', ['half size, from depth', 'blurred, edge-aware']);
       d.box(1028, 196, 286, 168, 'FIRE', ['ray-marched volume', 'half size', 'its own heat haze']);
       d.arrow([[346, 280], [400, 280]]); d.arrow([[660, 280], [714, 280]]); d.arrow([[974, 280], [1028, 280]]);
@@ -295,13 +300,50 @@ const Pages = (() => {
       d.arrow([[1070, 455], [1114, 455]]); d.arrow([[1214, 510], [1214, 600]]);
     }, ['the surf swells as its wave reaches the sand', 'crickets after dark, birds at dawn', 'the mixer switches are the five buses', 'sounds load only when sound is on']]
   ];
+  /* the island from above, in place of the coast's sheet when the world is the island: drawn from the island itself */
+  const ISLE_SHEET = ['The island, from above', () => {
+    const I = Layout.island(), Ld = I.data.line, P = Ld.P || Ld.n * Ld.ds;
+    return `A round island: ${(P / 1000).toFixed(2)} km of beach all the way round it, no rocks; the rainforest in the middle, the huts along its edge.`;
+  }, d => {
+    const a = d.a, I = Layout.island(), Ld = I.data.line, P = Ld.P || Ld.n * Ld.ds, Q = {};
+    const sh = [], fe = []; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (let u = 0; u <= P; u += 4) { const q = I.shore(u, Q); sh.push([q.x, q.z]); fe.push([q.x - q.nx * q.W, q.z - q.nz * q.W]); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); z0 = Math.min(z0, q.z); z1 = Math.max(z1, q.z); }
+    /* (north up, east to the right: as the map has it) */
+    const cx = 640, cy = 500, K = 590 / Math.max(x1 - x0, z1 - z0), xm = (x0 + x1) / 2, zm = (z0 + z1) / 2;
+    const S = ([x, z]) => [cx - (z - zm) * K, cy + (x - xm) * K];
+    const shP = sh.map(S), feP = fe.map(S);
+    /* the sea round it: its long lines, ring on ring */
+    for (const k of [1.07, 1.15, 1.24, 1.34]) d.line(shP.map(([u, v]) => [cx + (u - cx) * k, cy + (v - cy) * k]), { color: `rgba(170,205,255,${(0.3 - 0.06 * (k - 1) * 10).toFixed(2)})`, w: 1.2, dash: [10, 8] });
+    d.line(shP, { color: d.LINE, w: 2.6 }); d.line(feP, { color: d.SOFT, w: 1.6, dash: [6, 6] });
+    /* the forest, crown by crown, inside its edge */
+    const inside = (u, v) => { let c = false; for (let i = 0, j = feP.length - 1; i < feP.length; j = i++) { const [ui, vi] = feP[i], [uj, vj] = feP[j]; if ((vi > v) !== (vj > v) && u < (uj - ui) * (v - vi) / (vj - vi) + ui) c = !c; } return c; };
+    const r = rnd(11); for (let i = 0, n = 0; i < 4000 && n < 560; i++) { const u = cx + (r() - 0.5) * 600, v = cy + (r() - 0.5) * 600; if (!inside(u, v)) continue; d.circle(u, v, 2.5 + r() * 4.5, { color: 'rgba(170,205,255,0.3)', w: 1 }); n++; }
+    /* the huts at the forest's edge, the work hut among them; the camp */
+    const H = Engine.huts ? Engine.huts.huts : [];
+    for (const h of H) { const [u, v] = S([h.p.x, h.p.z]); a.save(); a.translate(u, v); a.rotate(-h.p.ry); a.fillStyle = 'rgba(214,176,126,0.9)'; a.strokeStyle = d.LINE; a.lineWidth = 1.4; a.fillRect(-7, -5, 14, 10); a.strokeRect(-7, -5, 14, 10); a.restore(); }
+    const [pu, pv] = S([Layout.camp.x, Layout.camp.z]);
+    a.fillStyle = d.TXT; a.beginPath(); a.moveTo(pu, pv - 9); a.lineTo(pu + 7, pv + 6); a.lineTo(pu - 7, pv + 6); a.closePath(); a.fill();
+    d.text('camp', pu + 14, pv + 6, { size: 15, color: d.TXT });
+    const lab = (x, y, t, tx, ty) => d.arrow([[tx, ty], [x, y]], { soft: true, label: t, at: [tx, ty - 8] });
+    const work = H.find(h => h.p.kind === 'work'), stay = H.find(h => h.p.kind !== 'work' && h.p.u < 0);
+    if (work) { const [u, v] = S([work.p.x, work.p.z]); lab(u + 6, v + 6, 'the work hut', u + 150, v + 70); }
+    if (stay) { const [u, v] = S([stay.p.x, stay.p.z]); lab(u + 6, v - 6, 'huts to stay in', u + 150, v - 70); }
+    { const q = I.shore(P * 0.62, Q), [u, v] = S([q.x, q.z]); lab(u - 4, v + 4, 'beach, all the way round', u - 120, v + 96); }
+    d.text('FOREST', cx - 40, cy + 6, { font: FN.mono(600, 16), color: d.ACC });
+    d.text('SEA', 104, 236, { font: FN.mono(600, 18), color: d.ACC });
+    /* north, and a scale */
+    d.arrow([[1240, 300], [1240, 230]], { w: 2 }); d.text('N', 1240, 216, { align: 'center', font: FN.mono(600, 18), color: d.TXT });
+    d.line([[1080, 806], [1080 + 200 * K, 806]], { color: d.TXT, w: 2 }); d.text('200 m', 1080 + 100 * K, 798, { align: 'center', size: 13, color: d.TXT });
+  }, ['drawn from the island itself, as you will find it', 'the forest grown in tiles round you as you go', 'the beach is the camp’s, all the way round', 'a hut’s door, shutters, lamps and hammock all work']];
+  if (Layout.isle) { const i = SHEETS.findIndex(s => s[0] === 'The coast, from above'); if (i >= 0) SHEETS[i] = ISLE_SHEET; }
+  const subOf = s => typeof s === 'function' ? s() : s;
   function plans(C, o = {}) {
     const T = PLANS, out = [], labels = [];
     SHEETS.forEach(([title, sub, draw, notes], si) => {
       const c = canvas(T.PW, T.PH), a = c.getContext('2d'); T.paper(a, si);
       a.fillStyle = T.accent; a.font = FN.mono(500, 20); spaced(a, `SHEET ${si + 1} — ${title}`.toUpperCase(), T.M.l, T.M.t - 6, 3, 'left');
       a.strokeStyle = 'rgba(225,238,255,0.5)'; a.lineWidth = 1.5; a.beginPath(); a.moveTo(T.M.l, T.M.t + 12); a.lineTo(T.PW - T.M.r, T.M.t + 12); a.stroke();
-      a.fillStyle = T.muted; a.font = FN.serif(400, 24, true); a.textAlign = 'left'; a.fillText(sub, T.M.l, T.M.t + 50, T.PW - T.M.l - T.M.r);
+      a.fillStyle = T.muted; a.font = FN.serif(400, 24, true); a.textAlign = 'left'; a.fillText(subOf(sub), T.M.l, T.M.t + 50, T.PW - T.M.l - T.M.r);
       draw(ink(a));
       /* notes, bottom left */
       a.fillStyle = T.muted; a.font = FN.mono(400, 15); notes.forEach((n, i) => a.fillText('· ' + n, T.M.l, T.PH - 128 + i * 22, 700));
@@ -312,7 +354,7 @@ const Pages = (() => {
       a.fillStyle = T.muted; a.font = FN.mono(400, 15); a.fillText('DRAWN BY ' + C.name.toUpperCase(), bx + 14, by + 76, split - 24); a.fillText('NOT TO SCALE', bx + split + 12, by + 76, bw - split - 20);
       out.push(c); labels.push(title);
     });
-    return { canvases: out, labels, pages: out.length, notes: SHEETS.map(s => [s[0], s[1], s[3]]) };
+    return { canvases: out, labels, pages: out.length, notes: SHEETS.map(s => [s[0], subOf(s[1]), s[3]]) };
   }
 
   /* ── the stack, as a checklist on the clipboard ── */
