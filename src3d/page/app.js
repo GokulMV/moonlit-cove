@@ -669,7 +669,9 @@
       for (let i = 1; i <= 12; i++) {
         const r = R * Math.pow(i / 12, 1.3), x = orb.px + sy * r, z = orb.pz + cy * r;
         let h;
-        if (ISLE && top) { h = top(x, z); if (i === 12 && away > 0) h += away * (Math.max(h, top(x + 2.5, z), top(x - 2.5, z), top(x, z + 2.5), top(x, z - 2.5)) - h); h -= base; }
+        /* (round the island the trees stand up out of the canopy's mean top here and there, and the palms along a beach's
+           top are taller than its fringe is counted: what is round the line of sight counts a little higher than that) */
+        if (ISLE && top) { const g0 = W.land(x, z); h = top(x, z); if (h > g0 + 2) h += 0.18 * (h - g0) + 2; if (i === 12 && away > 0) h += away * (Math.max(h, top(x + 2.5, z), top(x - 2.5, z), top(x, z + 2.5), top(x, z - 2.5)) - h); h -= base; }
         else h = Math.max(0, W ? W.land(x, z) : 0) + canopy(x, z);
         need = Math.max(need, Math.atan2(h + (i === 12 ? 1.6 + 0.8 * away : 0.4), r));
       }

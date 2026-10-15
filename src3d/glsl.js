@@ -1284,6 +1284,8 @@ void main(){
           vec4 n1 = tN(mat2(0.8, 0.6, -0.6, 0.8)*bw, 11.0), n2 = tN(bw + 13.7, 3.1), n3 = tN(mat2(0.6, -0.8, 0.8, 0.6)*bw, 37.0), n4 = tN(bw*1.7 + 5.3, 1.3);
           float dens = mix(0.25, 0.75, smoothstep(0.15, 0.85, q))*(0.7 + 0.6*n3.r);
           float coral = smoothstep(0.62 - 0.3*dens, 0.7 - 0.3*dens, n1.r*0.55 + n2.g*0.3 + n4.b*0.15);
+          /* (from far off, where the heads of coral are only a pixel or two, their average: no pattern left to shimmer) */
+          coral = mix(clamp(0.25 + 0.6*dens - 0.3, 0.05, 0.6), coral, 1.0 - smoothstep(0.12, 0.6, fpL));
           float crest = smoothstep(0.78, 0.95, q)*(1.0 - smoothstep(1.02, 1.15, q));
           float sandP = (1.0 - coral)*smoothstep(0.42, 0.62, n3.b + 0.25*(1.0 - q))*(1.0 - crest);
           vec3 rub = vec3(0.4, 0.37, 0.3)*(0.8 + 0.35*n2.r)*(0.9 + 0.2*n4.a);

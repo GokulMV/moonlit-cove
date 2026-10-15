@@ -451,8 +451,11 @@ vec2 lastHit(float x, float z){
 float inSea(float x, float z){ return smoothstep(-0.3, 0.8, shoreS(vec2(x, z))); }`;
   const FOAM_VS = `
 ${SURF_T}
-varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
+varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea, vSeaV;
 void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), c = modelMatrix*instanceMatrix[3]; vSea = inSea(c.x, c.z);
+  /* (and how much of the water there is under this part of it: a stone at the water's edge has foam only on its sea side,
+     none on the dry sand behind it) */
+  vSeaV = inSea(w.x, w.z);
   /* (riding on the water as it rises and falls, not at a height of its own, or every crest that passes cuts it off in a
      straight line) */
   w.y = waveH(w.xz) + 0.01; vW = w.xyz; vHit = lastHit(c.x, c.z);
@@ -461,10 +464,10 @@ void main(){ vUv = uv; vec4 w = modelMatrix*instanceMatrix*vec4(position, 1.0), 
   gl_Position = projectionMatrix*viewMatrix*vec4(w.xyz - v/max(d, 1e-3)*min(d*0.5, 0.06 + 0.0015*d), 1.0); }`;   /* (each ring is centred on its rock) */
   const FOAM_FS = `
 uniform float uTime; uniform vec3 uAmbF, uKeyColT; uniform sampler2D uNoise; uniform vec4 uFog;
-varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea;
+varying vec2 vUv; varying vec3 vW; varying vec2 vHit; varying float vSea, vSeaV;
 ${GLSL.ISLE_SH}
 void main(){
-  if (vSea < 0.01) discard;
+  if (vSea < 0.01 || vSeaV < 0.02) discard;
   vec2 q = vUv*2.0 - 1.0; float d = length(q);
   float surge = exp(-max(vHit.x, 0.0)*0.55)*min(vHit.y, 2.0);
   /* (the foam hugs the rock where the water meets it, thickest right at it, and trails off in tongues and patches as far
@@ -473,7 +476,7 @@ void main(){
   float n = texture2D(uNoise, vW.xz*0.33 + vec2(uTime*0.012, -uTime*0.008)).r*0.6 + texture2D(uNoise, vW.xz*1.1 - vec2(uTime*0.02, 0.0)).a*0.4;
   float n2 = texture2D(uNoise, vW.xz*0.13 + vec2(-uTime*0.005, uTime*0.009)).g, reach = min(0.95, 0.5 + 0.4*n2 + 0.2*surge);
   float ring = smoothstep(0.3, 0.44, d)*(1.0 - smoothstep(reach - 0.18, reach, d))*(1.0 - 0.6*smoothstep(0.42, reach, d));
-  float a = ring*smoothstep(0.46 - 0.28*surge, 0.7, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
+  float a = ring*smoothstep(0.46 - 0.28*surge, 0.7, n)*(0.22 + 0.8*min(surge, 1.0))*vSea*smoothstep(0.02, 0.5, vSeaV);
   if (a < 0.01) discard;
   float fd = distance(vW, cameraPosition);
   vec3 c = mix((uAmbF*1.6 + uKeyColT*isleSh(vW.xz)*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));
@@ -821,7 +824,7 @@ void main(){
     const surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: { value: noiseTex } }, Mats.coastU);
     const foamM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: FOAM_VS, fragmentShader: FOAM_FS, transparent: true, depthWrite: false });
     const sprayM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: SPRAY_VS, fragmentShader: SPRAY_FS, transparent: true, depthWrite: false });
-    const ring = new T.PlaneGeometry(1, 1); ring.rotateX(-Math.PI / 2);
+    const ring = new T.PlaneGeometry(1, 1, 6, 6); ring.rotateX(-Math.PI / 2);
     const quad = new T.PlaneGeometry(1, 1), NP = 48;
     const crownMat = Trees.crownMaterial(U);
     /* the forest: shapes near and far, and their materials */

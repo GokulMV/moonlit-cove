@@ -183,7 +183,7 @@ const IsleWorld = (() => {
       const S = World.SURF, surfU = Object.assign({ uWaveT: U.uWaveT, uWv: U.uWv, uSurgeT: U.uSurgeT, uNUw: U.uNUw, uTime: Mats.U.uTime, uAmbF: Mats.U.uAmbF, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uNoise: U.uNoise }, Mats.coastU);
       const foamM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: S.FOAM_VS, fragmentShader: S.FOAM_FS, transparent: true, depthWrite: false });
       const sprayM = new T.ShaderMaterial({ uniforms: surfU, vertexShader: S.SPRAY_VS, fragmentShader: S.SPRAY_FS, transparent: true, depthWrite: false });
-      const ring = new T.PlaneGeometry(1, 1); ring.rotateX(-Math.PI / 2);
+      const ring = new T.PlaneGeometry(1, 1, 6, 6); ring.rotateX(-Math.PI / 2);
       const CAPF = 320, CAPS = 40, NP = 48, RF = 260, RS = 140;
       const foam = new T.InstancedMesh(ring, foamM, CAPF); foam.count = 0; foam.frustumCulled = false; foam.renderOrder = 5; foam.matrixAutoUpdate = false; group.add(foam);
       const quad = new T.PlaneGeometry(1, 1), sg = new T.InstancedBufferGeometry();

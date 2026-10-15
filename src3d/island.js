@@ -357,6 +357,18 @@ const Island = (() => {
     const H = new Float32Array(NC);
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const c = j * nx + i; RBc = RB[c]; H[c] = heightAt(X0 + (i + 0.5) * cell, Z0 + (j + 0.5) * cell, S[c], Uu[c]); }
     RBc = -1;
+    /* (the sea floor blurred over some tens of metres out from the water's edge: it is worked out from the nearest shore,
+       sand or reef, and where two stretches of shore are equally near it would step down a metre or two along a line
+       across the sea, the water darker on one side of it than the other) */
+    { const R = Math.max(2, Math.round(10 / cell)), A = new Float32Array(NC), B = new Float32Array(NC);
+      const pass = (src, dst, along) => {
+        const n = along ? nx : nz, m = along ? nz : nx, st = along ? 1 : nx, ln = along ? nx : 1, k = 1 / (2 * R + 1);
+        for (let jj = 0; jj < m; jj++) { const o = jj * ln; let sum = 0;
+          for (let ii = -R; ii <= R; ii++) sum += src[o + Math.max(0, Math.min(n - 1, ii)) * st];
+          for (let ii = 0; ii < n; ii++) { dst[o + ii * st] = sum * k; sum += src[o + Math.min(n - 1, ii + R + 1) * st] - src[o + Math.max(0, ii - R) * st]; } }
+      };
+      pass(H, B, true); pass(B, A, false);
+      for (let c = 0; c < NC; c++) { const w = sm(3, 28, S[c]); if (w > 0) H[c] = Math.min(-0.05, H[c] + (A[c] - H[c]) * w); } }
     grid.H = H;
     I.ms = Date.now() - t0;
     return I;
@@ -580,6 +592,22 @@ const Island = (() => {
       k1[c * 4] = b8(tideK(q) / 1.5); k1[c * 4 + 1] = b8(mix(L.W[i], L.W[j], t) / 50); k1[c * 4 + 2] = b8(q.sand); k1[c * 4 + 3] = b8(G.EB[c]);
       k2[c * 4] = b8(q.rock); k2[c * 4 + 1] = b8(q.cliff); k2[c * 4 + 2] = b8(q.mangrove); k2[c * 4 + 3] = b8(G.RB[c] / 128);
     }
+    /* (out at sea, those blurred over some tens of metres: where two stretches of shore are equally near, each cell takes
+       the one or the other's, and a reef or a rocky shore's dark water would end along a straight line across the sea.
+       At the water's edge they are as they are; blurred more the further out) */
+    { const nx = G.nx, nz = G.nz, R = Math.max(2, Math.round(10 / G.cell)), A = new Float32Array(NC), B = new Float32Array(NC), W = new Float32Array(NC);
+      for (let c = 0; c < NC; c++) W[c] = sm(3, 28, G.S[c]);
+      const pass = (src, dst, along) => {
+        const n = along ? nx : nz, m = along ? nz : nx, st = along ? 1 : nx, ln = along ? nx : 1, k = 1 / (2 * R + 1);
+        for (let j = 0; j < m; j++) { const o = j * ln; let sum = 0;
+          for (let i = -R; i <= R; i++) sum += src[o + Math.max(0, Math.min(n - 1, i)) * st];
+          for (let i = 0; i < n; i++) { dst[o + i * st] = sum * k; sum += src[o + Math.min(n - 1, i + R + 1) * st] - src[o + Math.max(0, i - R) * st]; } }
+      };
+      for (const P of [k1, k2]) for (let ch = 0; ch < 4; ch++) {
+        for (let c = 0; c < NC; c++) A[c] = P[c * 4 + ch];
+        pass(A, B, true); pass(B, A, false);
+        for (let c = 0; c < NC; c++) { const w = W[c]; if (w > 0) P[c * 4 + ch] = Math.round(P[c * 4 + ch] + (A[c] - P[c * 4 + ch]) * w); }
+      } }
     /* (u, and how much later than its distance from the shore says the swell gets there: full floats, side by side) */
     const u = new Float32Array(NC * 2); for (let c = 0; c < NC; c++) { u[c * 2] = G.UA[c]; u[c * 2 + 1] = G.LG ? G.LG[c] : 0; }
     return { field, u, line, k1, k2, nx: G.nx, nz: G.nz, X0: G.X0, Z0: G.Z0, cell: G.cell, LW, rows, n: L.n, P: L.P, u0: L.u0, ds: L.ds };
