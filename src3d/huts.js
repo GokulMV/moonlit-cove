@@ -186,8 +186,18 @@ const IsleHuts = (() => {
     }
     /* (the boards repainted once the page's fonts have come: drawn before, they were in the fallbacks) */
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { for (const h of huts) for (const b of h.boards || []) { boardCanvas(b.B, b.canvas); if (b.tex) b.tex.needsUpdate = true; } });
+    /* how far inside a hut's room a point is (0 out, 1 well in): as glsl.js hutIn, for the eye — inside, it opens up for the
+       room's dimmer light as eyes do (engine.js), and the doorway and the windows go bright */
+    function inside(x, y, z) {
+      let k = 0;
+      for (const h of huts) {
+        const F = h.info, [lx, lz] = loc(h, x, z), fy = h.y0 + F.floor; if (Math.abs(lx) > F.X + 0.5 || Math.abs(lz) > F.Z + 0.5) continue;
+        k = Math.max(k, sm(F.X + 0.05, F.X - 0.45, Math.abs(lx)) * sm(F.Z + 0.05, F.Z - 0.45, Math.abs(lz)) * sm(fy - 0.2, fy + 0.4, y) * sm(fy + 4.2, fy + 3.2, y));
+      }
+      return k;
+    }
     const stats = () => ({ huts: huts.length, lamps: huts.reduce((n, h) => n + h.use.lamps.filter(L => L.k > 0.5).length, 0), night: +nightK.toFixed(2) });
-    return { huts, walk, obstacles, update, pick, use, seatPose, stats, plan: P, group };
+    return { huts, walk, obstacles, update, pick, use, seatPose, inside, stats, plan: P, group };
   }
   return { SITES, plan, build, boardCanvas };
 })();

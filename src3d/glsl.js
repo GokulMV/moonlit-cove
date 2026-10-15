@@ -858,6 +858,7 @@ uniform float uMist, uWet, uRough, uPud;
 uniform float uTideHi;       /* how far up the beach the last high water reached (m, as uTideZ is now) */
 uniform vec3 uShC;          /* where the key light's shadow map is centred (x, z) and how far it reaches */
 uniform int uDbgG;
+${Layout.isle ? 'uniform vec4 uLawn[6];      /* the huts\' lawns (huts.js): x, z, how far out, how thick */' : ''}
 /* rain on water: rings from drops landing on a jittered grid */
 vec2 rainRings(vec2 p, float t){
   vec2 g = p*3.2, gi = floor(g), acc = vec2(0.0);
@@ -1184,7 +1185,9 @@ void main(){
       vec2 e = vec2(0.02/uDecalRect.z, 0.02/uDecalRect.w);
       rg += vec2(texture2D(uRelief, duv + vec2(e.x, 0.0)).r - rel.r, texture2D(uRelief, duv + vec2(0.0, e.y)).r - rel.r)*4.5;
     }
-    float veg = smoothstep(-0.4, 1.4, shoreVeg(p) + (nm.r - 0.5)*1.6);
+    float veg = smoothstep(-0.4, 1.4, shoreVeg(p) + (nm.r - 0.5)*1.6);${Layout.isle ? `
+    /* (a hut's lawn: the grass's own ground under its blades, the sand coming back at its ragged edge) */
+    for (int i = 0; i < 6; i++){ vec4 L = uLawn[i]; if (L.z > 0.0) veg = max(veg, L.w*smoothstep(L.z*0.98, L.z*0.6, length(p - L.xy) + (nm.g - 0.5)*2.4)); }` : ''}
     float trample = rel.g;
     float dryness = smoothstep(-0.2, -3.5, s);
     /* the sand the falling tide has left since the last high water: still damp, darkest by the water, drying toward the

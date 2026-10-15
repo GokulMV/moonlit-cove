@@ -64,7 +64,7 @@
        light as the strips swell where they cross over and dip where they go under; each strip its own tone of straw and
        tan, some greyed, the odd one smoked brown — no pattern picked out in dark strips, as on the plain walls of a
        hut on the shore; dust and grime in the weave's gaps */
-    weave: { w: 512, h: 512, tile: [0.48, 0.48], seed: 317, depth: 0.004,
+    weave: { w: 512, h: 512, tile: [0.48, 0.48], seed: 317, depth: 0.0055,
       hgt(u, v, K, o) {
         const n = 20, x = u * n, y = v * n, i = Math.floor(x), j = Math.floor(y), fi = x - i, fj = y - j;
         const warpTop = ((i + j) % 4 + 4) % 4 < 2, a = warpTop ? fi : fj, along = warpTop ? fj : fi, k = warpTop ? i : j;
@@ -76,8 +76,8 @@
         o[1] = sm(0.8, 0.86, id2); o[2] = id; o[3] = edge;
       },
       col(u, v, P, K) {
-        let col = mix3([0.34, 0.26, 0.135], [0.43, 0.335, 0.18], P.m2);
-        col = mix3(col, [0.3, 0.27, 0.215], sm(0.62, 0.95, P.m2) * 0.55);
+        let col = mix3([0.31, 0.225, 0.105], [0.41, 0.31, 0.155], P.m2);
+        col = mix3(col, [0.3, 0.27, 0.215], sm(0.66, 0.95, P.m2) * 0.4);
         col = mix3(col, [0.17, 0.11, 0.06], P.m1 * 0.6);
         /* (fine fibres along each strip, and the grime in the weave's gaps) */
         col = col.map(q => q * (0.9 + 0.2 * K.vn(u * 260, v * 40, 260, 40)));

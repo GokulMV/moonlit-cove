@@ -811,6 +811,7 @@ const Engine = (() => {
     flora = Flora.build(natG, world);
     /* (round the island, its grass, blade by blade: grass.js) */
     if (Layout.isle && typeof IsleGrass !== 'undefined' && opts.grass !== false) { grass = IsleGrass.build(natG); Object.assign(api, { grass }); if (huts) grass.setClear(huts.plan.map(p => p.lawn)); }
+    if (huts) huts.plan.slice(0, Mats.U.uLawn.value.length).forEach((p, i) => Mats.U.uLawn.value[i].set(p.lawn[0], p.lawn[1], p.lawn[2], p.lawn[3] ?? 1));
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
     /* (and the camp's sand castle washes away as theirs do; washed flat, there is no castle left to walk round) */
@@ -951,7 +952,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     }
   }
   Object.defineProperty(api, 'isleMs', { get: () => isleMs });
-  let lastCW = 0, lastCH = 0, fabT = null, shExT = null, shExK = 9;
+  let lastCW = 0, lastCH = 0, fabT = null, shExT = null, shExK = 9, hutExT = null, hutExK = 0;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
        or a resized window shows the frame in only part of it */
@@ -966,6 +967,13 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       const dt = shExT === null ? 1 : Math.max(0, Math.min(1, (o.t - shExT) / 1.2)); shExT = o.t; shExK += (k - shExK) * (shExK > 1.5 ? 1 : dt);
       const lu = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], la = lu(S.amb), ld = lu(S.keyCol) * Math.max(0, S.keyDir[1]);
       S.exposure = Math.min(16, S.exposure * (la + ld + 0.0045) / (la + ld * (0.4 + 0.6 * Math.min(1, shExK)) + 0.0045));
+    }
+    /* (and in a hut's room, the eye opening up for its dimmer light over a second or so; the doorway and the windows go
+       bright) */
+    if (huts) {
+      const c0 = o.cam || Layout.cameras.wide, cp = c0.pos || c0.look, kin = huts.inside(cp[0], cp[1], cp[2]);
+      const dt = hutExT === null ? 1 : Math.max(0, Math.min(1, (o.t - hutExT) / 0.9)); hutExT = o.t; hutExK += (kin - hutExK) * dt;
+      S.exposure = Math.min(16, S.exposure * (1 + 2.4 * hutExK * (0.35 + 0.65 * S.day)));
     }
     /* the tide: where the water's edge is now (everything that knows where the sea is reads it from Layout), and where it
        reached at the last high water (the sand it left is still damp) */

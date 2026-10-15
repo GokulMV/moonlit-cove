@@ -31,7 +31,9 @@ const Mats = (() => {
     uSnow: { value: V4() },
     /* whether the frame being drawn has several samples to a pixel, so that a cut-out's edge can be shared among them
        (glsl.js ISLE_SH cutCov): set by the engine round the scene's own pass only */
-    uA2C: { value: 0 }
+    uA2C: { value: 0 },
+    /* the huts' lawns (huts.js): where the beach's ground under them is grass's, not sand (glsl.js GROUND_FS) */
+    uLawn: { value: [V4(), V4(), V4(), V4(), V4(), V4()] }
   };
   /* the shoreline the shaders draw (glsl.js COAST): a strip of numbers along the coast round the camera, the shore's z,
      its slope and the forest edge's z (Layout's own), every half metre for two kilometres either way (row 0) and every
@@ -472,7 +474,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     float hold = smoothstep(0.25, 0.9, sk)*(1.0 - hutsIn(vWPos))*smoothstep(0.3, 2.5, -shoreS(vWPos.xz) + vWPos.y*0.4);
     float k = snowK(nWs, hold); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.91), k); roughnessFactor = mix(roughnessFactor, 0.62, k); }`);
       /* (and the sky's light, as much of it as comes in under the forest's canopy) */
-      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n  { vec3 skyK = isleSky3(vWPos)*mix(1.0, 0.16, hutsIn(vWPos)); iblIrradiance *= skyK; irradiance *= skyK; radiance *= mix(vec3(1.0), skyK, 0.85); }');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n  { vec3 skyK = isleSky3(vWPos)*mix(1.0, 0.22, hutsIn(vWPos)); iblIrradiance *= skyK; irradiance *= skyK; radiance *= mix(vec3(1.0), skyK, 0.85); }');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + (key === 'gran' || key === 'granw' ? 'varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;\n' + GRAN_XTL : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
         .replace('#include <opaque_fragment>', `

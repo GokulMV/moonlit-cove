@@ -2961,6 +2961,6 @@
   }
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
-  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto, stepWalk };
+  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto, stepWalk, hutUse };
   Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard, sketch, openSketch, closeSketch, tbox, openToolbox, closeToolbox });
 })();
