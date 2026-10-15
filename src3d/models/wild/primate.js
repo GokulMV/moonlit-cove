@@ -136,7 +136,7 @@ const Primate = (() => {
     const eyes = [-1, 1].map(s => ({ geo: eyeG(s), bind: R.rigid(S, 'head'), col: C.iris, mat: [0.1, 0.55, PAT.eye, 0], eye: [0, sp.eye.irisR ?? 0.44, sp.eye.pupilR ?? 0.15, sp.eye.white ?? 0.05] }));
     const lidG = s => { const g = new T.SphereGeometry(ER * 1.055, 24, 10, Math.PI * 0.06, Math.PI * 0.88, 0, Math.PI * 0.31); g.rotateY(Math.PI / 2 - s * 0.12); g.rotateZ(-0.3); g.translate(EYE[0], EYE[1], s * EZ); return g; };
     const lids = [-1, 1].map(s => ({ geo: lidG(s), bind: R.rigid(S, 'lid' + side(s)), col: C.lid, mat: [0.6, 0.05, PAT.skin, 0] }));
-    const teeth = R.sculpt(sp.teeth(fem), { S, cell: 0.0005, tau: 0.001, paint: () => ({ col: lin('#d6cbb0'), mat: [0.25, 0.6, PAT.horn, 0], fur: 0 }) });
+    const teeth = R.sculpt(sp.teeth(fem), { S, cell: 0.0005, tau: 0.001, paint: () => ({ col: lin(sp.toothCol || '#d6cbb0'), mat: [0.25, 0.6, PAT.horn, 0], fur: 0 }) });
 
     const B = R.body(S, [body, head, handL, R.mirror(handL, S), footL, R.mirror(footL, S), tail, ...eyes, ...lids, teeth, ...(sp.parts ? sp.parts(S) : [])], { fur: sp.fur });
     const g = B.g; g.name = sp.name;

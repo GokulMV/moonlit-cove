@@ -378,7 +378,9 @@ void main(){
     const decorate = (fn, lod = 'near') => { if (lod !== 'tiny') return; tinyHooks.push(fn); for (const ch of bay.values()) if (ch.built) fn(ch); };
     /* what the van must drive round (and a walker step round): the stones big enough to be in the way, [x, z, radius, kind] */
     /* (each with its highest point, for a walker to step up onto one no higher than a long step) */
-    const obsOut = [], obstaclesNear = (x, z) => { obsOut.length = 0; if (stones) for (const st of stones.near(x, z, 14)) if (st.s > 0.45) obsOut.push([st.x, st.z, st.s * 0.95, 'rock', stones.peakOf(st)]); return obsOut; };
+    /* (the radius each is given is how far its side stands out toward the point asked about, and its size rides along:
+       [x, z, radius, kind, peak, size]) */
+    const obsOut = [], obstaclesNear = (x, z) => { obsOut.length = 0; if (stones) for (const st of stones.near(x, z, 14)) if (st.s > 0.45) obsOut.push([st.x, st.z, stones.reach(st, x - st.x, z - st.z), 'rock', stones.peakOf(st), st.s]); return obsOut; };
     const wetOut = [], wetNear = (x, z, r) => { wetOut.length = 0; if (stones) for (const st of stones.near(x, z, r)) if (st.wet) wetOut.push({ x: st.x, z: st.z, top: st.y + st.s * st.sy * 0.8, rad: st.s * 0.9, id: st.id }); return wetOut; };
     /* the land's height at a world point, as drawn (on the sand and over the sea, the sand's level) */
     const land = (x, z) => Math.max(drawnH(x, z), LEVEL);

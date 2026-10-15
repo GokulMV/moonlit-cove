@@ -990,6 +990,19 @@ Wv waves(float s, float a, float t, vec2 p, vec4 k1, vec4 k2, float lg){
   return w;
 }
 
+/* shingle up close: pebbles packed side by side, each its own grey, brown or quartz-white, rounded (lighter on its crown,
+   dark down into the gaps between it and the next): (its hash, its hash, how far inside it from the gap, how far from its
+   middle), the cells a little irregular */
+vec2 pbH(vec2 p){ p = mod(p, 1024.0); vec3 q = fract(vec3(p.xyx)*vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz)*q.zy); }
+vec4 pebbles(vec2 p){
+  vec2 g = floor(p), f = p - g; float d1 = 8.0, d2 = 8.0; vec2 h1 = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+    vec2 o = vec2(float(i), float(j)), h = pbH(g + o), r = o + 0.12 + 0.76*h - f; float d = dot(r, r);
+    if (d < d1){ d2 = d1; d1 = d; h1 = h; } else if (d < d2) d2 = d;
+  }
+  d1 = sqrt(d1); d2 = sqrt(d2);
+  return vec4(h1, d2 - d1, d1);
+}
 /* (one texel's say, lit or not; and between four of them, weighed by how near each is, so the shadow's edge is a
    smooth ramp across a texel instead of the texels' own stairs) */
 float shT(vec2 uv, float z){ return step(z, unpackRGBAToDepth(texture2D(uShadowMap, uv))); }
@@ -1145,6 +1158,22 @@ void main(){
       if (ns > 0.01){
         vec4 pb = tS(p*1.9, 1.3);
         vec3 shing = vec3(0.31, 0.29, 0.26)*(0.66 + 0.5*nb.g)*(0.8 + 0.4*pb.a)*mix(vec3(1.0), vec3(1.08, 0.98, 0.86), smoothstep(0.4, 0.8, nm.b));
+        /* (near the eye, its stones themselves: cobbles and pebbles, gravel between them, here and there a patch of coarse
+           sand; further off their average) */
+        float pk = smoothstep(26.0, 7.0, dist);
+        if (pk > 0.0){
+          vec4 P1 = pebbles(p*9.0), P2 = pebbles(p*23.0 + 7.3);
+          vec3 c1 = mix(vec3(0.3, 0.285, 0.26), vec3(0.4, 0.355, 0.3), P1.x)*(0.8 + 0.4*P1.y);
+          c1 = mix(c1, vec3(0.6, 0.58, 0.54), step(0.9, P1.y)*0.8); c1 = mix(c1, vec3(0.15, 0.145, 0.135), step(0.82, P1.x)*0.7);
+          float big = step(0.35, pbH(floor(p*9.0) + 3.7).x);
+          vec3 c2 = mix(vec3(0.34, 0.32, 0.29), vec3(0.45, 0.41, 0.35), P2.x)*(0.78 + 0.44*P2.y);
+          float e1 = smoothstep(0.0, 0.16, P1.z), e2 = smoothstep(0.0, 0.2, P2.z);
+          /* (each stone rounded: pale on its crown, darker down its sides into the gap) */
+          vec3 st = mix(c2*(0.6 + 0.4*e2)*(1.08 - 0.25*P2.w), c1*(0.55 + 0.45*e1)*(1.18 - 0.42*P1.w*P1.w), big*e1);
+          float cs = smoothstep(0.55, 0.7, nb.b*0.6 + nm.r*0.4);
+          st = mix(st, vec3(0.42, 0.38, 0.31)*(0.86 + 0.24*grain), cs*0.85);
+          shing = mix(shing, st, pk);
+        }
         vec3 mud = vec3(0.105, 0.092, 0.07)*(0.82 + 0.3*nb.r)*(0.9 + 0.2*nm.b);
         float mk = clamp(sq.k2.z/max(1.0 - sq.k1.z, 1e-3), 0.0, 1.0); mudK = mk*ns;
         alb = mix(alb, mix(shing, mud, mk), ns);

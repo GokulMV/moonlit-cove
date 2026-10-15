@@ -6,7 +6,7 @@
    north, 90 east), or { cam: { pos, look, fov } }, or { js: "…returns {pos, look, fov}…" } (worked out in the page),
    or { drive: { x, z, heading°, secs, keys: "w"|"wa"|… } } (the van put there and driven, the camera behind it), or
    { walk: { x, z, heading°, secs, auto? } } (walking, on the page's own walk), or { orbit: { x, z, yaw°, zoom } } (the
-   explore camera), with frames? (how many to draw first, 10), hud? (the page's own overlays left on) */
+   explore camera; zoom the log of its distance, or js: "…returns {x, z, yaw, zoom}…"), with frames? (how many to draw first, 10), hud? (the page's own overlays left on) */
 import { open } from './lib.mjs';
 import fs from 'fs'; import path from 'path';
 const [file, prefix = 'tour', where = 'island', W = '1280', H = '720', RS = '1'] = process.argv.slice(2);
@@ -20,7 +20,9 @@ try {
   if (isle) console.log('island built in', await page.evaluate(() => { const I = Layout.island(); return I && I.data ? I.data.ms : null; }), 'ms');
   for (const s of stops) {
     const ts = Date.now();
-    await page.addStyleTag({ content: s.hud ? '#hint { display: none !important; }' : '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap { display: none !important; }' });
+    /* (one style of the tour's own, its rules this stop's: the overlays hidden, or only the hint) */
+    await page.evaluate(css => { let el = document.getElementById('tourHide'); if (!el) { el = document.createElement('style'); el.id = 'tourHide'; document.head.appendChild(el); } el.textContent = css; },
+      s.hud ? '#hint { display: none !important; }' : '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap, #map { display: none !important; }');
     if (s.hour !== undefined) await page.evaluate(h => { const st = window.__cove.st; st.hour = h; st.timeMode = 'custom'; st.offset = 0; }, s.hour);
     let cam = null;
     if (s.eye) {
@@ -32,7 +34,8 @@ try {
       await page.evaluate(c => { window.__coveCamFix = { pos: c.pos, look: c.look, fov: c.fov || 60, focus: Math.hypot(c.pos[0] - c.look[0], c.pos[1] - c.look[1], c.pos[2] - c.look[2]) }; }, cam);
       if (isle) await page.evaluate(([x, y, z]) => Engine.world.prime(x, z, y, true), cam.pos);
     } else await page.evaluate(() => { window.__coveCamFix = null; });
-    if (s.orbit) await page.evaluate(o => { const c = window.__cove; if (c.orbAt) c.orbAt(o.x, o.z, (o.yaw || 0) * Math.PI / 180, o.zoom ?? 0); }, s.orbit);
+    if (s.orbit) { const o = s.orbit.js ? Object.assign({}, s.orbit, await page.evaluate(s.orbit.js)) : s.orbit;
+      await page.evaluate(o => { const c = window.__cove; if (c.orbAt) c.orbAt(o.x, o.z, (o.yaw || 0) * Math.PI / 180, o.zoom ?? 0); }, o); }
     if (s.drive) {
       const d = s.drive.js ? Object.assign({}, s.drive, await page.evaluate(s.drive.js)) : s.drive;
       await page.evaluate(d => { const C = window.__cove, car = C.car; if (!car.on) C.startDrive(); Object.assign(car, { x: d.x, z: d.z, h: Math.PI - d.heading * Math.PI / 180, v: 0, k: 1, camK: 1, camP: null }); }, d);   /* (its nose (cos h, -sin h): heading 0 north, 90 east, as for the eyes) */

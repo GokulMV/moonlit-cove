@@ -96,8 +96,8 @@ void main(){
   float crum = mkN(vWxz*9.0)*0.6 + mkN(vWxz*23.0)*0.4;
   m.a *= smoothstep(0.05, 0.35, m.a + 0.25*(crum - 0.5));
 #ifdef RIBBON
-  /* (the tread, pressed in as the sand's dampness lets it: crisp in wet sand, a blur in damp, nothing in dry) */
-  { float wk = smoothstep(0.15, 0.7, vMark.z), e = 0.01, h0 = treadH(vUv);
+  /* (the tread, pressed in as the sand's dampness lets it: crisp in wet sand, a blur in damp, soft in dry) */
+  { float wk = 0.35 + 0.65*smoothstep(0.15, 0.7, vMark.z), e = 0.01, h0 = treadH(vUv);
     vec2 g = vec2(treadH(vUv + vec2(e, 0.0)) - h0, treadH(vUv + vec2(0.0, e)) - h0)/e;
     n2 -= g*vec2(0.008, 0.007)*wk*smoothstep(0.3, 0.6, m.b); m.b += 0.18*h0*wk*smoothstep(0.3, 0.6, m.b); }
 #endif
@@ -105,7 +105,8 @@ void main(){
   vec3 N = normalize(vU*n2.x + vV*n2.y + vec3(0.0, 1.0, 0.0));
   float ly = max(uL.y, 0.22);
   float lit = (max(dot(N, uL), 0.0) - max(uL.y, 0.0))/ly;          /* lighter or darker than the flat sand round it */
-  float occ = m.b*(0.12 + 0.3*vMark.z);                          /* deeper is a little darker, more so in wet sand */
+  float occ = m.b*(0.2 + 0.26*vMark.z)*(0.8 + 0.4*mkN(vWxz*37.0));   /* deeper is darker, more so in wet sand; its floor's
+                                                                    sand churned into crumbs and their shadows */
   float churn = clamp(m.a - m.b*1.6, 0.0, 1.0)*(1.0 - vMark.z);  /* the dry sand kicked up round the edge is paler */
   float age = uNow - vMark.x, fade = (1.0 - smoothstep(uLife*0.55, uLife, age))*(1.0 - smoothstep(0.0, 0.7, uNow - vMark.y));
   /* (in the shade of the land and the forest the sun picks out no dents: only their hollows are darker) */

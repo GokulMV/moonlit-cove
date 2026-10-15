@@ -49,55 +49,58 @@
 
   /* ── one boulder's surface: a direction's radius, and what it is there (joint groove, sheet step, pit) ── */
   function shaper(R, o) {
-    const shape = o.shape || 'round', S = o.size || 1;
-    const sc = shape === 'flat' ? [1.15 + 0.25 * R(), 0.42 + 0.14 * R(), 0.95 + 0.25 * R()] : shape === 'tall' ? [0.86 + 0.12 * R(), 1.08 + 0.2 * R(), 0.76 + 0.15 * R()] : [1.0 + 0.35 * R(), 0.6 + 0.26 * R(), 0.82 + 0.3 * R()];
-    /* (a corestone is a joint block rounded off, not an egg: squarer than an ellipsoid, some much squarer; a tall one
-       squarest, a block stood on end) */
-    const ex = shape === 'tall' ? 3.1 + 1.2 * R() : 2.4 + 1.4 * R() * R() + 0.5 * R(), seed = R() * 50, rot = R() * TAU;
+    const shape = o.shape || 'round', S = o.size || 1, seed = R() * 50, rot = R() * TAU;
+    /* (the block the joints cut, its three spans: a slab, a block stood on end, or near square) */
+    const sc = shape === 'flat' ? [1.15 + 0.25 * R(), 0.46 + 0.14 * R(), 0.95 + 0.25 * R()] : shape === 'tall' ? [0.82 + 0.14 * R(), 1.05 + 0.25 * R(), 0.72 + 0.16 * R()] : [1.0 + 0.3 * R(), 0.64 + 0.24 * R(), 0.8 + 0.28 * R()];
+    /* its faces: the block's six, each turned its own way off square and standing its own distance out — joints are never
+       quite square, nor the blocks they cut even — and on most a corner or an edge cut off by another joint; all of them
+       rounded off together as it weathered in the ground, how far depending on how long (pw: the lower, the rounder).
+       A corestone is a joint block rounded off: not an egg, not a box, and no two alike */
+    const unit = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    const planes = [];
+    for (let a = 0; a < 3; a++) for (const sg of [1, -1]) {
+      const n = [0, 0, 0]; n[a] = sg; for (let b = 0; b < 3; b++) if (b !== a) n[b] = (R() - 0.5) * 0.62;
+      planes.push({ n: unit(n), d: sc[a] * (0.86 + 0.26 * R()) });
+    }
+    const pw = shape === 'tall' ? 3.0 + 1.5 * R() : shape === 'flat' ? 2.5 + 1.6 * R() : 2.2 + 1.8 * R() * R() + 0.5 * R();
+    const fpoly = (x, y, z) => { let s = 0; for (const P of planes) { const t = (x * P.n[0] + y * P.n[1] + z * P.n[2]) / P.d; if (t > 0) s += Math.pow(t, pw); } return Math.pow(Math.max(s, 1e-9), 1 / pw); };
+    for (let k = 0, nc = R() < 0.25 ? 0 : 1 + Math.floor(R() * 2.4); k < nc; k++) {
+      const a = R() * TAU, t = (R() - 0.25) * 1.2, n = [Math.cos(a) * Math.cos(t), Math.sin(t), Math.sin(a) * Math.cos(t)];
+      planes.push({ n, d: (0.8 + 0.12 * R()) / fpoly(n[0], n[1], n[2]) });
+    }
+    /* (on some, a face where a slab broke away clean: flat, fresher, its edge still sharp) */
+    const frac = shape !== 'split' && R() < 0.35 ? (() => { const a = R() * TAU, t = (R() - 0.5) * 0.9, n = [Math.cos(a) * Math.cos(t), Math.sin(t), Math.sin(a) * Math.cos(t)]; return { n, d: (0.74 + 0.14 * R()) / fpoly(n[0], n[1], n[2]) }; })() : null;
     /* (lopsided: fuller one way than the other; spread at its foot where it has settled; and down its steep sides the
        flutes the rain has cut — the mark of granite in the tropics: rounded grooves side by side, sharp ridges between,
-       running from the shoulder down the fall of the stone, deepest high on its sides and fading toward its foot;
-       now and then a hollow weathered into one side) */
-    const la = R() * TAU, lt = (R() - 0.5) * 0.8, lop = [Math.cos(la) * Math.cos(lt), Math.sin(lt), Math.sin(la) * Math.cos(lt)].map(v => v * (0.07 + 0.13 * R()));
+       running from the shoulder down the fall of the stone, deepest high on its sides and fading toward its foot. The
+       flutes are drawn by the shader (Mats' granite), a few tenths of a metre apart whatever the stone's size, from what
+       is kept here: where round the stone they run, how far down, their phase and wander. Now and then a hollow weathered
+       into one side) */
+    const la = R() * TAU, lt = (R() - 0.5) * 0.8, lop = [Math.cos(la) * Math.cos(lt), Math.sin(lt), Math.sin(la) * Math.cos(lt)].map(v => v * (0.06 + 0.12 * R()));
     const flare = 0.05 + 0.12 * R();
-    const karren = R() < (shape === 'flat' ? 0.55 : 0.88) ? { n: 10 + Math.floor(R() * 9), ph: R() * TAU, dep: (0.05 + 0.06 * R()) * S, wob: 0.15 + 0.3 * R(), side: R() * TAU, span: 1.9 + 1.4 * R(), top: 0.62 + 0.2 * R() } : null;
+    const karren = R() < (shape === 'flat' ? 0.5 : 0.85) ? { ph: R() * TAU, dep: 0.045 + 0.05 * R(), wob: 0.15 + 0.3 * R(), side: R() * TAU, span: 1.9 + 1.4 * R(), top: 0.55 + 0.25 * R() } : null;
     const taf = R() < 0.3 ? (() => { const a = R() * TAU, t = (R() - 0.6) * 0.5; return { c: [Math.cos(a) * Math.cos(t), Math.sin(t), Math.sin(a) * Math.cos(t)], r: 0.16 + 0.14 * R(), dep: (0.05 + 0.08 * R()) * S }; })() : null;
     /* (a waist worn into it low down, where the sand and the water scour it: the stone overhangs its own foot) */
-    const notch = shape !== 'flat' && R() < 0.45 ? { y: -0.3 - 0.2 * R(), w: 0.16 + 0.1 * R(), dep: 0.06 + 0.08 * R() } : null;
-    /* (two to four faces where it was jointed against its neighbours: flattish, their edges rounded; a tall one's top
-       cut flat across) */
-    const faces = []; for (let k = 0, n = 2 + Math.floor(R() * 4); k < n; k++) { const a = R() * TAU, t = (R() - 0.6) * 1.4, l = 1; faces.push({ n: [Math.cos(a) * Math.cos(t), Math.sin(t), Math.sin(a) * Math.cos(t)], d: 0.68 + 0.18 * R(), soft: 0.08 + 0.1 * R() }); }
-    if (shape === 'tall') faces.push({ n: [0.15 * (R() - 0.5), 1, 0.15 * (R() - 0.5)].map((v, i, a) => v / Math.hypot(...a)), d: (0.82 + 0.1 * R()) * sc[1], soft: 0.12 });
-    /* (one or two joints still cut into it: planes through it, a groove where each meets the surface) */
+    const notch = shape !== 'flat' && R() < 0.4 ? { y: -0.3 - 0.2 * R(), w: 0.16 + 0.1 * R(), dep: 0.05 + 0.07 * R() } : null;
+    /* (one joint still cut into it now and then: a plane through it, a groove where it meets the surface) */
     const joints = []; for (let k = 0, n = R() < 0.35 ? 1 : 0; k < n; k++) { const a = R() * TAU, t = (R() - 0.5) * 0.6; joints.push({ n: [Math.cos(a) * Math.cos(t), Math.sin(t), Math.sin(a) * Math.cos(t)], d: (R() - 0.5) * 0.9 * S, w: (0.012 + 0.012 * R()) * S, dep: (0.015 + 0.02 * R()) * S }); }
     /* (sheets of its skin spalled off: a cap of it gone, a step round the cap's ragged edge) */
-    const sheets = []; for (let k = 0, n = 1 + Math.floor(R() * 2.5); k < n; k++) { const a = R() * TAU, up = 0.15 + 0.7 * R(), l = Math.hypot(Math.cos(a), up, Math.sin(a)); sheets.push({ c: [Math.cos(a) / l, up / l, Math.sin(a) / l], r: 0.35 + 0.35 * R(), t: (0.015 + 0.03 * R()) * S }); }
+    const sheets = []; for (let k = 0, n = 1 + Math.floor(R() * 2.5); k < n; k++) { const a = R() * TAU, up = 0.15 + 0.7 * R(), l = Math.hypot(Math.cos(a), up, Math.sin(a)); sheets.push({ c: [Math.cos(a) / l, up / l, Math.sin(a) / l], r: 0.35 + 0.35 * R(), t: (0.012 + 0.025 * R()) * S }); }
     const pits = R() < 0.25;
-    return { S, sc, ex, seed, rot, faces, joints, sheets, pits, lop, flare, karren, taf, notch, split: shape === 'split' ? { n: (() => { const a = R() * TAU; return [Math.cos(a), 0, Math.sin(a)]; })(), gap: (0.05 + 0.1 * R()) * S } : null };
+    return { S, sc, fpoly, frac, seed, rot, joints, sheets, pits, lop, flare, karren, taf, notch, split: shape === 'split' ? { n: (() => { const a = R() * TAU; return [Math.cos(a), 0, Math.sin(a)]; })(), gap: (0.05 + 0.1 * R()) * S } : null };
   }
-  /* the radius toward unit direction (x, y, z), and the masks (groove, fresh rock at a sheet's edge, pit) */
+  /* the radius toward unit direction (x, y, z), and the masks (groove, fresh rock at a sheet's edge or a fracture, pit) */
   function surface(K, x, y, z, out) {
-    const { S, sc, ex, seed, rot } = K;
-    /* (a rounded block: a superquadric turned its own way, lumpy at every scale) */
+    const { S, seed, rot } = K;
+    /* (the rounded block, turned its own way, lumpy at every scale) */
     const cr = Math.cos(rot), sr = Math.sin(rot), xr = x * cr - z * sr, zr = x * sr + z * cr;
-    const q = Math.pow(Math.pow(Math.abs(xr / sc[0]), ex) + Math.pow(Math.abs(y / sc[1]), ex) + Math.pow(Math.abs(zr / sc[2]), ex), -1 / ex);
-    let r = q * S * (1 + 0.16 * (fbm(x * 0.9 + seed, y * 0.9, z * 0.9, 3) - 0.5) + 0.06 * (fbm(x * 2.6 + seed, y * 2.6, z * 2.6, 3) - 0.5) + 0.014 * (vn(x * 11 + seed, y * 11, z * 11) - 0.5));
+    let r = S / K.fpoly(xr, y, zr) * (1 + 0.16 * (fbm(x * 0.9 + seed, y * 0.9, z * 0.9, 3) - 0.5) + 0.06 * (fbm(x * 2.6 + seed, y * 2.6, z * 2.6, 3) - 0.5) + 0.014 * (vn(x * 11 + seed, y * 11, z * 11) - 0.5));
     r *= 1 + (K.lop ? x * K.lop[0] + y * K.lop[1] + z * K.lop[2] : 0) + (K.flare || 0) * sm(-0.05, -0.75, y);
     if (K.notch) { const u = (y - K.notch.y) / K.notch.w; r *= 1 - K.notch.dep * Math.exp(-u * u) * (0.75 + 0.25 * vn(x * 3 + seed, y * 2, z * 3)); }
-    /* (its jointed faces: the surface held back to each plane, softly) */
-    for (const F of K.faces) { const dn = (x * F.n[0] + y * F.n[1] + z * F.n[2]) * r, lim = F.d * S; if (dn > lim - F.soft * S) { const over = dn - (lim - F.soft * S), k2 = F.soft * S, pulled = k2 * (1 - Math.exp(-over / k2)); r *= (lim - F.soft * S + pulled) / dn; } }
-    let groove = 0, fresh = 0, pit = 0;
-    /* (the runnels: down the steep sides, deepest just under the top's shoulder, fading out toward the foot) */
-    if (K.karren) {
-      /* (side by side over most of the way round, each its own depth: a rounded groove, a sharp ridge where two meet —
-         |sin| — wandering a little as it runs down; from just under the top's shoulder, deepest a little below it, gone
-         by the foot) */
-      const kr = K.karren, th = Math.atan2(zr, xr), off = Math.atan2(Math.sin(th - kr.side), Math.cos(th - kr.side));
-      const ph = th * kr.n * 0.5 + kr.ph + kr.wob * Math.sin(y * 3.1 + seed) + 0.35 * (vn(x * 1.6 + seed, y * 0.5, z * 1.6) - 0.5) * TAU;
-      const prof = Math.pow(Math.abs(Math.sin(ph)), 1.4), each = 0.4 + 0.6 * vn(Math.cos(th) * 2.6 + seed, Math.sin(th) * 2.6, 0.7);
-      const kg = prof * each * sm(kr.span, kr.span * 0.55, Math.abs(off)) * sm(kr.top + 0.02, kr.top - 0.3, y) * sm(-0.45, 0.15, y);
-      r -= kr.dep * kg; groove = Math.max(groove, kg * 0.8);
-    }
+    let frx = 0;
+    /* (the clean break: the surface held to its plane, the edge rounded only a little) */
+    if (K.frac) { const c = xr * K.frac.n[0] + y * K.frac.n[1] + zr * K.frac.n[2]; if (c > 1e-3) { const t = K.frac.d * S / c, k = 0.04 * S, h = Math.max(k - Math.abs(r - t), 0) / k; if (t < r + k) { r = Math.min(r, t) - h * h * k * 0.25; frx = sm(r + 0.02 * S, r - 0.004 * S, t); } } }
+    let groove = 0, fresh = frx, pit = 0;
     /* (a hollow weathered into its side, the rock round its lip a little proud) */
     if (K.taf) { const c = x * K.taf.c[0] + y * K.taf.c[1] + z * K.taf.c[2], e = Math.cos(K.taf.r * Math.PI); const hk = sm(e, e + 0.06, c) * (0.75 + 0.25 * vn(x * 6 + seed, y * 6, z * 6)); r -= K.taf.dep * hk; pit = Math.max(pit, hk); }
     const px = x * r, py = y * r, pz = z * r;
@@ -118,19 +121,25 @@
     const map = new Map(), V = [], idx = [];
     for (let i = 0; i < pos.count; i++) { const k = Math.round(pos.getX(i) * 1e5) + ',' + Math.round(pos.getY(i) * 1e5) + ',' + Math.round(pos.getZ(i) * 1e5); let id = map.get(k); if (id === undefined) { id = V.length / 3; map.set(k, id); V.push(pos.getX(i), pos.getY(i), pos.getZ(i)); } idx.push(id); }
     sph.dispose();
-    const n = V.length / 3, P = new Float32Array(n * 3), M = new Float32Array(n * 4), out = [0, 0, 0, 0], sink = (o.sink ?? 0.18) * S * K.sc[1];
+    const n = V.length / 3, P = new Float32Array(n * 3), D = new Float32Array(n * 3), M = new Float32Array(n * 4), out = [0, 0, 0, 0], sink = (o.sink ?? 0.18) * S * K.sc[1];
     let ymin = 1e9;
     for (let i = 0; i < n; i++) {
       let x = V[i * 3], y = V[i * 3 + 1], z = V[i * 3 + 2]; const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
       surface(K, x, y, z, out); let px = x * out[0], py = y * out[0], pz = z * out[0];
       if (K.split) { const s = Math.sign(px * K.split.n[0] + pz * K.split.n[2]) || 1; px += K.split.n[0] * s * K.split.gap * 0.5; pz += K.split.n[2] * s * K.split.gap * 0.5; }
-      P[i * 3] = px; P[i * 3 + 1] = py; P[i * 3 + 2] = pz; M.set(out, i * 4); ymin = Math.min(ymin, py);
+      P[i * 3] = px; P[i * 3 + 1] = py; P[i * 3 + 2] = pz; M.set(out, i * 4); ymin = Math.min(ymin, py); D[i * 3] = x; D[i * 3 + 1] = y; D[i * 3 + 2] = z;
     }
     /* (its foot: flattened where it sits, the lowest part a little under) */
     const base = ymin + sink;
     for (let i = 0; i < n; i++) { let y = P[i * 3 + 1] - base; if (y < 0) y *= 0.25; P[i * 3 + 1] = y; }
     const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.BufferAttribute(P, 3)); geo.setIndex(idx); geo.computeVertexNormals();
     colour(geo, M, R, o, S, o.off || [0, 0, 0]);
+    /* (for the shader's flutes: each point's way out from the stone's middle, and the stone's flutes — their phase, the
+       side they are on, how far round and how far down they run; its seed, its size (in the geometry's own units: the
+       shader multiplies it by the stone's own scale), their depth and wander) */
+    const kr = K.karren, KR = new Float32Array(n * 4), KS = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) { KR.set(kr ? [kr.ph, kr.side, kr.span, kr.top] : [0, 0, 0, 0], i * 4); KS.set([K.seed, S, kr ? kr.dep : 0, kr ? kr.wob : 0], i * 4); }
+    geo.setAttribute('aDir', new T.BufferAttribute(D, 3)); geo.setAttribute('aKr', new T.BufferAttribute(KR, 4)); geo.setAttribute('aKs', new T.BufferAttribute(KS, 4));
     return geo;
   }
   /* ── the boulder's colours: its own grey, lighter and lichened on top, streaked dark down its steep faces, fresher where a
@@ -138,7 +147,7 @@
   function colour(geo, M, R, o, S, off = [0, 0, 0]) {
     const P = geo.attributes.position.array, N = geo.attributes.normal.array, n = P.length / 3, C = new Float32Array(n * 3), W = new Float32Array(n);
     /* (one tone for the whole stone, never a channel each: a weathered grey, warmer or cooler, the feldspar's pink in it) */
-    const bk = 0.88 + 0.24 * R(), base = o.colour || mix3([0.25, 0.243, 0.232], [0.29, 0.262, 0.238], R()).map(q => q * bk), tide = o.tide, seed = R() * 40;
+    const bk = 0.88 + 0.24 * R(), base = o.colour || mix3([0.3, 0.292, 0.278], [0.345, 0.312, 0.284], R()).map(q => q * bk), tide = o.tide, seed = R() * 40;
     for (let i = 0; i < n; i++) {
       const x = P[i * 3] + off[0], y = P[i * 3 + 1] + off[1], z = P[i * 3 + 2] + off[2], ny = N[i * 3 + 1], g = M[i * 4 + 1], fr = M[i * 4 + 2], pt = M[i * 4 + 3];
       let c = base.map(q => q * (0.92 + 0.16 * fbm(x * 0.9 + seed, y * 0.9, z * 0.9, 3)));

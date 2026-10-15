@@ -79,6 +79,22 @@ vec3 fogIt(vec3 c, vec3 wp){
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }`;
   const PREFIX = GLSL.COMMON + GLSL.ART + FOG;
+  /* granite's crystals as they are up close: a mosaic of them a few millimetres across, interlocking, each one mineral —
+     the black mica, the glassy grey quartz, the white feldspar and now and then the pink — read off the plane the surface
+     faces most (cell, how far inside it from its edge) */
+  const GRAN_XTL = `
+/* (a hash that holds up however far from the origin: the cell wrapped first, a sine-free hash of it) */
+vec2 gxH(vec2 p){ p = mod(p, 1024.0); vec3 q = fract(vec3(p.xyx)*vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz)*q.zy); }
+vec2 gXtl(vec3 w, vec3 n){
+  vec3 a = abs(n); vec2 p = a.x > a.y && a.x > a.z ? w.yz : a.y > a.z ? w.xz : w.xy;
+  vec2 g = floor(p), f = p - g; float d1 = 8.0, d2 = 8.0, h1 = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){
+    vec2 o = vec2(float(i), float(j)), h = gxH(g + o), r = o + 0.1 + 0.8*h - f; float d = dot(r, r);
+    if (d < d1){ d2 = d1; d1 = d; h1 = h.x; } else if (d < d2) d2 = d;
+  }
+  return vec2(h1, sqrt(d2) - sqrt(d1));
+}
+`;
   /* a rough surface: three sizes of bumps, the finest a sandpaper grain (faded with distance, so it doesn't sparkle) */
   const bump = `
   #include <normal_fragment_maps>
@@ -194,8 +210,14 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
         /* (a vertex with no normal at all — where a model's surface folds to a point — would be lit as nothing, a black
            speck with black triangles round it: it is given one) */
         .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n  if (dot(objectNormal, objectNormal) < 1e-12) objectNormal = vec3(0.0, 1.0, 0.0);')
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud, aPath; varying float vCov, vMud, vPath;' : ''))
-        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud; vPath = aPath;' : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud, aPath; varying float vCov, vMud, vPath;' : '') + (key === 'gran' || key === 'granw' ? '\nattribute vec3 aDir; attribute vec4 aKr, aKs; varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;' : ''))
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud; vPath = aPath;' : '') + (key === 'gran' || key === 'granw' ? `
+  vKDir = aDir; vKr = aKr; vKs = aKs;
+  #ifdef USE_INSTANCING
+    vKsz = aKs.y*length((modelMatrix*instanceMatrix)[0].xyz);
+  #else
+    vKsz = aKs.y*length(modelMatrix[0].xyz);
+  #endif` : ''))
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
   vec4 wpp = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -239,25 +261,54 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
          across it, level from stone to stone: high up the black lichen of the splash zone, below it the barnacles' pale
          crust, at the water the wet dark rock and its weed; glossy where the waves keep it wet */
       if (key === 'gran' || key === 'granw') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  float gWet = 0.0;
-  { float gD = distance(vWPos, cameraPosition), gK = smoothstep(7.0, 1.2, gD), gK2 = smoothstep(60.0, 6.0, gD);
+  float gWet = 0.0, gFl = 0.0, gFlH = 0.0;
+  /* the flutes: side by side round the stone a few tenths of a metre apart whatever its size (so a big one has many, a
+     small one none), each a rounded groove with a sharp ridge between it and the next, wandering a little as it runs down
+     from under the shoulder, deepest a little below it, gone toward the foot; fading out where they would be finer than
+     the pixels. Their height (gFlH, m) bends the light (below), the water running down them darkens them */
+  { vec3 dr = normalize(vKDir); float th = atan(dr.z, dr.x), off = atan(sin(th - vKr.y), cos(th - vKr.y));
+    float nF = max(6.0, floor(6.2832*vKsz*1.12/mix(0.3, 0.46, fract(vKs.x*0.37)) + 0.5));
+    /* (never even: their spacing wanders round the stone, some wide and some narrow, some deep and some hardly there,
+       two now and then running into one) */
+    float ph = th*nF*0.5 + vKr.x + vKs.w*sin(dr.y*3.1 + vKs.x) + 0.35*(vnz(dr*1.6 + vKs.x) - 0.5)*6.2832 + 2.4*(vnz(vec3(cos(th)*4.1 + vKs.x, sin(th)*4.1, dr.y*1.3)) - 0.5);
+    float prof = pow(abs(sin(ph)), 1.4), each = smoothstep(0.25, 0.75, vnz(vec3(cos(th)*5.3 + vKs.x, sin(th)*5.3, dr.y*0.8 + 1.7)))*(0.55 + 0.45*vnz(vec3(cos(th)*2.6 + vKs.x, sin(th)*2.6, 0.7)));
+    float env = smoothstep(vKr.z, vKr.z*0.55, abs(off))*smoothstep(vKr.w + 0.02, vKr.w - 0.3, dr.y)*smoothstep(-0.45, 0.15, dr.y)*step(0.01, vKr.z);
+    float fph = nF*0.5*length(fwidth(dr))/max(length(dr.xz), 0.15);
+    gFl = prof*each*env*smoothstep(0.65, 1.5, vKsz)*(1.0 - smoothstep(0.35, 0.9, fph));
+    gFlH = -vKs.z*clamp(vKsz, 0.0, 2.2)*0.55*gFl;
+    diffuseColor.rgb *= 1.0 - 0.2*gFl*(0.6 + 0.4*vnz(vWPos*vec3(3.0, 0.7, 3.0))); }
+  { float gD = distance(vWPos, cameraPosition), gK = smoothstep(6.5, 1.2, gD), gK2 = smoothstep(60.0, 6.0, gD);
     vec3 gN = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz);
-    float n1 = vnz(vWPos*190.0), n2 = vnz(vWPos*120.0 + 7.3), n3 = vnz(vWPos*60.0 + 2.1);
-    float mica = smoothstep(0.74, 0.8, n1), fel = smoothstep(0.5, 0.62, n2);
-    vec3 c = diffuseColor.rgb*mix(vec3(0.88, 0.89, 0.92), vec3(1.12, 1.03, 0.95), fel);
-    c *= mix(1.0, 0.3, mica); c *= 0.93 + 0.14*n3;
-    diffuseColor.rgb = mix(diffuseColor.rgb*(0.97 + 0.06*n3), c, gK);
+    float n1 = vnz(vWPos*190.0), n2 = vnz(vWPos*120.0 + 7.3), n3 = vnz(vWPos*60.0 + 2.1), n4 = vnz(vWPos*150.0 + 3.7);
+    /* (its crystals a little way off: the black mica in flecks, the feldspar pinkish, the quartz glassy grey-white —
+       softly, as they blur together) */
+    float mica = smoothstep(0.75, 0.81, n1), fel = smoothstep(0.5, 0.62, n2), qz = smoothstep(0.8, 0.86, n4);
+    vec3 c = diffuseColor.rgb*mix(vec3(0.92, 0.92, 0.94), vec3(1.08, 1.03, 0.97), fel);
+    c *= mix(1.0, 0.55, mica)*(1.0 + 0.22*qz); c *= 0.95 + 0.1*n3;
+    float gK3 = smoothstep(2.6, 0.7, gD);
+    diffuseColor.rgb = mix(diffuseColor.rgb*(0.97 + 0.06*n3), c, gK*(1.0 - gK3));
+    /* (and right up close the crystals themselves, each its own) */
+    if (gK3 > 0.0){
+      /* (the feldspar and the quartz the bigger crystals, the mica small among them; weathered, so softly told apart) */
+      vec2 xa = gXtl(vWPos*130.0, gN), xb = gXtl(vWPos*310.0 + 3.1, gN); float m = xa.x;
+      vec3 mc = m < 0.38 ? vec3(0.87, 0.89, 0.92) : m < 0.86 ? vec3(1.07, 1.05, 1.0) : vec3(1.12, 0.98, 0.9);
+      mc *= (0.95 + 0.1*fract(m*13.7))*(0.9 + 0.1*smoothstep(0.0, 0.1, xa.y));
+      mc = mix(mc, vec3(0.34, 0.33, 0.33), step(xb.x, 0.12)*smoothstep(0.0, 0.07, xb.y)*0.85);
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*mc, gK3);
+    }
     diffuseColor.rgb *= mix(1.0, (0.93 + 0.14*vnz(vWPos*1.1 + 3.0))*(0.96 + 0.08*vnz(vWPos*3.7 + 8.0)), gK2);
     float st = smoothstep(0.6, 0.82, vnz(vec3(vWPos.x*5.0, vWPos.y*0.42, vWPos.z*5.0) + 11.0))*smoothstep(0.92, 0.4, abs(gN.y));
     diffuseColor.rgb *= 1.0 - 0.26*st;${key === 'granw' ? `
-    float sea = smoothstep(4.0, -0.5, -shoreS(vWPos.xz)), y = vWPos.y + 0.1*(vnz(vWPos*vec3(1.3, 0.2, 1.3)) - 0.5), hw = 0.45 + 0.25*sea;
-    float blk = smoothstep(hw - 0.04, hw + 0.1, y)*smoothstep(hw + 0.4 + 0.8*sea, hw + 0.12 + 0.3*sea, y)*mix(0.35, 1.0, sea)*(0.55 + 0.45*smoothstep(0.3, 0.62, vnz(vWPos*2.6 + 2.0)));
+    /* (only on the stones the sea reaches: out in it, or by its edge; a stone back up the beach is dry granite) */
+    float sea = smoothstep(3.0, -0.6, -shoreS(vWPos.xz)), y = vWPos.y + 0.1*(vnz(vWPos*vec3(1.3, 0.2, 1.3)) - 0.5), hw = 0.4 + 0.2*sea;
+    float blk = smoothstep(hw - 0.04, hw + 0.08, y)*smoothstep(hw + 0.24 + 0.42*sea, hw + 0.08 + 0.16*sea, y)*sea*(0.4 + 0.6*smoothstep(0.3, 0.62, vnz(vWPos*2.6 + 2.0)));
     float bar = smoothstep(hw + 0.03, hw - 0.08, y)*smoothstep(-0.4, -0.08, y)*sea, low = smoothstep(0.02, -0.3, y)*sea;
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.032, 0.032, 0.03)*(0.8 + 0.4*vnz(vWPos*23.0)), blk*0.85);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.055, 0.052, 0.047)*(0.8 + 0.4*vnz(vWPos*23.0)), blk*0.62);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.35, 0.32)*(0.7 + 0.45*smoothstep(0.5, 0.8, vnz(vWPos*65.0 + 1.0))), bar*0.7);
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.6*vec3(0.85, 1.0, 0.8), low*0.6);
-    gWet = smoothstep(hw + 0.25 + 0.6*sea, 0.05, vWPos.y)*mix(0.15, 1.0, sea);
-    diffuseColor.rgb *= mix(1.0, 0.55, gWet);` : ''} }`)
+    /* (wet where the waves wash it, up to a little over their reach) */
+    gWet = smoothstep(0.3 + 0.28*sea, 0.0, y)*sea;
+    diffuseColor.rgb *= mix(1.0, 0.58, gWet);` : ''} }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
   roughnessFactor *= mix(1.0, 0.45, gWet);`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -266,7 +317,10 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     float h0 = GRH(vWPos);
     vec3 g = vec3(GRH(vWPos + vec3(e, 0.0, 0.0)) - h0, GRH(vWPos + vec3(0.0, e, 0.0)) - h0, GRH(vWPos + vec3(0.0, 0.0, e)) - h0)/e;
     #undef GRH
-    vec3 gv = mat3(viewMatrix)*g; normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
+    vec3 gv = mat3(viewMatrix)*g; normal = normalize(normal - (gv - dot(gv, normal)*normal)); }
+  { vec3 sp = -vViewPosition, sX = dFdx(sp), sY = dFdy(sp), R1 = cross(sY, normal), R2 = cross(normal, sX);
+    float det = dot(sX, R1); vec2 dH = vec2(dFdx(gFlH), dFdy(gFlH));
+    vec3 nP = abs(det)*normal - sign(det)*(dH.x*R1 + dH.y*R2); if (dot(nP, nP) > 1e-26) normal = normalize(nP); }`);
       if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', '0.08*vRock')}
   /* where it is bare rock, the boulders' relief, and the joints between its blocks */
   if (vRock > 0.02){ float rkD2 = distance(vWPos, cameraPosition);
@@ -287,10 +341,16 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     rockC = mix(rockC, vec3(0.5, 0.48, 0.38)*0.6, lich*0.35);${key === 'land' && Layout.isle ? `
     /* (round the island a bare face of granite in the forest is streaked black down its slope where the rain runs off it,
        a film of algae; green with moss and ferns in its hollows and along its joints) */
-    { float stk = smoothstep(0.5, 0.78, vnz(vec3(vWPos.x*0.55, vWPos.y*0.045, vWPos.z*0.55))*0.75 + vnz(vec3(vWPos.x*2.1, vWPos.y*0.12, vWPos.z*2.1))*0.25);
-      rockC *= 1.0 - 0.5*stk;
+    { float inl = smoothstep(3.0, 16.0, -shoreS(vWPos.xz));
+      float stk = smoothstep(0.5, 0.78, vnz(vec3(vWPos.x*0.55, vWPos.y*0.045, vWPos.z*0.55))*0.75 + vnz(vec3(vWPos.x*2.1, vWPos.y*0.12, vWPos.z*2.1))*0.25);
+      rockC *= 1.0 - 0.5*stk*inl;
       float mos = smoothstep(0.58, 0.74, vnz(vWPos*0.33 + 4.0)*0.7 + vnz(vWPos*1.3)*0.3);
-      rockC = mix(rockC, vec3(0.035, 0.05, 0.022)*(0.8 + 0.4*n3), mos*0.75); }` : ''}
+      rockC = mix(rockC, vec3(0.035, 0.05, 0.022)*(0.8 + 0.4*n3), mos*0.75*inl);
+      /* (down by the sea, out of the forest's shade and its damp, the granite bare and pale, bleached by the sun and the
+         salt, coarse sand lying in its hollows) */
+      rockC *= mix(1.65, 1.0, inl);
+      float snd = smoothstep(0.5, 0.66, vnz(vWPos*0.5 + 2.0)*0.6 + vnz(vWPos*1.9)*0.4)*(1.0 - inl)*smoothstep(3.5, 1.0, vWPos.y);
+      rockC = mix(rockC, vec3(0.4, 0.37, 0.31)*(0.86 + 0.24*vnz(vWPos*41.0))*(0.9 + 0.2*n2), snd*0.85); }` : ''}
     /* the bare rock up close as the boulders are: its crystals' speckle, its cracks (and wider joints between the
        blocks, seen from further off), iron stains and crusts of lichen */
     if (vRock > 0.02){
@@ -328,11 +388,11 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
           float fw = length(fwidth(vWPos.xz)), lk = (1.0 - smoothstep(0.01, 0.045, fw))*smoothstep(0.1, 0.5, vCov)*(1.0 - 0.75*vMud)*smoothstep(0.6, 0.82, nW.y);
           if (lk > 0.0) litter = mix(litter, litterAt(vWPos.xz)*(0.64 + 0.22*l3), lk); }
         float fleck = smoothstep(0.7, 0.78, vnz(vWPos*0.8 + 11.0)*0.65 + l3*0.35);
-        float shade = mix(1.0, 0.26 + 0.9*fleck, smoothstep(0.1, 0.55, vCov));
+        float shade = mix(1.0, 0.42 + 0.75*fleck, smoothstep(0.1, 0.55, vCov));
         vec3 grass = mix(vec3(0.07, 0.1, 0.035), vec3(0.1, 0.105, 0.05), l2)*(0.72 + 0.4*l1 + 0.22*l4);
         vegC = mix(vegC, mix(grass, litter, smoothstep(0.1, 0.5, vCov))*shade, flN);
         /* (in the mangroves, their mud: grey-brown, wet, the leaves fallen on it, the light coming through in flecks) */
-        vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.45 + 0.8*fleck, smoothstep(0.1, 0.55, vCov));
+        vec3 mudC = mix(vec3(0.062, 0.054, 0.04), vec3(0.075, 0.06, 0.038), l2)*(0.72 + 0.36*l3 + 0.16*l4)*mix(1.0, 0.55 + 0.7*fleck, smoothstep(0.1, 0.55, vCov));
         /* (up close, the crabs' burrows in it, each a dark hole and round it the pellets of mud they have dug out, paler as
            they dry; and its hollows holding the last of the tide's water, dark and still, the sky in them) */
         { float mk = smoothstep(0.02, 0.2, vMud), nk = (1.0 - smoothstep(0.012, 0.05, length(fwidth(vWPos.xz))))*mk;
@@ -345,7 +405,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
           mudC = mix(mudC, mudC*0.55, mudPud); }
         vegC = mix(vegC, mudC, smoothstep(0.02, 0.2, vMud)*flN);
         /* (a trail's tread: red-brown earth trodden bare, roots across it, the forest's shade on it) */
-        vec3 earth = mix(vec3(0.24, 0.125, 0.065), vec3(0.19, 0.115, 0.07), l2)*(0.82 + 0.22*l3 + 0.1*l4)*mix(1.0, 0.5 + 0.7*fleck, smoothstep(0.1, 0.55, vCov));
+        vec3 earth = mix(vec3(0.24, 0.125, 0.065), vec3(0.19, 0.115, 0.07), l2)*(0.82 + 0.22*l3 + 0.1*l4)*mix(1.0, 0.62 + 0.55*fleck, smoothstep(0.1, 0.55, vCov));
         /* (its edges ragged into the litter, a root across it now and then) */
         float pe = smoothstep(0.25, 0.75, vPath + 0.35*(l3 - 0.5) + 0.2*(l4 - 0.5)), root = smoothstep(0.86, 0.92, vnz(vec3(vWPos.x*0.8, 0.0, vWPos.z*0.8) + vec3(0.0, l2*0.5, 0.0)));
         vegC = mix(vegC, mix(earth, vec3(0.07, 0.05, 0.035), root*0.65), pe*flN);
@@ -388,7 +448,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
       /* (the key light, the sun or the moon, only as much of it as gets past the land and the forest toward it to here) */
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', LFB_SH);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + (key === 'gran' || key === 'granw' ? 'varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;\n' + GRAN_XTL : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};

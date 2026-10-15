@@ -21,16 +21,19 @@ const IsleStones = (() => {
   /* the shapes (granite.js's boulder, a metre across its half-width, each its own seed) and the detail each level of them
      is drawn at: up close, at a middle distance, far off */
   const SHAPES = [['round', 3], ['round', 7], ['round', 12], ['round', 19], ['flat', 4], ['flat', 9], ['flat', 15], ['tall', 6], ['tall', 13], ['split', 8], ['round', 23], ['flat', 21]];
-  const DET = [12, 5, 2];
+  const DET = [12, 5, 2, 24];
   /* how near the stones are drawn whole, and the band over which they give way to their simpler shapes (m); how far off
-     the middle level is drawn, and the far one */
-  const NEAR = 70, FADE = 14, MID = 420, FAR = 1000;
+     the middle level is drawn, and the far one; and how near the big ones are drawn finer still (HERO, m, those bigger
+     than HERO_S): their outline smooth however close one comes */
+  const NEAR = 70, FADE = 14, MID = 420, FAR = 1000, HERO = 38, HERO_S = 1.15;
 
   function build(root, I, o) {
     const land = o.land, L = I.data.line, group = new T.Group(); group.name = 'stones'; group.matrixAutoUpdate = false; root.add(group);
     const t0 = performance.now();
     /* ── the shapes, each at its three levels ── */
-    const protos = SHAPES.map(([shape, seed]) => DET.map(detail => { const g = StoneKit.boulder({ size: 1, shape, seed, detail, sink: 0.24 }); g.computeBoundingSphere(); return g; }));
+    const proto = (shape, seed, detail) => { const g = StoneKit.boulder({ size: 1, shape, seed, detail, sink: 0.24 }); g.computeBoundingSphere(); return g; };
+    /* (the finest level is made when a big stone first comes near, one shape a frame) */
+    const protos = SHAPES.map(([shape, seed]) => DET.map((detail, lev) => lev === 3 ? null : proto(shape, seed, detail)));
     /* the material: granite by the sea (Mats' 'granw': its crystals, its streaks, the sea's bands across it — the black
        lichen of the splash zone, the barnacles, the wet rock and its weed at the water), its near level fading out
        beyond NEAR, the others in within it, dithered pixel by pixel so the two never show at once */
@@ -116,6 +119,9 @@ void main() {
 
     /* ── near the eye: the nearest stones whole, as many of each shape as there is room for ── */
     const CAP = 160, nearIm = protos.map(P => { const im = new T.InstancedMesh(P[0], matN, CAP); im.count = 0; im.frustumCulled = false; im.castShadow = im.receiveShadow = true; im.matrixAutoUpdate = false; group.add(im); return im; });
+    const HCAP = 24, heroIm = protos.map(() => null);
+    const heroOf = p => { if (heroIm[p]) return heroIm[p]; const P = protos[p]; P[3] = proto(SHAPES[p][0], SHAPES[p][1], DET[3]);
+      const im = new T.InstancedMesh(P[3], matN, HCAP); im.count = 0; im.frustumCulled = false; im.castShadow = im.receiveShadow = true; im.matrixAutoUpdate = false; group.add(im); return (heroIm[p] = im); };
     let lastX = 1e9, lastZ = 1e9, frame = 0;
     function update(cx, cy, cz, _landTiles, budget) {
       const tiles = ownTiles();
@@ -135,13 +141,21 @@ void main() {
         const S = t.st; if (!S || !S.list.length || distTo(t, cx, cz) > NEAR + FADE + 8) continue;
         for (const st of S.list) { const d2 = (st.x - cx) ** 2 + (st.y - cy) ** 2 * 0.3 + (st.z - cz) ** 2; if (d2 < R2 + st.s * st.s * 4) pick[st.p].push([d2, st]); }
       }
+      /* (the nearest big ones at the finest level, the rest at the near one) */
+      const H2 = HERO * HERO; let made = 0;
       pick.forEach((P, p) => {
-        P.sort((a, b) => a[0] - b[0]); const im = nearIm[p], k = Math.min(CAP, P.length);
-        for (let i = 0; i < k; i++) { im.setMatrixAt(i, place(P[i][1])); im.setColorAt(i, tintOf(P[i][1])); }
+        P.sort((a, b) => a[0] - b[0]); const im = nearIm[p]; let k = 0, h = 0;
+        /* (this shape's finest level, if a big one of it is near and it is not made yet: one a frame) */
+        let hm = heroIm[p]; if (!hm && !made && P.some(q => q[1].s > HERO_S && q[0] < H2)) { hm = heroOf(p); made++; }
+        for (let i = 0; i < P.length && k < CAP; i++) { const st = P[i][1];
+          if (hm && st.s > HERO_S && P[i][0] < H2 && h < HCAP) { hm.setMatrixAt(h, place(st)); hm.setColorAt(h, tintOf(st)); h++; }
+          else { im.setMatrixAt(k, place(st)); im.setColorAt(k, tintOf(st)); k++; } }
         im.count = k; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        if (hm) { hm.count = h; hm.instanceMatrix.needsUpdate = true; if (hm.instanceColor) hm.instanceColor.needsUpdate = true; }
       });
+      if (made) lastX = 1e9;
     }
-    const stats = () => ({ stones: n, planMs: Math.round(planMs), near: nearIm.reduce((a, m) => a + m.count, 0), tiles: byTile.size });
+    const stats = () => ({ stones: n, planMs: Math.round(planMs), near: nearIm.reduce((a, m) => a + m.count, 0), hero: heroIm.reduce((a, m) => a + (m ? m.count : 0), 0), tiles: byTile.size });
     /* ── each shape's top, for a walker stepping up onto a stone: over a grid across its footprint, the highest its surface
        comes over each cell (its triangles laid flat onto the grid); and its highest point. A stone's top at a world
        point is its shape's, turned, tilted and sized as the stone is ── */
@@ -192,6 +206,24 @@ void main() {
     }
     /* (a stone's highest point) */
     const peakOf = st => st.y + tops[st.p].peak * st.s * st.sy;
+    /* ── each shape's footprint: how far out from its middle its side stands, every 15° round, over the height of the
+       van and the walker (its foot's flare, its bulges, its squared corners all in it), a little generous: so the van
+       stops at a boulder's side and a walker brushes it, rather than either going in ── */
+    const NB = 24, foot = protos.map(P => {
+      const p = P[0].attributes.position.array, F = new Float32Array(NB);
+      for (let i = 0; i < p.length; i += 3) { if (p[i + 1] < -0.16) continue; const b = ((Math.round(Math.atan2(p[i + 2], p[i]) / TAU * NB) % NB) + NB) % NB, r = Math.hypot(p[i], p[i + 2]); if (r > F[b]) F[b] = r; }
+      const G = new Float32Array(NB); for (let b = 0; b < NB; b++) G[b] = 1.02 * Math.max(F[b], 0.5 * (F[b] + Math.max(F[(b + 1) % NB], F[(b + NB - 1) % NB])));
+      return G;
+    });
+    const FPMAX = Math.max(1.3, ...foot.map(G => Math.max(...G)));
+    /* (how far a stone's side stands out toward a world direction (dx, dz) from its middle: the direction taken into the
+       stone's own frame, its shape's footprint read there between the two nearest bearings, sized as the stone is) */
+    function reach(st, dx, dz) {
+      e.set(st.tx, st.yaw, st.tz); _q.setFromEuler(e); _qi.copy(_q).invert();
+      _v.set(dx, 0, dz).applyQuaternion(_qi);
+      const G = foot[st.p], f = ((Math.atan2(_v.z, _v.x) / TAU * NB) % NB + NB) % NB, b0 = Math.floor(f) % NB, t = f - Math.floor(f);
+      return st.s * (G[b0] * (1 - t) + G[(b0 + 1) % NB] * t);
+    }
     /* ── and the streams' own stones (streams.js): the boulders of each step lined across it, the water pouring between and
        over them; a boulder now and then in a pool, its top just out of the water; cobbles along its edges and up the
        foot of its banks, half sunk in them. Dark with the wet ── */
@@ -223,13 +255,13 @@ void main() {
     /* the stones within r of a point (for the walk to climb them, the waves' slap on those in the water) */
     function near(x, z, r, out = []) {
       out.length = 0;
-      for (let tz = Math.floor((z - r - 6) / TS); tz <= Math.floor((z + r + 6) / TS); tz++) for (let tx = Math.floor((x - r - 6) / TS); tx <= Math.floor((x + r + 6) / TS); tx++) {
+      for (let tz = Math.floor((z - r - 9) / TS); tz <= Math.floor((z + r + 9) / TS); tz++) for (let tx = Math.floor((x - r - 9) / TS); tx <= Math.floor((x + r + 9) / TS); tx++) {
         const L2 = byTile.get(tx + ',' + tz); if (!L2) continue;
-        for (const st of L2) if ((st.x - x) ** 2 + (st.z - z) ** 2 < (r + st.s * 1.3) ** 2) out.push(st);
+        for (const st of L2) if ((st.x - x) ** 2 + (st.z - z) ** 2 < (r + st.s * FPMAX) ** 2) out.push(st);
       }
       return out;
     }
-    return { update, stats, near, top, topOf, peakOf, all, protos, mats: [matN, matF] };
+    return { update, stats, near, top, topOf, peakOf, reach, all, protos, mats: [matN, matF] };
   }
   return { build, SHAPES, NEAR };
 })();

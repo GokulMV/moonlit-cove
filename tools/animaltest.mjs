@@ -1,7 +1,7 @@
 /* The island's animals, clicked: for each of a few kinds out round the eye, the camera set a little way off it (further
    than it lets you come), a click on it — it should come up into the hand with its card (its name, what it is), turn
    there — then let go: back where it was, and off.
-   node tools/animaltest.mjs [prefix an] */
+   node tools/animaltest.mjs [prefix an] [kinds macaque,pig,egret] */
 import { open } from './lib.mjs';
 import path from 'path';
 const prefix = process.argv[2] || 'an';
@@ -12,7 +12,7 @@ try {
   await page.waitForFunction(() => window.__cove.st.camT >= 1, null, { timeout: 180000 });
   await page.addStyleTag({ content: '#hint { display: none !important; }' });
   /* the animals out: the nearest spot of each ground kind is brought out round the eye, so go to where some live */
-  for (const kind of ['macaque', 'pig', 'egret']) {
+  for (const kind of (process.argv[3] || 'macaque,pig,egret').split(',')) {
     /* (a spot of that kind, the camera there, the animals given a moment to be brought out) */
     const sp = await page.evaluate(k => { const s = Engine.isFauna.spots[k]; if (!s || !s.length) return null; const C = Layout.camp, L = s.slice().sort((a, b) => Math.hypot(a.x - C.x, a.z - C.z) - Math.hypot(b.x - C.x, b.z - C.z)); return [L[0].x, L[0].z]; }, kind);
     if (!sp) { ok(false, `${kind}: has somewhere to live`); continue; }

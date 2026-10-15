@@ -1106,7 +1106,13 @@
     car.pitch = body.p; car.roll = body.r;
   }
   const CQ = {}, CQI = {};
+  /* (a long frame — a slow phone, a tab coming back — is driven as several short ones, so the van never jumps further in
+     one step than its push off a rock can undo) */
   function stepCar(dt) {
+    if (dt <= 1 / 30) return stepCar1(dt);
+    const n = Math.min(10, Math.ceil(dt * 30)); let r; for (let i = 0; i < n; i++) r = stepCar1(dt / n); return r;
+  }
+  function stepCar1(dt) {
     const k = keys, has = (...a) => a.some(x => k.has(x));
     const thr = (has('w', 'arrowup') ? 1 : 0) - (has('s', 'arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
     const str = (has('a', 'arrowleft') ? 1 : 0) - (has('d', 'arrowright') ? 1 : 0) + (touch.on ? -touch.x : 0);
@@ -1131,10 +1137,10 @@
       const circ = [-1.45, 0, 1.45].map(l => [car.x + Math.cos(car.h) * l, car.z - Math.sin(car.h) * l]);
       let moved = false;
       for (const [cx, cz] of circ) for (const [dx, dz, rad, o] of obstaclesNear(cx, cz)) {
-        if (Math.abs(dz) > 6) continue;
+        if (Math.abs(dz) > rad + 1) continue;
         const d = Math.hypot(dx, dz), min = 0.95 + rad;
         /* small stones: the van rolls over them with a jolt instead of stopping dead */
-        if (o[3] === 'rock' && rad < 0.55) { if (it === 0 && d < 0.75 + rad * 0.4 && car.bumpO !== o) { car.bumpO = o; car.bumpAt = [car.x, car.z]; jolt(cx - dx, cz - dz, rad); } continue; }
+        if (o[3] === 'rock' && (o[5] !== undefined ? o[5] : rad) < 0.55) { if (it === 0 && d < 0.75 + rad * 0.4 && car.bumpO !== o) { car.bumpO = o; car.bumpAt = [car.x, car.z]; jolt(cx - dx, cz - dz, rad); } continue; }
         if (d < min) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, push = min - d + 0.002; car.x += nx * push; car.z += nz * push; moved = true;
           const into = -(fx * nx + fz * nz) * car.v; if (into > impact) { impact = into; hit = o; } }
       }
@@ -1212,7 +1218,15 @@
     /* never let the lagging camera fall inside the van, or into a rock */
     const dx = car.camP[0] - car.x, dz = car.camP[2] - car.z, dd = Math.hypot(dx, dz);
     if (dd < 6.2) { car.camP[0] = car.x + dx / Math.max(dd, 1e-3) * 6.2; car.camP[2] = car.z + dz / Math.max(dd, 1e-3) * 6.2; }
-    if (Engine.world) { const g = Engine.world.land(car.camP[0], car.camP[2]) + 1.6; if (car.camP[1] < g) car.camP[1] = g; }
+    if (Engine.world) { const W = Engine.world; let g = W.land(car.camP[0], car.camP[2]) + 1.6;
+      /* (nor into a boulder: over one it comes to, eased up onto it and down off it again, never inside it) */
+      if (W.stones) {
+        const topAt = (x, z) => { const T = W.stones.top(x, z); return T.y > -1e8 ? T.y : -1e9; };
+        const need = Math.max(g, Math.max(topAt(tp[0], tp[2]), topAt(car.camP[0], car.camP[2]), topAt((car.camP[0] + car.x) / 2, (car.camP[2] + car.z) / 2) - 0.6) + 1.1);
+        car.lift = car.lift === undefined ? need : car.lift + (need - car.lift) * (1 - Math.exp(-dt * (need > car.lift ? 6 : 1.2)));
+        g = Math.max(g, car.lift, topAt(car.camP[0], car.camP[2]) + 0.35);
+      }
+      if (car.camP[1] < g) car.camP[1] = g; }
     return { pos: car.camP.slice(), look: car.camL.slice(), fov: 54 + Math.min(8, Math.abs(car.v) * 0.7), focus: 7.4 };
   }
 
@@ -1844,7 +1858,11 @@
     /* (the eyes adapting: in under the forest's canopy, round the island, the dark under the trees opens up over a second
        or two, as eyes open to it; and closes down again out in the sun) */
     { let tgt = 1; const Wd = Engine.world;
-      if (Layout.isle && Wd && Wd.forest && cam && cam.pos) { const p = cam.pos, up = p[1] - Wd.land(p[0], p[2]); tgt = 1 + 0.75 * Wd.forest.cover(p[0], p[2]) * (1 - smf(16, 40, up)); }
+      if (Layout.isle && Wd && Wd.forest && cam && cam.pos) { const p = cam.pos, up = p[1] - Wd.land(p[0], p[2]), F = Wd.forest;
+        /* (how closed the canopy is round here: where one stands, and a few metres round, so a trail's cut through it, open
+           only overhead, counts as under it) */
+        const cov = 0.4 * F.cover(p[0], p[2]) + 0.15 * (F.cover(p[0] + 6, p[2]) + F.cover(p[0] - 6, p[2]) + F.cover(p[0], p[2] + 6) + F.cover(p[0], p[2] - 6));
+        tgt = 1 + 2.6 * cov * (1 - smf(16, 40, up)); }
       st.eyeK = (st.eyeK || 1) + (tgt - (st.eyeK || 1)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.5)); }
     const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;

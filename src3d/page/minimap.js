@@ -20,7 +20,7 @@ const Minimap = (() => {
     rock: [138, 132, 120], cliff: [116, 110, 100], mud: [98, 88, 68], mang: [56, 72, 46], fringe: [76, 106, 60], forest: [42, 70, 42], high: [70, 90, 56] };
   const KEY = { trail: '#eadcb6', creek: '#5aa8bf', jetty: '#b28a5a', hut: '#d6b07e', camp: '#f2b769', van: '#7fc4c4', you: '#ffffff' };
 
-  let btn, cv, g, dlg, bcv, bg, base = null, job = null, isle = false, open = false, shown = true, lastT = 0, lastBig = 0, state = null;
+  let btn, cv, g, dlg, bcv, bg, base = null, job = null, isle = false, open = false, shown = true, lastT = 0, lastBig = 0, lastF = 0, state = null;
 
   /* ── the island, drawn once: a pixel every 3.5 m, north up (the world's −x), east to the right (its −z) ── */
   function* islandBase() {
@@ -64,7 +64,8 @@ const Minimap = (() => {
         }
         const o = (r * W + q) * 4; px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; px[o + 3] = 255;
       }
-      if (r % 24 === 23) yield;
+      /* (a few rows at a time, so a frame's share of the work stays within its few milliseconds even on a slow phone) */
+      if (r % 3 === 2) yield;
     }
     cx.putImageData(img, 0, 0);
     /* what is laid on it: the creeks, the trails, the jetty and the ranger's hut (where the island's world has them) */
@@ -270,7 +271,9 @@ const Minimap = (() => {
   const fw = new THREE.Vector3();
   function frame(o) {
     if (!btn) return;
-    if (job) { const t0 = performance.now(); let r; do r = job.next(); while (!r.done && performance.now() - t0 < 4); if (r.done) { base = r.value; job = null; if (open) drawBig(); } }
+    /* (the island's picture: a few milliseconds of a frame, more where frames are slow anyway — a sixth of one, up to 60) */
+    const tn = performance.now(), fdt = lastF ? tn - lastF : 16; lastF = tn;
+    if (job) { const t0 = performance.now(), bud = Math.max(4, Math.min(60, fdt / 6)); let r; do r = job.next(); while (!r.done && performance.now() - t0 < bud); if (r.done) { base = r.value; job = null; if (open) drawBig(); } }
     const cam = Engine.camera; cam.getWorldDirection(fw);
     const driving = !!o.driving, van = o.van, fl = Math.hypot(fw.x, fw.z) || 1;
     state = { you: driving && van ? { x: van.x, z: van.z, fx: Math.cos(van.heading), fz: -Math.sin(van.heading) } : { x: cam.position.x, z: cam.position.z, fx: fw.x / fl, fz: fw.z / fl }, van, driving };
