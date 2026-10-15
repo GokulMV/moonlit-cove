@@ -62,6 +62,45 @@ const StructKit = (() => {
         col = mix3(col, [0.17, 0.155, 0.135], P.m3 * 0.35);
         return [col.map(q => q * Math.max(0.55, 1 - 4 * Math.max(0, P.cav))), 0.6];
       } },
+    /* the beach huts' timber (beachhut.js): sawn hardwood oiled once and left to the weather, still brown, greying where
+       the sun and the rain get at it, the grain's lines darker, dark flecks of its fibres; and the darker red-brown of the
+       doors, the treads, the table tops; and the round posts it stands on, checked along their length */
+    hutWood: { w: 256, h: 1024, tile: [0.25, 1.6], seed: 401, depth: 0.0024,
+      hgt(u, v, K, o) {
+        const [line, knot] = grain(u, v, K, 26, [3, 2, 0.1]);
+        const cr = Math.abs(K.fbm(u * 16 + 2 * K.vn(u * 3, v * 10, 3, 10), v * 1.5, 16, 2, 2) - 0.5), ck = sm(0.007, 0.0, cr) * sm(0.6, 0.75, K.vn(u * 6, v * 4, 6, 4));
+        o[0] = clamp(0.64 + 0.1 * line - 0.05 * knot + 0.04 * (K.vn(u * 90, v * 300, 90, 300) - 0.5) + 0.04 * (K.fbm(u * 6, v * 2, 6, 2, 3) - 0.5) - 0.35 * ck); o[1] = knot; o[2] = patch(u, v, K, 3, 0.35, 4.7); o[3] = ck;
+      },
+      col(u, v, P, K) {
+        const b = K.fbm(u * 3, v * 1.5, 3, 2, 3), fl = sm(0.8, 0.88, K.vn(u * 140, v * 26, 140, 26));
+        let col = mix3([0.085, 0.05, 0.03], mix3([0.15, 0.09, 0.052], [0.21, 0.135, 0.078], b), sm(0.45, 0.8, P.h));
+        col = mix3(col, [0.06, 0.035, 0.02], P.m1 * 0.5); col = mix3(col, [0.2, 0.18, 0.155], P.m2 * 0.38); col = mix3(col, [0.04, 0.025, 0.015], P.m3 * 0.75); col = mix3(col, [0.055, 0.032, 0.018], fl * 0.45);
+        const ao = Math.max(0.5, 1 - 4 * Math.max(0, P.cav)), ed = 1 + 0.5 * Math.max(0, P.cvx);
+        return [col.map(q => q * ao * ed), 0.8];
+      } },
+    hutWoodDark: { w: 256, h: 1024, tile: [0.25, 1.6], seed: 409, depth: 0.0014,
+      hgt(u, v, K, o) {
+        const [line, knot] = grain(u, v, K, 32, [3, 2, 0.1]);
+        o[0] = clamp(0.7 + 0.08 * line - 0.05 * knot + 0.02 * (K.vn(u * 120, v * 400, 120, 400) - 0.5)); o[1] = knot; o[2] = line; o[3] = patch(u, v, K, 3, 0.25, 6.1);
+      },
+      col(u, v, P, K) {
+        const b = K.fbm(u * 3, v * 1.2, 3, 2, 3);
+        let col = mix3([0.085, 0.046, 0.028], [0.125, 0.07, 0.04], b); col = mix3(col, [0.06, 0.033, 0.02], P.m2 * 0.5); col = mix3(col, [0.045, 0.025, 0.016], P.m1 * 0.7);
+        col = mix3(col, [0.17, 0.15, 0.13], P.m3 * 0.3);
+        return [col.map(q => q * Math.max(0.55, 1 - 4 * Math.max(0, P.cav))), 0.62];
+      } },
+    hutPost: { w: 512, h: 1024, tile: [0.8, 1.6], seed: 419, depth: 0.005,
+      hgt(u, v, K, o) {
+        const [line] = grain((u + v * 0.04) % 1, v, K, 30, null);
+        const cr = Math.abs(K.fbm(u * 14 + 2 * K.vn(u * 3, v * 8, 3, 8), v * 1.2, 14, 2, 2) - 0.5), ck = sm(0.012, 0.0, cr) * sm(0.5, 0.68, K.vn(u * 5, v * 3, 5, 3));
+        o[0] = clamp(0.6 + 0.16 * line + 0.07 * (K.fbm(u * 8, v * 4, 8, 4, 3) - 0.5) - 0.55 * ck); o[1] = ck; o[2] = patch(u, v, K, 3, 0.4, 2.9); o[3] = patch(u, v, K, 5, 0.12, 7.3);
+      },
+      col(u, v, P, K) {
+        const b = K.fbm(u * 3, v * 2, 3, 2, 3);
+        let col = mix3([0.075, 0.05, 0.032], mix3([0.135, 0.092, 0.058], [0.19, 0.135, 0.085], b), sm(0.4, 0.78, P.h));
+        col = mix3(col, [0.035, 0.024, 0.016], P.m1 * 0.8); col = mix3(col, [0.2, 0.185, 0.16], P.m2 * 0.42); col = mix3(col, [0.07, 0.065, 0.045], P.m3 * 0.4);
+        return [col.map(q => q * Math.max(0.48, 1 - 4 * Math.max(0, P.cav)) * (1 + 0.45 * Math.max(0, P.cvx))), 0.84];
+      } },
     pile: { w: 512, h: 1024, tile: [0.8, 1.6], seed: 223, depth: 0.006,
       hgt(u, v, K, o) {
         const [line] = grain((u + v * 0.04) % 1, v, K, 30, null);

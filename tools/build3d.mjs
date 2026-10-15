@@ -22,7 +22,7 @@ const MODELS = (() => {
   };
   walk('models'); return ['models/models.js', ...out];
 })();
-export const ENGINE = ['astro.js', 'stardata.js', 'textures.js', 'island.js', 'layout.js', 'sky.js', 'glsl.js', 'paint.js', 'mats.js', 'cloth.js', 'book.js', 'paper.js', ...MODELS, 'camp.js', 'nature.js', 'trees.js', 'impostor.js', 'forest.js', 'stones.js', 'park.js', 'trailroutes.js', 'trails.js', 'streams.js', 'horizon.js', 'isfauna.js', 'world.js', 'isle.js', 'shacks.js', 'marks.js', 'life.js', 'shallows.js', 'flora.js', 'orchard.js', 'fauna.js', 'inspect.js', 'fx.js', 'stars.js', 'cloudnoise.js', 'uncork.js', 'engine.js', 'audio.js'];
+export const ENGINE = ['astro.js', 'stardata.js', 'textures.js', 'island.js', 'layout.js', 'sky.js', 'glsl.js', 'paint.js', 'mats.js', 'cloth.js', 'book.js', 'paper.js', ...MODELS, 'camp.js', 'nature.js', 'trees.js', 'impostor.js', 'forest.js', 'grass.js', 'stones.js', 'park.js', 'trailroutes.js', 'trails.js', 'streams.js', 'horizon.js', 'isfauna.js', 'world.js', 'isle.js', 'huts.js', 'shacks.js', 'marks.js', 'life.js', 'shallows.js', 'flora.js', 'orchard.js', 'fauna.js', 'inspect.js', 'fx.js', 'snow.js', 'snowman.js', 'stars.js', 'cloudnoise.js', 'uncork.js', 'engine.js', 'audio.js'];
 const nm = path.join(root, 'node_modules');
 const THREE_VERSION = JSON.parse(fs.readFileSync(path.join(nm, 'three/package.json'), 'utf8')).version;
 const LOCAL_THREE = 'file://' + path.join(nm, 'three/build/three.min.js');

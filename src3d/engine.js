@@ -155,7 +155,10 @@ const Engine = (() => {
         _vr.copy(camera.matrixWorldInverse).setPosition(0, 0, 0); r.uPrevVP.value.copy(camera.projectionMatrix).multiply(_vr);
         ci = 1 - ci; clPrev = true;
       } else { su0.uCBOn.value = 0; fin.uniforms.uCloudBOn.value = 0; }
+      /* (the scene itself: where it is drawn with several samples to a pixel, the leaves' edges are shared among them) */
+      Mats.U.uA2C.value = rt.samples > 0 ? 1 : 0;
       R.setRenderTarget(rt); R.clear(); R.render(scene, camera);
+      Mats.U.uA2C.value = 0;
       if (p.ao > 0.01) {
         const a = ssao.uniforms; a.uDepth.value = rt.depthTexture; a.uTexel.value.set(1 / rt.width, 1 / rt.height);
         a.uProj.value.copy(camera.projectionMatrix); a.uInvProj.value.copy(camera.projectionMatrixInverse); a.uRad.value = 0.42;
@@ -545,7 +548,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
+  let grass = null, huts = null, hutT = null, snowFx = null, snowT = null, snowmen = null, fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -707,7 +710,8 @@ const Engine = (() => {
     const V3 = () => new T.Vector3();
     skyU = { uZen: { value: V3() }, uHor: { value: V3() }, uGlow: { value: V3() }, uSunDirV: { value: V3() }, uMoonDirV: { value: V3() }, uMoonDisc: { value: V3() }, uSunDisc: { value: V3() }, uAnti: { value: new T.Vector4() } };
     /* (round the island, the far ranges across the sea: drawn by the sky, from horizon.js's profile of them) */
-    const hzP = Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false ? IsleHorizon.profile() : null;
+    /* (the round island stands in the open sea: no far ranges unless asked for) */
+    const hzP = Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon === true ? IsleHorizon.profile() : null;
     skyMat = new T.ShaderMaterial({
       uniforms: Object.assign({}, skyU, { uEnv: { value: 0 }, uCloudLit: { value: new T.Vector3() }, uStars: { value: 1 }, uTime: { value: 0 }, uPhaseC: { value: 1 }, uPhaseSign: { value: 1 }, uCloud: { value: 0.85 }, uMoonR: { value: 0.0175 }, uSunR: { value: 0.016 }, uNoise: { value: noiseTex },
         uCirrus: { value: 0.5 }, uAlto: { value: 0.0 }, uCumulus: { value: 0.6 }, uStratus: { value: 0 }, uStorm: { value: 0 }, uFlash: { value: 0 }, uBolt: { value: new T.Vector4() }, uWind: { value: new T.Vector2(0.93, -0.37) }, uCloudT: { value: 0 }, uDriftW: { value: new T.Vector2() }, uDriftS: { value: new T.Vector3() }, uDriftT: { value: new T.Vector3() }, uHiDrift: { value: new T.Vector2() }, uAltoD: { value: new T.Vector4() }, uPix: { value: 0.0015 },
@@ -789,9 +793,14 @@ const Engine = (() => {
     /* (or the island's land, when the page is asked for the island, and its forest) */
     /* (the forest's and the fruit trees' bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
     FloraKit.Q.tex = opts.texQ ?? 0.5;
-    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest }) : World.build(natG, gU, noiseTex, { R });
+    /* (the round island: its beach and its forest; none of the rocky island's trails, streams, park or boulders) */
+    /* (and its huts along the top of the beach: where they stand worked out first, so the forest keeps clear of them) */
+    const hutPlan = Layout.isle && typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.island()) : null;
+    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R });
+    if (hutPlan) { huts = IsleHuts.build(natG, Layout.island(), world, { plan: hutPlan }); world.addWalker(huts.walk); world.addObstacles(huts.obstacles); Object.assign(api, { huts });
+      for (const h of huts.huts) for (const s of ['hammock', 'bench', 'bed', 'chair']) { const P = huts.seatPose(h.p.i, s); if (P) SEATS.push({ id: P.id, name: P.name, kind: 'hut', hut: h.p.i, seat: s, near: 'hut' }); } }
     /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
-    if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false) {
+    if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon === true) {
       horizon = IsleHorizon.build(scene, { sky: skyU, U: Mats.U, mist: gU.uMist }); Object.assign(api, { horizon });
       skyMat.uniforms.uHzMist = gU.uMist; envSkyMat.uniforms.uHzMist = gU.uMist;
     }
@@ -800,6 +809,8 @@ const Engine = (() => {
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
+    /* (round the island, its grass, blade by blade: grass.js) */
+    if (Layout.isle && typeof IsleGrass !== 'undefined' && opts.grass !== false) { grass = IsleGrass.build(natG); Object.assign(api, { grass }); if (huts) grass.setClear(huts.plan.map(p => p.lawn)); }
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
     /* (and the camp's sand castle washes away as theirs do; washed flat, there is no castle left to walk round) */
@@ -814,6 +825,10 @@ const Engine = (() => {
       sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c), (L, c) => { if (isFauna) isFauna.pickables(L, c); }],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
+    /* snow falling, when the weather brings it (snow.js) */
+    snowFx = Snow.build(scene); Object.assign(api, { snowFx });
+    /* and the snowballs and snowmen rolled in it (snowman.js), each facing whoever made it */
+    snowmen = Snowmen.build(natG, world, { face: () => [camera.position.x, camera.position.z] }); Object.assign(api, { snowmen });
     post = makePost(); gU.uSunVis.value = post.visTex;
     return { casters: nCast };
   }
@@ -1017,6 +1032,11 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       for (const sp of splashes) { surge.ripples.push({ x: sp.x, z: sp.z, t0: o.waveT ?? t, A: 0.35 * sp.k / 0.4 }); }
     }
     if (flora) flora.update(t, camera);
+    if (huts) { const dtH = hutT === null ? 0 : Math.max(0, Math.min(0.1, t - hutT)); hutT = t; huts.update(dtH, t, camera.position, S); }
+    /* the snow lying (how much, how deep) for every shader that lays it, and the flakes in the air */
+    Mats.U.uSnow.value.set(o.snow || 0, o.snowD || 0, o.snowFall || 0, 0);
+    if (snowFx) { const now = performance.now() / 1000, dtS = snowT === null ? 0 : Math.max(0, Math.min(0.1, now - snowT)); snowT = now; snowFx.update(dtS, camera.position, camera, { fall: o.snowFall || 0, wind: o.wind ?? 1, height: post.height() }); if (snowmen) snowmen.update(dtS, o.snowD || 0); }
+    if (grass) grass.update(camera.position, { ground: world ? world.land(camera.position.x, camera.position.z) : 0, wind: o.wind ?? 1, gust: Mats.U.uWindK.value.y, push: o.push || null, snow: o.snow || 0, snowD: o.snowD || 0 });
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
     V(skyU.uMoonDisc, S.moonDisc); V(skyU.uSunDisc, S.sunDisc); skyU.uAnti.value.set(S.anti[0], S.anti[1], S.anti[2], 0);
@@ -1125,6 +1145,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
        hillside or the summit, looking out over kilometres, the day's air is far clearer) */
     if (Layout.isle) { const y = Math.max(1, camera.position.y), H = 600, up = Math.max(0, Math.min(1, (y - 20) / 180)); gU.uMist.value *= H / y * (1 - Math.exp(-y / H)) * (1 - 0.86 * up * up * (3 - 2 * up)); }
     Mats.U.uFog.value.set(S.hor[0], S.hor[1], S.hor[2], gU.uMist.value);
+    /* (the forest's own haze: the shade's light, sky and leaf-green, scattered in the damp air under the canopy) */
+    { const k = o.forestFog || 0, a = S.amb, g = S.groundAmb || a; Mats.U.uForF.value.set((a[0] * 0.55 + g[0] * 0.25) * 1.1, (a[1] * 0.62 + g[1] * 0.3) * 1.25, (a[2] * 0.5 + g[2] * 0.2) * 0.95, k); }
     if (volFire) { ppFire.dbg = o.fireDbg || 0; ppFire.I = F.i * (0.8 + 0.35 * ff) * (o.fireK ?? 2.2); ppFire.flick = ff; ppFire.t = t; ppFire.n3 = n3Tex; ppFire.fc.set(fb.x, 0.02, fb.z); }
     pp.exp = S.exposure * (o.expMul || 1); pp.thresh = 0.85 - 0.3 * soft; pp.bloomK = (o.bloomK ?? 0.5) + 0.25 * soft; pp.fade = o.fade ?? 1; pp.t = t; pp.night = S.night; pp.prof = o.prof ? [] : null;
     pp.dofK = o.dof === false ? 0 : 4.5 * soft; pp.focus = cam.focus || 25; pp.grain = 0.003 + 0.008 * soft; pp.veil = 0.05 * soft;
@@ -1229,6 +1251,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
   const yawOf = (fx, fz) => Math.atan2(fx, -fz);
   function seatPose(i) {
     const S = SEATS[i]; if (!S || !camp) return null;
+    if (S.kind === 'hut') { const P = huts && huts.seatPose(S.hut, S.seat); return P ? Object.assign({}, S, P, { kind: S.seat === 'chair' ? 'deskchair' : S.seat }) : null; }
     if (S.kind === 'chair') {
       const ch = camp.chairs && camp.chairs[S.i]; if (!ch) return null; ch.updateMatrixWorld(true);
       const eye = ch.localToWorld(new T.Vector3(-0.24, 0.96, 0)), f = new T.Vector3(1, 0, 0).applyQuaternion(ch.quaternion);
@@ -1285,6 +1308,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     _ndc.set(nx * 2 - 1, 1 - ny * 2); _ray.setFromCamera(_ndc, camera);
     let best = null, bd = 60;
     for (const o of camp.pick) { const h = _ray.intersectObject(o, true)[0]; if (h && h.distance < bd) { bd = h.distance; best = o.userData.pick; } }
+    /* (the huts' doors, shutters, lamps, hammocks and boards, as near as an arm and a few steps can reach) */
+    if (huts) { const h = huts.pick(_ray, Math.min(bd, 14)); if (h) best = h; }
     return best;
   }
   /* the radio's dial: how lit it is (0 is off) and where the needle sits along the scale, 0 to 1 */

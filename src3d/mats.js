@@ -16,10 +16,22 @@ const Mats = (() => {
     uWindK: { value: new THREE.Vector2(1, 0) }, uFlood: { value: 0 },
     uVanInv: { value: new THREE.Matrix4() }, uHead: { value: V4() }, uHeadDir: { value: V3(1, 0, 0) }, uFireSh: { value: null }, uCanSh: { value: null }, uFireShM: { value: new THREE.Matrix4() }, uCanShM: { value: new THREE.Matrix4() }, uShOn: { value: 0 },
     uFog: { value: V4(0, 0, 0, 1) },
+    /* (under the forest's canopy, the humid air between the trunks: its colour, lit by the shade's light, and how much) */
+    uForF: { value: V4(0, 0, 0, 0) },
     uTorch: { value: V4() }, uTorchDir: { value: V3(0, 0, -1) }, uTorchSh: { value: null }, uTorchShM: { value: new THREE.Matrix4() }, uTorchShS: { value: new THREE.Vector2(1024, 1024) },
     /* the key light's shadow map, for shaders of our own that take shadows (the grown trees' leaves): the map, its matrix,
        where it is centred (x, z) and how far it reaches, whether it is ready; its size */
-    uLeafShM: { value: null }, uLeafShX: { value: new THREE.Matrix4() }, uLeafShA: { value: V4() }, uLeafShS: { value: new THREE.Vector2(2048, 2048) }
+    uLeafShM: { value: null }, uLeafShX: { value: new THREE.Matrix4() }, uLeafShA: { value: V4() }, uLeafShS: { value: new THREE.Vector2(2048, 2048) },
+    /* the beach huts nearest the eye (huts.js): each one's middle (x, z) and its turn (cos, sin); its room's half-width,
+       half-depth, its verandah's depth and its floor's height (w < 0: no hut); their lamps (where, how bright) and which
+       hut's room each is inside (-1 out on a verandah) */
+    uHutB: { value: [V4(0, 0, 1, 0), V4(0, 0, 1, 0), V4(0, 0, 1, 0), V4(0, 0, 1, 0)] }, uHutS: { value: [V4(0, 0, 0, -1), V4(0, 0, 0, -1), V4(0, 0, 0, -1), V4(0, 0, 0, -1)] },
+    uHutL: { value: [V4(), V4(), V4(), V4(), V4(), V4()] }, uHutLi: { value: [V4(-1, 0, 0, 0), V4(-1, 0, 0, 0), V4(-1, 0, 0, 0), V4(-1, 0, 0, 0), V4(-1, 0, 0, 0), V4(-1, 0, 0, 0)] },
+    /* the snow lying: how much of a full cover, how deep (m), how hard it is falling (glsl.js ISLE_SH snowOn) */
+    uSnow: { value: V4() },
+    /* whether the frame being drawn has several samples to a pixel, so that a cut-out's edge can be shared among them
+       (glsl.js ISLE_SH cutCov): set by the engine round the scene's own pass only */
+    uA2C: { value: 0 }
   };
   /* the shoreline the shaders draw (glsl.js COAST): a strip of numbers along the coast round the camera, the shore's z,
      its slope and the forest edge's z (Layout's own), every half metre for two kilometres either way (row 0) and every
@@ -36,7 +48,7 @@ const Mats = (() => {
      GLSL.ISLE_SH reads it: none until there is a map of it */
   Object.assign(coastU, { uIsSh: { value: null }, uIsShG: { value: V4() }, uIsShOn: { value: 0 }, uIsShL: { value: new THREE.Vector3(0, 1, 0) } });
   /* the uniforms a shader of its own needs to read that shade */
-  const shadeU = () => ({ uIsSh: coastU.uIsSh, uIsShG: coastU.uIsShG, uIsShOn: coastU.uIsShOn, uIsShL: coastU.uIsShL });
+  const shadeU = () => ({ uIsSh: coastU.uIsSh, uIsShG: coastU.uIsShG, uIsShOn: coastU.uIsShOn, uIsShL: coastU.uIsShL, uSnow: U.uSnow, uA2C: U.uA2C });
   Object.assign(U, coastU);
   /* the island's shore as the shaders read it: island.js's grid and coastline, as textures */
   function isleUp(D) {
@@ -72,11 +84,14 @@ const Mats = (() => {
   }
   /* aerial perspective, the same as the ground's: far things fade toward the horizon's colour */
   const FOG = `
-uniform vec4 uFog;
+uniform vec4 uFog, uForF;
 vec3 fogIt(vec3 c, vec3 wp){
   float d = distance(wp, cameraPosition);
   c = mix(c, uFog.rgb*1.0, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
-  return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
+  c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
+  /* (in under the trees the trunks a little way off go soft in the damp air, and further off into a green half-light) */
+  if (uForF.w > 0.001) c = mix(c, uForF.rgb, (1.0 - exp(-max(d - 4.0, 0.0)/34.0))*0.6*uForF.w);
+  return c;
 }`;
   const PREFIX = GLSL.COMMON + GLSL.ART + FOG;
   /* granite's crystals as they are up close: a mosaic of them a few millimetres across, interlocking, each one mineral —
@@ -410,7 +425,10 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
         float pe = smoothstep(0.25, 0.75, vPath + 0.35*(l3 - 0.5) + 0.2*(l4 - 0.5)), root = smoothstep(0.86, 0.92, vnz(vec3(vWPos.x*0.8, 0.0, vWPos.z*0.8) + vec3(0.0, l2*0.5, 0.0)));
         vegC = mix(vegC, mix(earth, vec3(0.07, 0.05, 0.035), root*0.65), pe*flN);
       } }` : ''}
-    diffuseColor.rgb = mix(vegC, rockC, vRock);
+    diffuseColor.rgb = mix(vegC, rockC, vRock);${key === 'land' ? `
+    /* (snow on the ground: all of it out in the open, a dusting under the trees where the canopy has let some through) */
+    if (uSnow.x > 0.002){ vec3 nWs = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz); float sk = isleSky3(vWPos).g;
+      diffuseColor.rgb = snowOn(diffuseColor.rgb, nWs, mix(0.22, 1.0, smoothstep(0.25, 0.9, sk))*smoothstep(0.3, 2.5, -shoreS(vWPos.xz))*(1.0 - hutsIn(vWPos))); }` : ''}
     float sea = smoothstep(5.0, -0.5, -shoreS(vWPos.xz));
     wetK = smoothstep(${key === 'reef' ? '0.75, 0.0' : '1.8, 0.1'}, vWPos.y)*sea*vRock;
     diffuseColor.rgb *= mix(1.0, 0.45, wetK);
@@ -447,6 +465,14 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
   }`);
       /* (the key light, the sun or the moon, only as much of it as gets past the land and the forest toward it to here) */
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', LFB_SH);
+      /* (snow on whatever faces the sky, out in the open; less under the trees, none in a hut or in the sea's reach; the
+         van's roof and the huts' thatch, the rocks, the logs, the camp's things) */
+      if (key !== 'land') sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+  if (uSnow.x > 0.002){ vec3 nWs = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz); float sk = isleSky3(vWPos).g;
+    float hold = smoothstep(0.25, 0.9, sk)*(1.0 - hutsIn(vWPos))*smoothstep(0.3, 2.5, -shoreS(vWPos.xz) + vWPos.y*0.4);
+    float k = snowK(nWs, hold); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.91), k); roughnessFactor = mix(roughnessFactor, 0.62, k); }`);
+      /* (and the sky's light, as much of it as comes in under the forest's canopy) */
+      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n  { vec3 skyK = isleSky3(vWPos)*mix(1.0, 0.16, hutsIn(vWPos)); iblIrradiance *= skyK; irradiance *= skyK; radiance *= mix(vec3(1.0), skyK, 0.85); }');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + (key === 'gran' || key === 'granw' ? 'varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;\n' + GRAN_XTL : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
         .replace('#include <opaque_fragment>', `
@@ -533,25 +559,27 @@ uniform sampler2D map; uniform vec3 uAmbF, uKeyDirT, uKeyColT, uTint; uniform fl
 varying vec2 vUv; varying vec3 vN; varying vec3 vWPos; varying vec3 vTint;
 void main(){
   vec4 tx = texture2D(map, vUv);
-  if (tx.a < uCut) discard;
+  float cov = cutCov(tx.a, uCut); if (cov < CUT_MIN) discard;
   vec3 a = tx.rgb*uTint*vTint;
   vec3 n = normalize(vN)*(gl_FrontFacing ? 1.0 : -1.0), V = normalize(cameraPosition - vWPos);
-  /* (the key light as much of it as gets past the land and the forest toward it) */
+  /* (snow on the fronds facing up) */
+  if (uSnow.x > 0.002) a = mix(a, vec3(0.84, 0.87, 0.91), snowLeaf(n, vWPos, smoothstep(0.25, 0.9, isleSky3(vWPos).g)));
+  /* (the key light as much of it as gets past the land and the forest toward it; the sky's as much as gets in) */
   float ndl = dot(n, uKeyDirT); vec3 kc = uKeyColT*isleShAt(vWPos);
-  vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + kc*(max(ndl, 0.0) + 0.06);
+  vec3 L = uAmbF*isleSky3(vWPos)*(0.55 + 0.45*max(n.y, 0.0)) + kc*(max(ndl, 0.0) + 0.06);
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) L += artLight(vWPos, n);
   /* light through the leaflets from behind, yellower, strongest looking toward the sun; the waxy shine of their tops */
   float thru = max(-ndl, 0.0)*(0.3 + 0.7*pow(max(dot(-V, uKeyDirT), 0.0), 2.0));
   vec3 c = a*L + a*vec3(0.95, 1.08, 0.45)*kc*thru*0.85;
   c += kc*0.16*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 36.0)*step(0.0, ndl);
-  gl_FragColor = vec4(fogIt(c, vWPos), 1.0);
+  gl_FragColor = vec4(fogIt(c, vWPos), uA2C > 0.5 ? cov : 1.0);
 }`;
   U.uAmbF = { value: V3() };
   function foliage(map, cut = 0.45, tint = [1, 1, 1], sway = false) {
     map.anisotropy = 1;
     const m = new THREE.ShaderMaterial({
       uniforms: Object.assign({}, U, { map: { value: map }, uCut: { value: cut }, uTint: { value: V3(...tint) } }),
-      vertexShader: FOL_VS, fragmentShader: FOL_FS, side: THREE.DoubleSide, defines: sway ? { SWAY: 1 } : {}
+      vertexShader: FOL_VS, fragmentShader: FOL_FS, side: THREE.DoubleSide, alphaToCoverage: true, defines: sway ? { SWAY: 1 } : {}
     });
     return m;
   }

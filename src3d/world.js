@@ -1014,10 +1014,10 @@ void main(){
         const hp = yield* headPlan(h);
         for (const p of hp) if (p.x >= X0c && p.x < X1c) rocks.push(Object.assign({}, p));
       }
-      /* clusters standing in the surf along the beach (the camp's bay has its own) */
-      for (const p of bay()) if (p.x >= X0c && p.x < X1c) rocks.push(Object.assign({}, p));
+      /* clusters standing in the surf along the beach (the camp's bay has its own) — on a coast that has rocks */
+      if (Co.ROCKS) for (const p of bay()) if (p.x >= X0c && p.x < X1c) rocks.push(Object.assign({}, p));
       const r2 = ch.rng(2), cl = [];
-      for (let x = X0c + r2() * 30; x < X1c; x += 18 + r2() * 30) if (Math.abs(x) >= 118 && !nearHead(x, 2.6)) cl.push([x, -2.0 - r2() * 1.4, 3 + Math.floor(r2() * 4)]);
+      if (Co.ROCKS) for (let x = X0c + r2() * 30; x < X1c; x += 18 + r2() * 30) if (Math.abs(x) >= 118 && !nearHead(x, 2.6)) cl.push([x, -2.0 - r2() * 1.4, 3 + Math.floor(r2() * 4)]);
       for (const [cx, dz, n] of cl) {
         for (let i = 0; i < n; i++) {
           const x = cx + (r2() - 0.5) * (i ? 6 : 1), z = Co.shoreZ(x) + dz + (i ? (r2() - 0.5) * 2.6 : 0);
@@ -1027,7 +1027,7 @@ void main(){
       }
       /* strays on the sand, mostly up by the forest edge, kept clear of the camp and the van */
       const r3 = ch.rng(3);
-      for (let i = 0; i < 28; i++) {
+      for (let i = 0; i < (Co.ROCKS ? 28 : 0); i++) {
         const x = X0c + r3() * CW, xw = x - o.x; if (Math.abs(xw - Layout.camp.x) < 13 || Math.abs(xw - Layout.van.x) < 5) continue;
         const sz = Co.shoreZ(x), vz = Co.vegZ(x), z = vz - 0.4 - Math.pow(r3(), 1.8) * (vz - sz - 1.2);
         if (massif(x, z) > 0) continue;

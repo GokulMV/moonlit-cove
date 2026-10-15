@@ -66,6 +66,34 @@ float isleShAt(vec3 w){
   float above = w.y - top - 0.8, k = smoothstep(1.5, 4.0, above);
   return isleSh(w.xz - uIsShL.xz*(k*min(above, 150.0)/max(uIsShL.y, 0.06)));
 }
+/* how much of the open sky's light reaches a point: in under the forest's closed canopy only what comes down through its
+   gaps and off its leaves, a fifth of it and greener; up in the crowns, more of it the higher; out in the open, all of it */
+/* the snow lying (the weather's: how much of a full cover, 0..1; how deep, m; how hard it is falling): on a surface
+   facing up to the sky, as much as can lie there (hold: 1 out in the open, less under the trees, none on what is warm,
+   steep or wet), white, a little blue where it is in shade (the light does that) */
+uniform vec4 uSnow;
+float snowK(vec3 nW, float hold){ return uSnow.x < 0.002 ? 0.0 : clamp((uSnow.x*1.25 - 0.08)*hold*smoothstep(0.18, 0.7, nW.y), 0.0, 1.0); }
+vec3 snowOn(vec3 alb, vec3 nW, float hold){ float k = snowK(nW, hold); return k > 0.0 ? mix(alb, vec3(0.84, 0.87, 0.91), k) : alb; }
+/* (on leaves and fronds it lies in clumps: on some a cap of it, others shaken clear by the wind or too narrow to hold
+   it, the green showing between — never the whole crown white) */
+float snHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+float snNoise(vec3 p){ vec2 q = p.xz*1.9 + p.y*1.3, i = floor(q), f = fract(q); f = f*f*(3.0 - 2.0*f);
+  return mix(mix(snHash(i), snHash(i + vec2(1.0, 0.0)), f.x), mix(snHash(i + vec2(0.0, 1.0)), snHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+float snowLeaf(vec3 nW, vec3 wp, float hold){ float k = snowK(nW, hold); return k > 0.0 ? k*mix(0.18, 0.78, smoothstep(0.3, 0.72, snNoise(wp))) : 0.0; }
+/* a cut-out's edge (a leaf's, a frond's, a card's): how much of the pixel its shape covers, the edge one pixel soft. Where
+   the frame is drawn with several samples to a pixel (uA2C 1) the samples share it — the leaf's edge as smooth as the
+   picture's; where there is one, it is cut at the line as it always was (the alpha then goes nowhere) */
+uniform float uA2C;
+#define cutCov(a, cut) clamp(((a) - (cut))/max(fwidth(a), 1e-3) + 0.5, 0.0, 1.0)
+#define CUT_MIN (uA2C > 0.5 ? 0.02 : 0.5)
+vec3 isleSky3(vec3 w){
+  if (uIsShOn < 0.5) return vec3(1.0);
+  vec2 uv = (w.xz - uIsShG.xy)*uIsShG.zw;
+  if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) return vec3(1.0);
+  /* (the palms along a beach's top stand some metres up over it, under the canopy is twenty-odd: only that one is a roof) */
+  float k = smoothstep(5.0, 16.0, texture2D(uIsSh, uv).b*400.0 - w.y);
+  return mix(vec3(1.0), vec3(0.17, 0.22, 0.14), k);
+}
 #endif
 `;
   const ISLE_GL = `
@@ -605,8 +633,26 @@ float shLook(highp sampler2DShadow m, mat4 M, vec3 wp, float bias, float rad){
   for (int i = 0; i < 8; i++) acc += texture(m, vec3(sc.xy + PD[i]*rad, z));
   return mix(1.0, acc*0.125, edge);
 }
+/* the beach huts' rooms and lamps (huts.js): how far inside hut i's room a point is (0 outside, 1 well in) */
+uniform vec4 uHutB[4], uHutS[4], uHutL[6], uHutLi[6];
+float hutIn(vec3 wp, int i){
+  vec4 b = uHutB[i], s = uHutS[i]; if (s.w < 0.0) return 0.0;
+  vec2 d = wp.xz - b.xy, l = vec2(d.x*b.z - d.y*b.w, d.x*b.w + d.y*b.z);
+  /* (the walls' own line the edge: their outer faces outside, out in the light, their inner ones in) */
+  float e = 0.006, k = smoothstep(s.x + e, s.x - e, abs(l.x))*smoothstep(s.y + e, s.y - e, abs(l.y))*smoothstep(s.w - 0.25, s.w + 0.05, wp.y)*smoothstep(s.w + 4.2, s.w + 3.2, wp.y);
+  return k;
+}
+float hutsIn(vec3 wp){ return max(max(hutIn(wp, 0), hutIn(wp, 1)), max(hutIn(wp, 2), hutIn(wp, 3))); }
 vec3 artLight(vec3 wp, vec3 n){
   vec3 L = vec3(0.0);
+  /* (the huts' lamps: a lamp in a room lights the room, and only a little of what is outside it; the verandah's, all
+     round it) */
+  for (int i = 0; i < 6; i++){
+    vec4 hl = uHutL[i]; if (hl.w < 0.001) continue;
+    vec3 d = hl.xyz - wp; float r2 = dot(d, d); if (r2 > 100.0) continue;
+    int hb = int(uHutLi[i].x + 0.5); float keep = uHutLi[i].x < -0.5 ? 1.0 : mix(0.12, 1.0, hutIn(wp, hb));
+    L += C_LANT*hl.w*keep*max(dot(n, d*inversesqrt(r2 + 1e-4))*0.75 + 0.25, 0.0)*0.55/(r2 + 0.35);
+  }
   vec2 uv = (wp.xz - uPoolRect.xy)/uPoolRect.zw;
   if (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0 && uLights.x > 0.001){
     vec3 lm = texture2D(uPool, uv).rgb; lm *= lm;
@@ -1203,6 +1249,14 @@ void main(){
       pud = smoothstep(lvl + 0.01, lvl - 0.025, hn)*smoothstep(-1.2, -2.4, s)*smoothstep(150.0, 90.0, dist);
       wet = max(wet, smoothstep(lvl + 0.07, lvl, hn)*uPud);
     }
+    /* snow lying on the sand: drifted and uneven; none where the sea washes or has just been, thin toward the water */
+    float snw = 0.0;
+    if (uSnow.x > 0.002){
+      snw = clamp((uSnow.x*1.35 - 0.1)*(0.7 + 0.6*nb.g)*smoothstep(-0.6, -4.0, s)*(1.0 - w.cover)*(1.0 - 0.7*wet), 0.0, 1.0);
+      alb = mix(alb, vec3(0.84, 0.87, 0.91)*(0.95 + 0.07*nm.r), snw);
+      N = normalize(mix(N, normalize(vec3((nb.r - 0.5)*0.14, 1.0, (nb.g - 0.5)*0.14)), snw));
+      wet *= 1.0 - snw; gloss *= 1.0 - snw; mark *= 1.0 - snw;
+    }
     vec3 a = alb*mix(1.0, 0.46, wet);
     a = mix(a, alb*1.2, mark*0.45);
     a = mix(a, dec.rgb/max(dec.a, 1e-3), dec.a);
@@ -1212,6 +1266,8 @@ void main(){
     /* quartz glints in dry sand */
     float qz = smoothstep(0.986, 1.0, grain)*(1.0 - wet)*smoothstep(0.08, 0.02, fpL);
     lit += keyC*qz*pow(max(dot(N, normalize(Lk + V)), 0.0), 8.0)*1.6;
+    /* (and the snow's own glitter, its crystals catching the light) */
+    if (snw > 0.0) lit += keyC*snw*gk*smoothstep(0.972, 1.0, grain2)*pow(max(dot(N, normalize(Lk + V)), 0.0), 5.0)*1.4;
     if (wet > 0.01){
       /* a film of water left on the sand is a still, smooth mirror for the sky and the moon (only the sheet still running
          over it ripples); damp sand keeps a little sheen, with the grain's sparkle */
@@ -1679,5 +1735,16 @@ void main(){
   /* (a fresh look is steadied a little by its neighbours' before it is blended in: the march's grain settles sooner) */
   gl_FragColor = fresh ? mix(hist, mix(now, m1, 0.3), uAlpha) : hist;
 }`;
-  return { MAXUW, MAXRIP, FLY, COMMON, ISLE_SH, SKY_FN, SKY_VS, SKY_FS, CLOUD_FS, CLOUDVIS_FS, CLOUD_RES_FS, CLOUDSHADOW, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
+  /* the key light's shadow on the leaves, the fronds and the grass (their own shaders read the shadow map as the ground's
+     does): each texel's say weighed between the four nearest, by how near each is, and four of those a texel and a half
+     apart, so the edge of a shadow is a soft ramp the width of the sun's disc, never the map's own stairs */
+  const LEAF_PCF = `
+float lsT(vec2 uv, float z){ return step(z, unpackRGBAToDepth(texture2D(uLeafShM, uv))); }
+float lsBil(vec2 uv, float z){
+  vec2 ts = 1.0/uLeafShS, q = uv*uLeafShS - 0.5, f = fract(q), b = (floor(q) + 0.5)*ts;
+  return mix(mix(lsT(b, z), lsT(b + vec2(ts.x, 0.0), z), f.x), mix(lsT(b + vec2(0.0, ts.y), z), lsT(b + ts, z), f.x), f.y);
+}
+float lsPCF(vec2 uv, float z){ vec2 tx = 0.85/uLeafShS; return 0.25*(lsBil(uv + vec2(-tx.x, -tx.y), z) + lsBil(uv + vec2(tx.x, -tx.y), z) + lsBil(uv + vec2(-tx.x, tx.y), z) + lsBil(uv + vec2(tx.x, tx.y), z)); }
+`;
+  return { LEAF_PCF, MAXUW, MAXRIP, FLY, COMMON, ISLE_SH, SKY_FN, SKY_VS, SKY_FS, CLOUD_FS, CLOUDVIS_FS, CLOUD_RES_FS, CLOUDSHADOW, ART, WAVEH, GROUND_VS, GROUND_FS, QUAD_VS, DOWN_FS, UP_FS, FINAL_FS, DOF_FS, SSAO_FS, AOBLUR_FS, FIRE_FS };
 })();

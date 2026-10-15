@@ -2,10 +2,10 @@
    minimap.js — where you are: a small map in the corner, north
    up, with you on it (where you stand or look from, and which way
    you face), the camp and the van; tap it for the whole map.
-   Round the island, the island itself — its sea and reefs, its
-   beaches, rocky shores and mangroves, its forest shaded by its
-   hills, its creeks, trails, jetty and ranger's hut — drawn once
-   from its grid; along the coast, the stretch of it round you
+   Round the island, the island itself — the sea round it, its
+   beach all the way round, its forest shaded by its low hill, and
+   whatever stands on it — drawn once from its grid; along the
+   coast, the stretch of it round you
    (its shoreline, beach, forest edge, headlands and reefs), drawn
    as you go.
    ───────────────────────────────────────────────────────────── */
@@ -215,7 +215,7 @@ const Minimap = (() => {
 
   function drawSmall() {
     const r = btn.getBoundingClientRect(); if (!r.width) return;
-    const dpr = size(cv, r.width, r.height), S = state, span = isle ? 560 : 520;
+    const dpr = size(cv, r.width, r.height), S = state, span = isle ? 380 : 520;
     const V = { w: cv.width, h: cv.height, cx: S.you.x, cz: S.you.z, mpp: span / cv.width, dpr };
     (isle ? paintIsle : paintCoast)(g, V); marks(g, V, false);
   }
@@ -257,7 +257,7 @@ const Minimap = (() => {
     btn = document.getElementById('map'); cv = document.getElementById('mapC'); g = cv.getContext('2d');
     dlg = document.getElementById('mapBig'); bcv = document.getElementById('mapBC'); bg = bcv.getContext('2d');
     document.getElementById('mbTitle').textContent = isle ? 'The island' : 'The coast';
-    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Trail', KEY.trail, 'dash'], ['Creek', KEY.creek, 'bar'], ['Jetty', KEY.jetty, 'bar'], ['Reef', rgb(COL.reef), 'bar'], ['Mangroves', rgb(COL.mang), 'bar']] : [['Headland', rgb(COL.rock), 'bar'], ['Beach', rgb(COL.sand), 'bar']]);
+    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Beach', rgb(COL.sand), 'bar'], ['Forest', rgb(COL.forest), 'bar']] : [['Headland', rgb(COL.rock), 'bar'], ['Beach', rgb(COL.sand), 'bar']]);
     document.getElementById('mbKey').innerHTML = key.map(([t, c, s]) => `<li><i class="${s}" style="--c:${c}"></i>${t}</li>`).join('');
     btn.addEventListener('click', () => setOpen(!open));
     document.getElementById('mbClose').addEventListener('click', () => setOpen(false));

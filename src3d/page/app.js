@@ -437,17 +437,24 @@
 
   /* ── sky and weather: clouds in kinds, rain, storms with lightning ── */
   const WX = {
-    clear: { cirrus: 0.1, alto: 0, cumulus: 0.24, stratus: 0, storm: 0, rain: 0 },
-    wispy: { cirrus: 0.95, alto: 0.1, cumulus: 0.22, stratus: 0, storm: 0, rain: 0 },
-    puffy: { cirrus: 0.22, alto: 0.08, cumulus: 1.0, stratus: 0, storm: 0, rain: 0 },
-    mackerel: { cirrus: 0.4, alto: 0.95, cumulus: 0.28, stratus: 0, storm: 0, rain: 0 },
-    overcast: { cirrus: 0, alto: 0.35, cumulus: 0.5, stratus: 0.88, storm: 0, rain: 0 },
-    rain: { cirrus: 0, alto: 0.15, cumulus: 0.45, stratus: 1, storm: 0.12, rain: 1 },
-    storm: { cirrus: 0, alto: 0.05, cumulus: 0.55, stratus: 1, storm: 1, rain: 1 }
+    clear: { cirrus: 0.1, alto: 0, cumulus: 0.24, stratus: 0, storm: 0, rain: 0, snow: 0 },
+    wispy: { cirrus: 0.95, alto: 0.1, cumulus: 0.22, stratus: 0, storm: 0, rain: 0, snow: 0 },
+    puffy: { cirrus: 0.22, alto: 0.08, cumulus: 1.0, stratus: 0, storm: 0, rain: 0, snow: 0 },
+    mackerel: { cirrus: 0.4, alto: 0.95, cumulus: 0.28, stratus: 0, storm: 0, rain: 0, snow: 0 },
+    overcast: { cirrus: 0, alto: 0.35, cumulus: 0.5, stratus: 0.88, storm: 0, rain: 0, snow: 0 },
+    rain: { cirrus: 0, alto: 0.15, cumulus: 0.45, stratus: 1, storm: 0.12, rain: 1, snow: 0 },
+    storm: { cirrus: 0, alto: 0.05, cumulus: 0.55, stratus: 1, storm: 1, rain: 1, snow: 0 },
+    /* (snow on a tropical island: as a dream has it. A soft grey sky, flakes on the wind, the beach and the trees going
+       white; deep enough, a snowman) */
+    snow: { cirrus: 0, alto: 0.25, cumulus: 0.4, stratus: 0.95, storm: 0, rain: 0, snow: 1 }
   };
-  const AUTO = ['puffy', 'wispy', 'mackerel', 'clear', 'puffy', 'mackerel', 'wispy', 'overcast'];
-  const WXNOTE = { auto: 'Clouds drift through their kinds on their own.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.' };
+  /* (and now and then, by itself, snow) */
+  const AUTO = ['puffy', 'wispy', 'mackerel', 'clear', 'puffy', 'mackerel', 'wispy', 'overcast', 'snow'];
+  const WXNOTE = { auto: 'Clouds drift through their kinds on their own, and now and then it snows.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.', snow: 'Snow, settling on the sand and the trees. When it lies deep enough, walk and roll a snowman.' };
   st.weather = store.get('weather', 'auto'); if (st.weather !== 'auto' && !WX[st.weather]) st.weather = 'auto'; st.wx = Object.assign({}, WX.puffy, { wet: 0 }); st.flash = null; st.nextBolt = 0;
+  /* the snow lying: how deep (m); it builds while it snows, a few centimetres a minute, and melts once it stops (the
+     tropical sun is quick about it) */
+  st.snowD = 0;
   function syncWxUI() { seg('wx', st.weather); $('wxNote').textContent = WXNOTE[st.weather] || ''; }
   /* where the sun and moon go: on the true compass (the camp faces east: the sun comes up out of the sea ahead and goes
      down behind the camp), or across the view in front of the camp, left to right, low enough to stay in it. Each page
@@ -471,6 +478,10 @@
        fall back over minutes */
     { const rk = Math.max(0, Math.min(1, (st.wx.rain - 0.25) / 0.6)), P = st.wx.pud || 0, F = st.wx.flood || 0;
       st.wx.pud = P + (rk - P) * (1 - Math.exp(-dt / (rk > P ? 45 : 240))); st.wx.flood = F + (rk - F) * (1 - Math.exp(-dt / (rk > F ? 120 : 600))); }
+    /* (the snow: deepening while it falls, melting after; real time, whatever the scene's clock is doing) */
+    { const fall = st.wx.snow || 0, day = st.S ? Math.max(0, Math.min(1, (st.S.sAlt + 4) / 30)) : 0.5;
+      const melt = fall > 0.25 ? 0 : 0.00022 + 0.00055 * day * (1 - (st.wx.stratus || 0) * 0.6);
+      st.snowD = Math.max(0, Math.min(0.32, st.snowD + (fall * fall * 0.0008 - melt) * Math.min(dt, 0.25))); }
     /* lightning: two or three quick pulses, a bolt, thunder a few seconds later */
     const now = performance.now() / 1000;
     if (st.wx.storm > 0.6 && now > st.nextBolt) {
@@ -591,7 +602,7 @@
   const OP = V0.pos.map((v, i) => v - P0[i]), OL = V0.look.map((v, i) => v - P0[i]), RYZ = Math.hypot(OP[1], OP[2]), EL0 = Math.atan2(OP[1], OP[2]);
   /* (round the island the view may draw much further back, and tip up nearly overhead, as a map) */
   const ISLE = !!Layout.isle;
-  const ORB = { elMin: 0.14, elMax: ISLE ? 1.32 : 1.05, zMin: Math.log(0.35), zMax: Math.log(ISLE ? 7 : 1.7), glide: 0.26, boost: 4.5 };
+  const ORB = { elMin: 0.14, elMax: ISLE ? 1.32 : 1.05, zMin: Math.log(0.35), zMax: Math.log(ISLE ? 14 : 1.7), glide: 0.26, boost: 4.5 };
   /* the open sand at x: the waterline, the forest edge, and the foot of a headland's rock where one stands on the beach
      (looked for a little beyond the trees, so that the edge of the sand moves smoothly as the rock comes and goes) */
   function sandAt(x, C) {
@@ -614,7 +625,7 @@
   const Y = 0, E = 1, Z = 2, X = 3, U = 4, OMEGA = [13, 13, 9, 11, 11];
   const C0 = sandAt(P0[0], { x: NaN }), HOME = ISLE ? [0, EL0, 0, P0[0], P0[2]] : [0, EL0, 0, P0[0], (P0[2] - pvLo(C0)) / (pvHi(C0) - pvLo(C0))];
   /* (how far the point may go round the island: the island's own grid, and a few hundred metres of sea round it) */
-  const IB = (() => { if (!ISLE) return null; const G = Layout.island().data.grid; return [G.X0 - 300, G.X0 + G.nx * G.cell + 300, G.Z0 - 300, G.Z0 + G.nz * G.cell + 300]; })();
+  const IB = (() => { if (!ISLE) return null; const G = Layout.island().data.grid; return [G.X0 + 60, G.X0 + G.nx * G.cell - 60, G.Z0 + 60, G.Z0 + G.nz * G.cell - 60]; })();
   const orb = { v: Float64Array.from(HOME), dv: new Float64Array(5), T: Float64Array.from(HOME), g: new Float64Array(5),
                 el: EL0, Fs: ORB.elMin, px: P0[0], pz: P0[2], py: 0, boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
   /* round the island, the height the point is held at: the top of whatever is round it (the sand, the rock, the forest's
@@ -663,6 +674,8 @@
     /* (round the island the point is held over whatever is there: what stands round it is measured from the point's own
        height; over the camera itself, the highest of what is round it) */
     const base = ISLE ? orb.py : 0, away = ISLE ? sstep(30, 110, Math.hypot(orb.px - P0[0], orb.pz - P0[2])) : 0;
+    /* (the home view as it is drawn, exactly; zoomed out, or away from the camp, the trees counted taller) */
+    const tall = ISLE ? Math.max(away, sstep(0.12, 0.7, v[Z])) : 0;
     let el = ORB.elMin;
     for (let it = 0; it < 2; it++) {
       const R = k * RYZ * Math.cos(el); let need = ORB.elMin;
@@ -671,7 +684,7 @@
         let h;
         /* (round the island the trees stand up out of the canopy's mean top here and there, and the palms along a beach's
            top are taller than its fringe is counted: what is round the line of sight counts a little higher than that) */
-        if (ISLE && top) { const g0 = W.land(x, z); h = top(x, z); if (h > g0 + 2) h += 0.18 * (h - g0) + 2; if (i === 12 && away > 0) h += away * (Math.max(h, top(x + 2.5, z), top(x - 2.5, z), top(x, z + 2.5), top(x, z - 2.5)) - h); h -= base; }
+        if (ISLE && top) { const g0 = W.land(x, z); h = top(x, z); if (h > g0 + 2) h += (0.18 * (h - g0) + 2) * tall; if (i === 12 && away > 0) h += away * (Math.max(h, top(x + 2.5, z), top(x - 2.5, z), top(x, z + 2.5), top(x, z - 2.5)) - h); h -= base; }
         else h = Math.max(0, W ? W.land(x, z) : 0) + canopy(x, z);
         need = Math.max(need, Math.atan2(h + (i === 12 ? 1.6 + 0.8 * away : 0.4), r));
       }
@@ -995,7 +1008,8 @@
   function buildObstacles() {
     for (const [x, z] of Layout.palms.map(p => [p[0], p[1]])) campObs.push([x, z, 0.4]);
     for (const t of Layout.trees) campObs.push([t[0], t[1], 0.5]);
-    for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7]);
+    /* (the bushes keep the van off, but a walker pushes through them) */
+    for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7, 'bush']);
     for (const f of Layout.fruit || []) campObs.push([f.x, f.z, f.r || 0.4]);
     for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
     campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
@@ -1251,13 +1265,14 @@
   function goAdd(ox, oz, r) { if (GO.n < 192 && Math.abs(ox - gq[0]) < gq[2] + r && Math.abs(oz - gq[1]) < gq[2] + r) { GO.x[GO.n] = ox; GO.z[GO.n] = oz; GO.r[GO.n] = r; GO.n++; } }
   function gather(x, z, R) {
     GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
-    for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; goAdd(o[0], o[1], o[2]); }
+    for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; if (o[3] !== 'bush') goAdd(o[0], o[1], o[2]); }
     const W = Engine.world;
     /* (not a groyne's foot, though: that keeps the van off it, but a person climbs up onto its blocks and walks out; nor,
        round the island, a stone no higher than a long step up from where the walker stands: they step up onto it) */
     if (W) { const L = W.obstaclesNear(x, z), foot = Layout.isle && W.walk ? W.walk(x, z).y + ISLE_STEP : 1e9;
-      for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef' && !(L[i][4] !== undefined && L[i][4] <= foot)) goAdd(L[i][0], L[i][1], L[i][2]); }
+      for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef' && L[i][3] !== 'hut' && !(L[i][4] !== undefined && L[i][4] <= foot)) goAdd(L[i][0], L[i][1], L[i][2]); }
     for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
+    if (Engine.snowmen) { const L = Engine.snowmen.obstacles(x, z, []); for (const o of L) goAdd(o[0], o[1], o[2]); }
     if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
   }
   /* bumping into things: pushed out round them (so a walk slides along a rock instead of sticking), kept out of the
@@ -1476,13 +1491,15 @@
     /* the pace eases up and down as a body's does; wading slows it */
     const sz = Layout.shoreZ(wk.x), wade = Layout.isle && Engine.world && Engine.world.walk ? Engine.world.walk(wk.x, wk.z).wade : wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
     want *= 1 - 0.45 * wade;
+    if (Engine.snowmen && Engine.snowmen.rolling) want *= 1 - 0.5 * Math.min(1, Engine.snowmen.rolling.r / 0.55);
     wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
     wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
     const ox = wk.x, oz = wk.z; wk.ox = ox; wk.oz = oz;
     wk.x -= Math.sin(wk.h) * wk.v * dt; wk.z -= Math.cos(wk.h) * wk.v * dt;
     walkCollide();
-    /* round the island, pushing on into the forest where there is no path: once, where the nearest way in is */
-    if (Layout.isle && !wk.auto && (wk.blocked || 0) > 30 && !st.forestTold) { st.forestTold = true; forestWay(); }
+    /* (a snowball being rolled: on ahead of you, growing; the button for it there while the snow lies deep enough) */
+    if (Engine.snowmen && Engine.snowmen.rolling) { Engine.snowmen.roll(wk.x, wk.z, wk.h, st.snowD || 0); }
+    { const sb = !!(Engine.snowmen && ((st.snowD || 0) > 0.05 || Engine.snowmen.rolling)); if (sb !== wk.sbShown) { wk.sbShown = sb; $('bSnowball').hidden = !sb; } }
     const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
     wk.odo += dist;
     /* a step every stride's half, left and right in turn */
@@ -1544,16 +1561,20 @@
       wk.prints++;
     } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
   }
-  /* (the forest is too thick to walk into off its trails: say so, and which way the nearest trail's end is, by the
-     compass, as the map has it) */
-  function forestWay() {
-    const W = Engine.world, T = W && W.trails ? W.trails.trails.filter(t => t.n > 4) : [];
-    let best = null, bd = Infinity;
-    for (const t of T) for (const i of [0, t.n - 1]) { const d = Math.hypot(t.X[i] - wk.x, t.Z[i] - wk.z); if (d < bd) { bd = d; best = [t.X[i], t.Z[i], t.name]; } }
-    if (!best) { toast('The forest is too thick to walk into here.', false, 3800); return; }
-    const dx = best[0] - wk.x, dz = best[1] - wk.z, k = (Math.atan2(dz, -dx) / TAU * 8 + 8.5 | 0) % 8, dirs = ['north', 'north-west', 'west', 'south-west', 'south', 'south-east', 'east', 'north-east'];
-    toast(`Too thick to walk into here: the forest is walked by its trails. ${best[2] ? 'The ' + best[2] + ' starts' : 'The nearest trail starts'} ${bd < 30 ? 'just' : Math.round(bd / 10) * 10 + ' m'} ${dirs[k]} of you (it’s on the map).`, false, 6500);
+  /* ── snowballs, when the snow lies deep enough: one started at your feet and rolled on ahead as you walk, let go where it
+     is, or up against a bigger one, on top of it; three high, a snowman ── */
+  function snowball() {
+    const S = Engine.snowmen; if (!S || !wk.on) return;
+    if (S.rolling) { const r = S.letGo(); $('bSnowball').setAttribute('aria-pressed', 'false');
+      if (r && r.man) { toast('A snowman! Pebbles for eyes, a carrot, a coconut shell for a hat.', false, 4200); unlock && unlock('snowman'); }
+      else if (r && r.stacked > 1) toast('Up on top of the other. One more makes a snowman.', false, 2800);
+      else toast('You let the snowball go. Roll another, smaller, and let it go against this one to stack it.', false, 3800);
+      return; }
+    if ((st.snowD || 0) < 0.05) { toast('Not enough snow yet: wait till it lies deeper.', false, 2600); return; }
+    if (S.start(wk.x, wk.z, wk.h, st.snowD)) { $('bSnowball').setAttribute('aria-pressed', 'true'); toast('A snowball at your feet. Walk to roll it bigger; B lets it go.', false, 3400); }
   }
+  $('bSnowball').addEventListener('click', snowball);
+  addEventListener('keydown', e => { if ((e.key === 'b' || e.key === 'B') && wk.on && !(e.target && e.target.closest && e.target.closest('input, textarea'))) snowball(); });
   function startWalk() {
     if (wk.on || !ready) return;
     const fromVan = car.on;
@@ -1700,7 +1721,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1763,8 +1784,22 @@
   $('enterSound').addEventListener('click', () => enter(true));
   $('enterQuiet').addEventListener('click', () => enter(false));
 
-  /* the render-scale ladder the frame rate is kept comfortable on (see the end of frame) */
-  const RS = [0.55, 0.62, 0.7, 0.78, 0.87, 1];
+  /* the render-scale ladder the frame rate is kept comfortable on (see the end of frame). Its top rung the same size
+     with four samples to a pixel: the grass blades, the leaves' and the fronds' edges, the thin twigs drawn smooth, not
+     stepped and shimmering — where the GPU can keep half-float samples, and the visitor's machine keeps up with it
+     (the first rung down, if not) */
+  const RS = [0.55, 0.62, 0.7, 0.78, 0.87, 1, 1], MS = [0, 0, 0, 0, 0, 0, 4];
+  let msOK = null, msWant = null;
+  const msTop = () => {
+    const want = window.__coveMSAA ?? 4;
+    if (msOK === null || want !== msWant) try {
+      const R = Engine.renderer; msWant = want; msOK = !!R && want > 0 && R.capabilities.isWebGL2 && (R.extensions.has('EXT_color_buffer_float') || R.extensions.has('EXT_color_buffer_half_float')) && !/[?&]nomsaa\b/.test(location.search);
+      /* (and only where half-float pictures can really be kept four samples to a pixel: some GPUs can't, whatever they say
+         of samples in general) */
+      if (msOK) { const gl = R.getContext(), s = gl.getInternalformatParameter ? gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA16F, gl.SAMPLES) : null; msOK = !!s && s.length > 0 && Math.max(...s) >= 4; }
+    } catch (e) { msOK = false; }
+    return msOK ? RS.length - 1 : RS.length - 2;
+  };
   Object.assign(st, { rsI: RS.length - 1, rsSlow: 0, rsQuick: 0, rsJudged: 0, rsAt: 0 });
 
   const ease = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -1864,15 +1899,18 @@
         /* (how closed the canopy is round here: where one stands, and a few metres round, so a trail's cut through it, open
            only overhead, counts as under it) */
         const cov = 0.4 * F.cover(p[0], p[2]) + 0.15 * (F.cover(p[0] + 6, p[2]) + F.cover(p[0] - 6, p[2]) + F.cover(p[0], p[2] + 6) + F.cover(p[0], p[2] - 6));
-        tgt = 1 + 2.6 * cov * (1 - smf(16, 40, up)); }
+        tgt = 1 + 2.6 * cov * (1 - smf(16, 40, up)); st.forF = cov * (1 - smf(10, 34, up)); }
+      else st.forF = 0;
       st.eyeK = (st.eyeK || 1) + (tgt - (st.eyeK || 1)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.5)); }
     const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     /* (the sun and moon swing over to the other path in a second or so, rather than jumping) */
     st.frontK += ((st.skyPath === 'front' ? 1 : 0) - st.frontK) * (1 - Math.exp(-dtR / 0.45)); if (Math.abs(st.frontK - (st.skyPath === 'front' ? 1 : 0)) < 1e-3) st.frontK = st.skyPath === 'front' ? 1 : 0;
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: MS[Math.min(st.rsI, msTop())] || 0, fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
-      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1) });
+      sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1), forestFog: st.forFs = (st.forFs || 0) + ((st.forF || 0) - (st.forFs || 0)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.2)),
+      push: wk.on ? [wk.x, wk.z] : null,
+      snow: sstep(0.0, 0.035, st.snowD || 0), snowD: st.snowD || 0, snowFall: st.wx.snow || 0 });
     st.S = S;
     if (!st.shown && ++drawn >= 3) introReady();
     updateSky(ms, S);
@@ -1915,8 +1953,9 @@
     if (tn - st.rsJudged >= 2000 && st.fms.length >= 20) {
       const w = st.fms.slice(-90).sort((a, b) => a - b), med = w[w.length >> 1];
       st.rsJudged = tn; st.rsSlow = med > 32 ? st.rsSlow + 1 : 0; st.rsQuick = med < 15 ? st.rsQuick + 1 : 0;
+      if (st.rsI > msTop()) st.rsI = msTop();
       if (st.rsSlow >= 2 && st.rsI > 0 && tn - st.rsAt > 4000) { st.rsI--; st.rsAt = tn; st.rsSlow = 0; }
-      else if (st.rsQuick >= 3 && st.rsI < RS.length - 1 && tn - st.rsAt > 10000) { st.rsI++; st.rsAt = tn; st.rsQuick = 0; }
+      else if (st.rsQuick >= 3 && st.rsI < msTop() && tn - st.rsAt > 10000) { st.rsI++; st.rsAt = tn; st.rsQuick = 0; }
       st.rs = RS[st.rsI];
     }
   }
@@ -2002,6 +2041,27 @@
     return { pos: [o(0) + n[0] * d, c[1] + 0.08, o(2) + n[2] * d], look: [o(0), c[1] - 0.02 - up, o(2)], fov, focus: d };
   } });
   /* the wishes open like a chapter: the camera goes to the board and the drawer lists them all */
+  /* ── the huts (round the island): a click on a door or a shutter works it, on a lamp lights it or puts it out, on the
+     hammock lies you in it, on one of the work hut's boards reads it ── */
+  function hutUse(id) {
+    const H = Engine.huts; if (!H) return;
+    const r = H.use(id); if (!r) return;
+    if (r.what === 'hammock') { const i = seatBy(`hut:${r.hut}:hammock`); if (i >= 0) sit(i); return; }
+    if (r.what === 'board') { openHutBoard(r.id); return; }
+    const say = { door: r.open ? 'The door swings open.' : 'You pull the door to.', shutter: r.open ? 'You prop the shutter open.' : 'The shutter drops shut.', lamp: r.on ? 'You light the lamp.' : 'You put the lamp out.' }[r.what];
+    if (say) toast(say, false, 1700);
+    if (sound.amb && sound.amb.thud) sound.amb.thud(r.what === 'lamp' ? 0.05 : 0.18);
+  }
+  const escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function openHutBoard(id) {
+    const B = (Content.work || []).find(b => b.id === id); if (!B) return;
+    $('hbEye').textContent = B.eyebrow || ''; $('hbTitle').textContent = B.title || '';
+    const links = B.links ? `<div class="cl">${(Content.links || []).map(([n, u, t]) => `<a href="${escH(u)}" target="_blank" rel="noopener">${escH(t || n)}</a>`).join('')}${Content.contact && Content.contact.email ? `<a href="mailto:${escH(Content.contact.email)}">${escH(Content.contact.email)}</a>` : ''}</div>` : '';
+    $('hbBody').innerHTML = `<ul class="hb-lines">${(B.lines || []).map(l => `<li>${escH(l)}</li>`).join('')}</ul>${(B.body || []).map(p => `<p>${escH(p)}</p>`).join('')}${links}`;
+    $('hutBoard').hidden = false; $('hbClose').focus();
+  }
+  $('hbClose').addEventListener('click', () => { $('hutBoard').hidden = true; });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !$('hutBoard').hidden) { $('hutBoard').hidden = true; } });
   function openWishes() {
     if (!ready || !st.entered || isDown('board')) return;
     if (seat.on) leaveSeat();
@@ -2098,6 +2158,8 @@
     const u = clamp((performance.now() - seat.sitAt) / 800, 0, 1), k = easeOut3(u), drop = 0.56 * (1 - k) - 0.014 * Math.sin(Math.PI * u) * (1 - u), fwd = 0.2 * (1 - k);
     const breathe = reduced ? 0 : 0.0035 * Math.sin(performance.now() / 1000 * 1.55);
     const yaw0 = P.yaw, e = [P.eye[0] + Math.sin(yaw0) * fwd, P.eye[1] + drop + breathe, P.eye[2] - Math.cos(yaw0) * fwd];
+    /* (in a hammock: swinging gently from side to side) */
+    if (P.kind === 'hammock' && !reduced) { const tt = performance.now() / 1000, sw = 0.07 * Math.sin(tt * 0.75); e[0] += Math.cos(yaw0) * sw; e[2] += Math.sin(yaw0) * sw; e[1] -= 0.015 * Math.abs(Math.sin(tt * 0.75)); }
     const yaw = yaw0 + seat.yaw, pitch = P.pitch + seat.pitch - 0.08 * (1 - k), cp = Math.cos(pitch) * 8;
     return { pos: e, look: [e[0] + Math.sin(yaw) * cp, e[1] + Math.sin(pitch) * 8, e[2] - Math.cos(yaw) * cp], fov: P.kind === 'rug' ? 54 : 58, focus: P.kind === 'rug' ? 1.2 : 2.6, swing: true };
   }
@@ -2105,7 +2167,7 @@
      over the table */
   function standCam(P) {
     const fx = Math.sin(P.yaw), fz = -Math.cos(P.yaw), off = P.kind === 'rug' ? -0.38 : 0.78, x = P.eye[0] + fx * off, z = P.eye[2] + fz * off;
-    const g = Math.max(0, Engine.world ? Engine.world.land(x, z) : 0);
+    const W = Engine.world, g = Math.max(0, W ? (Layout.isle && W.walk ? W.walk(x, z).y : W.land(x, z)) : 0);
     const look = P.kind === 'rug' ? [P.eye[0] + fx * 1.6, 0.45, P.eye[2] + fz * 1.6] : [P.eye[0] - fx * 0.3, 0.72, P.eye[2] - fz * 0.3];
     return { pos: [x, g + EYE, z], look, fov: 58, focus: 2, swing: true };
   }
@@ -2564,7 +2626,8 @@
       return;
     }
     down = null;                    /* (the sea's click handler, next in line, now has nothing to do) */
-    if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (hit === 'sketch') openSketch(); else if (hit === 'toolbox') openToolbox(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
+    if (typeof hit === 'string' && hit.startsWith('hut:')) hutUse(hit);
+    else if (hit === 'radio') radioClick(); else if (hit === 'board') openWishes(); else if (hit === 'sketch') openSketch(); else if (hit === 'toolbox') openToolbox(); else if (seatBy(hit) >= 0) sit(seatBy(hit));
   }, true);
   cv.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return;

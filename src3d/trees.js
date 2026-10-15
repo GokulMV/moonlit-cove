@@ -545,17 +545,17 @@ uniform sampler2D map, nmap; uniform vec3 uAmbF, uKeyDirT, uKeyColT, uTint; unif
 uniform vec3 uLeafK;                  /* gloss, its sharpness, light through the leaves */
 uniform sampler2D uLeafShM; uniform mat4 uLeafShX; uniform vec4 uLeafShA; uniform vec2 uLeafShS;   /* the key light's shadow map: (x, z) it is centred on, its reach, on */
 varying vec2 vUv; varying vec3 vN; varying vec3 vT; varying vec3 vB; varying vec3 vWPos; varying vec4 vL; varying vec3 vTint;
+${GLSL.LEAF_PCF}
 float leafShadow(vec3 wp){
   if (uLeafShA.w < 0.5 || length(wp.xz - uLeafShA.xy) > uLeafShA.z) return 1.0;
   vec4 sc = uLeafShX*vec4(wp, 1.0); sc.xyz /= sc.w;
   if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
-  vec2 tx = 1.5/uLeafShS; float z = sc.z - 0.0025;
-  return 0.25*(step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, -tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, -tx.y))))
-             + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, tx.y)))));
+  float z = sc.z - 0.0025;
+  return lsPCF(sc.xy, z);
 }
 void main(){
   vec4 tx = texture2D(map, vUv);
-  if (tx.a < uCut) discard;
+  float cov = cutCov(tx.a, uCut); if (cov < CUT_MIN) discard;
   vec3 V = normalize(cameraPosition - vWPos), Tg = normalize(vT), Bt = normalize(vB), Nc = normalize(cross(Tg, Bt))*vL.w;
   float face = dot(Nc, V) >= 0.0 ? 1.0 : -1.0;
   vec3 tn = texture2D(nmap, vUv).xyz*2.0 - 1.0;
@@ -567,28 +567,30 @@ void main(){
   /* how much of the key light gets this far into the crown */
   float vis = mix(0.1, 1.0, smoothstep(-0.35, 0.6, cr))*mix(0.4, 1.0, ao)*sh;
   vec3 alb = tx.rgb*uTint*vTint*(0.88 + 0.24*vL.z);
-  vec3 c = alb*uAmbF*(0.5 + 0.5*nb.y)*(0.28 + 0.72*ao)*(0.8 + 0.2*nl.y);
+  /* (snow on the crown's top, out in the open; less of it deep in the crown) */
+  if (uSnow.x > 0.002) alb = mix(alb, vec3(0.84, 0.87, 0.91), snowLeaf(nb, vWPos, smoothstep(0.25, 0.9, isleSky3(vWPos).g))*(0.3 + 0.7*ao));
+  vec3 ambS = uAmbF*isleSky3(vWPos), c = alb*ambS*(0.5 + 0.5*nb.y)*(0.28 + 0.72*ao)*(0.8 + 0.2*nl.y);
   c += alb*uKeyColT*max(ndl, 0.0)*vis;
   /* through the leaf, the light behind it: strongest at the crown's edge, where one leaf is all there is in the way */
   float thru = max(-ndl, 0.0)*mix(0.12, 1.0, ao*ao)*smoothstep(-0.9, 0.15, cr)*sh;
   c += alb*vec3(0.92, 1.06, 0.42)*uKeyColT*thru*uLeafK.z;
   /* a waxy leaf's shine, and the sky's sheen on the upturned ones */
   c += uKeyColT*uLeafK.x*pow(max(dot(nl, normalize(uKeyDirT + V)), 0.0), uLeafK.y)*vis*step(0.0, ndl);
-  c += uAmbF*uLeafK.x*0.25*pow(1.0 - max(dot(nl, V), 0.0), 4.0)*max(nl.y, 0.0)*(0.25 + 0.75*ao);
+  c += ambS*uLeafK.x*0.25*pow(1.0 - max(dot(nl, V), 0.0), 4.0)*max(nl.y, 0.0)*(0.25 + 0.75*ao);
   /* and the light the crown scatters about inside itself, green from leaf to leaf */
   c += alb*uKeyColT*vec3(0.8, 1.0, 0.6)*0.05*(0.4 + 0.6*ao)*(0.3 + 0.7*sh)*tsh;
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0) || torchNear(vWPos)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
   float d = distance(vWPos, cameraPosition);
   c = mix(c, uFog.rgb, 1.0 - exp(-max(d - 40.0, 0.0)/(1400.0/max(uFog.w, 0.05))));
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(c, uA2C > 0.5 ? cov : 1.0);
 }`;
   /* a species' three leaf materials (three cards, painted apart) and its bark */
   const matCache = {};
   function materials(kind) {
     if (matCache[kind]) return matCache[kind];
     const S_ = SPECIES[kind], cards = [0, 1, 2].map(k => card(S_.leaf, k));
-    const leaves = cards.map(cd => new T.ShaderMaterial({ uniforms: Object.assign({}, Mats.U, { map: { value: cd.map }, nmap: { value: cd.nmap }, uCut: { value: CUT }, uTint: { value: new T.Vector3(1, 1, 1) }, uLeafK: { value: new T.Vector3(S_.gloss[0], S_.gloss[1], S_.thru) } }), vertexShader: LEAF_VS, fragmentShader: LEAF_FS, side: T.DoubleSide }));
+    const leaves = cards.map(cd => new T.ShaderMaterial({ uniforms: Object.assign({}, Mats.U, { map: { value: cd.map }, nmap: { value: cd.nmap }, uCut: { value: CUT }, uTint: { value: new T.Vector3(1, 1, 1) }, uLeafK: { value: new T.Vector3(S_.gloss[0], S_.gloss[1], S_.thru) } }), vertexShader: LEAF_VS, fragmentShader: LEAF_FS, side: T.DoubleSide, alphaToCoverage: true }));
     const depth = cards.map(cd => Mats.cutoutDepth(cd.map, CUT));
     const barkCol = { almond: '#7a6f62', casuarina: '#5e4d40', hibiscus: '#6f6556', grape: '#6c5a49', scrub: '#5a4b3a' }[kind];
     const bt = barkTex(kind.length * 7 + 3, barkCol, kind);

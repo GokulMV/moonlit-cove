@@ -6,12 +6,12 @@
    north, 90 east), or { cam: { pos, look, fov } }, or { js: "…returns {pos, look, fov}…" } (worked out in the page),
    or { drive: { x, z, heading°, secs, keys: "w"|"wa"|… } } (the van put there and driven, the camera behind it), or
    { walk: { x, z, heading°, secs, auto? } } (walking, on the page's own walk), or { orbit: { x, z, yaw°, zoom } } (the
-   explore camera; zoom the log of its distance, or js: "…returns {x, z, yaw, zoom}…"), with frames? (how many to draw first, 10), hud? (the page's own overlays left on) */
+   explore camera; zoom the log of its distance, or js: "…returns {x, z, yaw, zoom}…"), with frames? (how many to draw first, 10), hud? (the page's own overlays left on), pre? (js run in the page first) */
 import { open } from './lib.mjs';
 import fs from 'fs'; import path from 'path';
-const [file, prefix = 'tour', where = 'island', W = '1280', H = '720', RS = '1'] = process.argv.slice(2);
+const [file, prefix = 'tour', where = 'island', W = '1280', H = '720', RS = '1', MSAA = '0'] = process.argv.slice(2);
 const stops = JSON.parse(fs.readFileSync(file, 'utf8')), isle = where === 'island';
-const { browser, page, logs } = await open({ w: +W, h: +H, rs: +RS, hour: stops[0].hour ?? 10, dtCap: 0.25, query: isle ? '?island' : '', tz: 'Asia/Kolkata' });
+const { browser, page, logs } = await open({ w: +W, h: +H, rs: +RS, msaa: +MSAA, hour: stops[0].hour ?? 10, dtCap: 0.25, query: isle ? '?island' : '', tz: 'Asia/Kolkata' });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const D = Math.PI / 180, t0 = Date.now();
 const dir = (h, p) => [-Math.cos(h * D) * Math.cos(p * D), Math.sin(p * D), -Math.sin(h * D) * Math.cos(p * D)];   /* (heading 0 north (−x), 90 east (−z)) */
@@ -24,6 +24,8 @@ try {
     await page.evaluate(css => { let el = document.getElementById('tourHide'); if (!el) { el = document.createElement('style'); el.id = 'tourHide'; document.head.appendChild(el); } el.textContent = css; },
       s.hud ? '#hint { display: none !important; }' : '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap, #map { display: none !important; }');
     if (s.hour !== undefined) await page.evaluate(h => { const st = window.__cove.st; st.hour = h; st.timeMode = 'custom'; st.offset = 0; }, s.hour);
+    /* (and anything to set first: the weather, the snow, a door opened …) */
+    if (s.pre) await page.evaluate(s.pre);
     let cam = null;
     if (s.eye) {
       const [x, z, h, p, fov] = s.eye;

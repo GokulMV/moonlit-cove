@@ -81,6 +81,20 @@ const Content = {
     ] }
   ],
 
+  /* ── the work hut on the beach: its four boards, each opened to read (edit freely: a board's lines are short on
+     purpose, it is read across a room) ── */
+  work: [
+    { id: 'about', eyebrow: 'On the board by the window', title: 'Gokul', lines: ['Senior Consultant at Thoughtworks', 'Software engineer, Hyderabad'],
+      body: ['I build the systems people lean on without noticing them: steady services, streams of events, and lately the AI tooling that helps teams write better code.', 'Seven years and more of it, and I still like the quiet craft best: making things fast, steady and kind to whoever looks after them next.'],
+      links: true },
+    { id: 'stack', eyebrow: 'Pinned over the desk', title: 'What I build with', lines: ['Java · Spring Boot', 'Apache Kafka · event-driven', 'AWS', 'React', 'Microservices', 'LangChain4j · MCP · RAG'],
+      body: ['Backends in Java and Spring Boot, talking through Kafka; microservices that stay simple to run on AWS; a React front when it needs one.', 'With AI: LangChain4j, the Model Context Protocol and retrieval-augmented pipelines, put to work in real codebases.'] },
+    { id: 'work', eyebrow: 'On the wall', title: 'Where I’ve worked', lines: ['Thoughtworks — now', 'OpenText', 'Cognizant'],
+      body: ['Thoughtworks: consulting on the systems clients run their business on.', 'Before that, OpenText and Cognizant: the enterprise software years, where I learned how big systems are kept alive.'] },
+    { id: 'projects', eyebrow: 'On the wall', title: 'Things I’ve made', lines: ['Levitas Validators — on Maven Central', 'A macOS app that mutes you when you step away', 'This cove'],
+      body: ['Levitas Validators: a Java validation library, published on Maven Central.', 'An open-source macOS app, installed with Homebrew: when you step away it mutes your mic in a call and pauses what you were watching, and picks up again when you are back.', 'And this cove: three.js and shaders, written by hand with Claude as a pair programmer. The blueprints, the stack and the build notes are at the camp.'] }
+  ],
+
   chapters: [
     { id: 'plans', label: 'Blueprints', anchor: 'basket', cam: 'basket', eyebrow: 'Rolled up in the basket', title: 'Blueprints' },
     { id: 'stack', label: 'Stack', anchor: 'clipboard', cam: 'van', eyebrow: 'On the van', title: 'What it’s built with' },

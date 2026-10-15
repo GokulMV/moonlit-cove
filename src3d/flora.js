@@ -101,19 +101,19 @@ ${GLSL.ART}
 uniform vec3 uAmbF, uKeyDirT, uKeyColT; uniform vec4 uFog;
 uniform sampler2D uLeafShM; uniform mat4 uLeafShX; uniform vec4 uLeafShA; uniform vec2 uLeafShS;
 varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vH;
+${GLSL.LEAF_PCF}
 float shadowHere(vec3 wp){
   if (uLeafShA.w < 0.5 || length(wp.xz - uLeafShA.xy) > uLeafShA.z) return 1.0;
   vec4 sc = uLeafShX*vec4(wp, 1.0); sc.xyz /= sc.w;
   if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
-  vec2 tx = 1.5/uLeafShS; float z = sc.z - 0.002;
-  return 0.25*(step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, -tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, -tx.y))))
-             + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, tx.y)))));
+  float z = sc.z - 0.002;
+  return lsPCF(sc.xy, z);
 }
 void main(){
   vec3 V = normalize(cameraPosition - vWPos), n = normalize(vN); if (dot(n, V) < 0.0) n = -n;
   float ndl = dot(n, uKeyDirT), sh = shadowHere(vWPos)*isleSh(vWPos.xz), ao = 0.4 + 0.6*smoothstep(0.0, 0.7, vH);
   /* (a blade is thin: lit from either side, the light from behind coming through it yellower) */
-  vec3 L = uAmbF*(0.65 + 0.35*max(n.y, 0.0))*ao + uKeyColT*sh*(0.3 + max(ndl, 0.0)*0.7 + max(-ndl, 0.0)*0.5*vec3(0.95, 1.05, 0.5))*(0.5 + 0.5*ao);
+  vec3 L = uAmbF*isleSky3(vWPos)*(0.65 + 0.35*max(n.y, 0.0))*ao + uKeyColT*sh*(0.3 + max(ndl, 0.0)*0.7 + max(-ndl, 0.0)*0.5*vec3(0.95, 1.05, 0.5))*(0.5 + 0.5*ao);
   L += uKeyColT*sh*0.25*pow(max(dot(n, normalize(uKeyDirT + V)), 0.0), 24.0)*ao;
   if (length(vWPos.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(vWPos.xz - uVanPos.xz) < 12.0 || torchNear(vWPos)) L += artLight(vWPos, n)*ao;
   vec3 c = vC*L; float d = distance(vWPos, cameraPosition);
@@ -136,8 +136,9 @@ void main(){
 
     world.decorate(ch => {
       const r = ch.rng(41), c = ch.c, grass = [[], [], []], items = [];
-      /* the grass: a band along the forest edge, a little out onto the sand, thinning into the trees */
-      for (let i = 0; i < 5200; i++) {
+      /* the grass: a band along the forest edge, a little out onto the sand, thinning into the trees (round the island the
+         grass is grass.js's, blade by blade) */
+      for (let i = 0; i < (Layout.isle ? 0 : 5200); i++) {
         const x = ch.x0 + r() * (ch.x1 - ch.x0), vz = Layout.vegZ(x), u = r(), z = vz - 1.6 + Math.pow(u, 1.7) * 14;
         if (world.massif(x, z) > 0.25 || !awayFromCamp(x, z)) continue;
         if (z < vz && r() < 0.6) continue;    /* (sparser out on the sand) */

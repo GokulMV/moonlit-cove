@@ -25,7 +25,7 @@ let held = null;
 const release = () => { if (held) { try { fs.rmSync(held, { recursive: true, force: true }); } catch (e) { /* already free */ } held = null; } };
 process.on('exit', release); for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { release(); process.exit(1); });
 
-export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'file://' + path.join(root, 'dist/page-local.html'), enter = true, hour = 23, query = '', mobile = false, init, tz } = {}) {
+export async function open({ rs = 0.4, msaa = 0, dtCap = 0.5, w = 1280, h = 800, url = 'file://' + path.join(root, 'dist/page-local.html'), enter = true, hour = 23, query = '', mobile = false, init, tz } = {}) {
   held = await takeSlot();
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
   /* (tz: the visitor's time zone, which the page places them by: the sky is theirs) */
@@ -34,10 +34,10 @@ export async function open({ rs = 0.4, dtCap = 0.5, w = 1280, h = 800, url = 'fi
   const logs = [];
   page.on('console', m => { const t = m.text(); logs.push(`[${m.type()}] ${t}`); if (m.type() === 'error') console.log('  console error:', t.slice(0, 300)); });
   page.on('pageerror', e => { logs.push('[pageerror] ' + e.message); console.log('  pageerror:', e.message.slice(0, 400)); });
-  await page.addInitScript(({ hour, rs, dtCap }) => {
+  await page.addInitScript(({ hour, rs, dtCap, msaa }) => {
     try { localStorage.setItem('cove.timeMode', JSON.stringify('custom')); localStorage.setItem('cove.hour', JSON.stringify(hour)); localStorage.setItem('cove.weather', JSON.stringify('clear')); } catch (e) {}
-    window.__coveMaxRS = rs; window.__coveDtCap = dtCap; window.__coveShadow = 512;
-  }, { hour, rs, dtCap });
+    window.__coveMaxRS = rs; window.__coveDtCap = dtCap; window.__coveShadow = 512; window.__coveMSAA = msaa;
+  }, { hour, rs, dtCap, msaa });
   if (init) await page.addInitScript(init);
   await page.goto(url + query, { timeout: 120000 });
   await page.waitForFunction(() => !document.getElementById('enterQuiet').disabled, null, { timeout: 180000 });

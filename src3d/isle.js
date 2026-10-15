@@ -120,7 +120,7 @@ const IsleWorld = (() => {
        trees themselves ── */
     /* ── what the park has built (park.js): the jetty, the hut, the boat; the forest keeps clear of them ── */
     const park = typeof IslePark !== 'undefined' && o.park !== false ? IslePark.build(group, I, { land: (x, z) => Math.max(drawnH(x, z), LEVEL), avoid: streams ? streams.streams.map(s => [s.X[s.n - 1], s.Z[s.n - 1]]) : [] }) : null;
-    const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z), keep: (park ? park.plan.clear : []).concat(trails ? trails.clear : [], streams ? streams.clear : []) }) : null;
+    const forest = o.R && typeof IsleForest !== 'undefined' && o.forest !== false ? IsleForest.build(group, I, { R: o.R, land: (x, z) => land(x, z), keep: (park ? park.plan.clear : []).concat(trails ? trails.clear : [], streams ? streams.clear : [], o.keep || []) }) : null;
     const streamsG = streams ? IsleStreams.build(group, I, streams, { sky: { uHor: U.uHor, uZen: U.uZen }, noise: U.uNoise, shade: forest ? (x, z) => 1 - 0.8 * forest.cover(x, z) : null }) : null;
     /* ── the streams' banks: the ground along each stream drawn finer than the tiles can draw it (a channel a metre or two
        across in a grid of two-metre cells would be lost), from its bed up its banks and out to where they ease into the
@@ -236,7 +236,7 @@ float topAt(vec2 p){
   float d = -f.x, W = k1.y*50.0, sand = k1.z, rock = k2.x, cliff = k2.y, mang = k2.z;
   /* (where forest.js grows it: back from a beach's top, behind the bare rock of a rocky shore, on the mangroves' mud) */
   float rk = (rock + cliff)*(1.0 - smoothstep(W + 4.0, W + 18.0, d));
-  float forest = max(max(smoothstep(W + 16.0, W + 46.0, d)*sand, smoothstep(W + 6.0, W + 20.0, d)*(rock + cliff)), smoothstep(16.0, 44.0, d)*mang)*(1.0 - rk);
+  float forest = max(max(smoothstep(W + 6.0, W + 22.0, d)*sand, smoothstep(W + 6.0, W + 20.0, d)*(rock + cliff)), smoothstep(16.0, 44.0, d)*mang)*(1.0 - rk);
   /* (along a beach's top, the palms and the thicket under them: lower, and not a wall) */
   float fringe = sand*smoothstep(W - 4.0, W + 1.0, d)*(1.0 - smoothstep(0.3, 0.6, mang));
   float open = 1.0;
@@ -287,7 +287,7 @@ void main(){
       function topAt(x, z) {
         const sd = I.sdf(x, z), d = -sd, q = I.shore(I.uAt(x, z), SQ2), W = q.W;
         const rk = (q.rock + q.cliff) * (1 - ss(W + 4, W + 18, d));
-        const forest = Math.max(ss(W + 16, W + 46, d) * q.sand, ss(W + 6, W + 20, d) * (q.rock + q.cliff), ss(16, 44, d) * q.mangrove) * (1 - rk);
+        const forest = Math.max(ss(W + 6, W + 22, d) * q.sand, ss(W + 6, W + 20, d) * (q.rock + q.cliff), ss(16, 44, d) * q.mangrove) * (1 - rk);
         const fringe = q.sand * ss(W - 4, W + 1, d) * (1 - ss(0.3, 0.6, q.mangrove));
         let open = 1; for (const c of clr) open *= ss(c[2] * 0.8, c[2] + 5, Math.hypot(x - c[0], z - c[1]));
         const mg = ss(0.25, 0.6, q.mangrove), roof = ss(0.02, 0.22, forest), mgr = mg * ss(-12, -6, d) * (1 - ss(18, 36, d)) * 13;
@@ -380,28 +380,38 @@ void main(){
     /* (each with its highest point, for a walker to step up onto one no higher than a long step) */
     /* (the radius each is given is how far its side stands out toward the point asked about, and its size rides along:
        [x, z, radius, kind, peak, size]) */
-    const obsOut = [], obstaclesNear = (x, z) => { obsOut.length = 0; if (stones) for (const st of stones.near(x, z, 14)) if (st.s > 0.45) obsOut.push([st.x, st.z, stones.reach(st, x - st.x, z - st.z), 'rock', stones.peakOf(st), st.s]); return obsOut; };
+    /* (and the forest's trunks, their buttresses and stilt roots: [x, z, radius, 'tree']; the ferns and the saplings, the
+       grass and the flowers are walked through) */
+    /* (and whatever else stands on the island and says so: the huts, huts.js) */
+    const extraObs = [], extraWalk = [];
+    const obsOut = [], obstaclesNear = (x, z) => { obsOut.length = 0; if (stones) for (const st of stones.near(x, z, 14)) if (st.s > 0.45) obsOut.push([st.x, st.z, stones.reach(st, x - st.x, z - st.z), 'rock', stones.peakOf(st), st.s]);
+      if (forest && forest.trunks) for (const t of forest.trunks(x, z)) if (Math.abs(t[0] - x) < 6 + t[2] && Math.abs(t[1] - z) < 6 + t[2]) obsOut.push([t[0], t[1], t[2], 'tree']);
+      for (const f of extraObs) f(x, z, obsOut);
+      return obsOut; };
     const wetOut = [], wetNear = (x, z, r) => { wetOut.length = 0; if (stones) for (const st of stones.near(x, z, r)) if (st.wet) wetOut.push({ x: st.x, z: st.z, top: st.y + st.s * st.sy * 0.8, rad: st.s * 0.9, id: st.id }); return wetOut; };
     /* the land's height at a world point, as drawn (on the sand and over the sea, the sand's level) */
     const land = (x, z) => Math.max(drawnH(x, z), LEVEL);
     const massif = (x, z) => { const h = land(x, z); return h > 0.1 ? h * rockAt(x, z, 1) : -9; };
     /* ── where a walker can go, and how high the ground is there: the beaches (and a little way into the water), the
-       trails, the camp's clearing and the hut's, the jetty's deck, the boardwalk over the mud. Not the forest itself
-       (a rainforest is a wall off its paths), nor the rocks, nor the sea past wading depth ── */
+       trails, the camp's clearing and the hut's, the jetty's deck, the boardwalk over the mud, and the forest's floor
+       wherever it is no steeper than a scramble (its trunks kept off by obstaclesNear); not the cliffs, nor the sea past
+       wading depth ── */
     const WQ = {}, WO = { ok: false, y: 0, kind: '', wade: 0 }, STEP = 0.75;
     /* (and the stones: a walker steps up onto one whose top is no higher than a long step from where they stand (foot),
        stands and walks on it, steps across onto the next, and down off it; one higher stands in their way. Asked without
        foot, any stone's top is where they would stand) */
     function walk(x, z, out = WO, foot) {
-      out.deck = false; ground0(x, z, out);
+      out.deck = false; ground0(x, z, out, foot);
       /* (a deck — the jetty, a footbridge — is over whatever stones lie under it) */
       if (stones && !out.deck && out.kind !== 'deck') { const S = stones.top(x, z); if (S.y > out.y + 0.05) {
         if (foot !== undefined && S.y > foot + STEP) { out.ok = false; out.kind = 'stone'; }
         else { out.ok = true; out.kind = 'rock'; out.y = S.y; out.wade = 0; } } }
       return out;
     }
-    function ground0(x, z, out) {
+    function ground0(x, z, out, foot) {
       out.ok = false; out.kind = ''; out.wade = 0; out.y = land(x, z);
+      /* (a hut's floor, its steps, its walls: huts.js says) */
+      for (const f of extraWalk) if (f(x, z, out, foot)) { out.deck = out.kind === 'deck'; return out; }
       /* (the jetty: along its line from its foot out to its head, its deck's height there) */
       if (park) {
         const j = park.plan.jetty, ax = x - j.x, az = z - j.z, al = ax * j.nx + az * j.nz, ac = -ax * j.nz + az * j.nx, info = park.jetty.userData.info, Lh = info.len;
@@ -428,6 +438,11 @@ void main(){
         const e = 0.6, gx = land(x + e, z) - land(x - e, z), gz = land(x, z + e) - land(x, z - e);
         if (Math.hypot(gx, gz) / (2 * e) < 0.7) { out.ok = true; out.kind = 'rockshore'; out.wade = Math.max(wd, Math.max(0, Math.min(1, (s + 0.2) / 1.8)) * 0.6); if (s > 0) out.y = Math.max(fl, -1.0); }
       }
+      /* (the forest's floor, in off the beach or the rocks: anywhere it is not so steep that a walker would need hands) */
+      if (!out.ok && s < 0) {
+        const e = 0.8, gx = land(x + e, z) - land(x - e, z), gz = land(x, z + e) - land(x, z - e);
+        if (Math.hypot(gx, gz) / (2 * e) < 0.85 && q.cliff < 0.5 + 0.5 * sm(q.W + 8, q.W + 30, -s)) { out.ok = true; out.kind = 'forest'; }
+      }
       return out;
     }
     const none = [];
@@ -438,6 +453,7 @@ void main(){
       get counts() { return { tiles: tiles.length, built: stat.built, worst: +stat.worst.toFixed(2), prime: +(stat.prime || 0).toFixed(1), shown: tiles.reduce((n, t) => n + t.m.filter(m => m && m !== 'none' && m.visible).length, 0),
         treeTiles: tiles.filter(t => t.trees).length, trees: stat.trees || 0, forest: forest ? forest.stats() : null, stones: stones ? stones.stats() : null }; },
       forest, stones, park, trails, trailsG, streams, streamsG, shade,
+      addWalker: f => { extraWalk.push(f); }, addObstacles: f => { extraObs.push(f); },
       get chunks() { return [...bay.values()].filter(ch => ch.built); }, chunkAt: x => bay.get(Math.floor((x - X0) / CW)) || null, resetWorst: () => { stat.worst = 0; }, tiles };
   }
   return { build, LODS, TS };

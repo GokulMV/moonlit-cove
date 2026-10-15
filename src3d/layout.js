@@ -20,6 +20,9 @@ const Layout = (() => {
   const WIN = { x: 0.6, r0: 175, r1: 460 };   /* the camp's bay as it was within r0 of the camp; its own coast from r1 on */
   const Coast = (() => {
     const BLOCK = 1100, BAYB = 2500, REEFB = 640, WMAX = 38, REACH = 6, QUIET = 430;   /* (a headland's shape counts out to REACH half-widths) */
+    /* (and no rock anywhere on it now: no headlands, no rocky points, no reefs running out into the sea — a coast of sand
+       and its long, slow bays. The rest of what follows is how they were, kept should they ever come back) */
+    const ROCKS = false;
     /* the camp's own two points, as they always were (ids -1 and 0: world.js lays their rocks as it always did) */
     const FIX = [{ hx: -125, w: 16, d: 17, ht: 1, st: 1.7, gap: 9.5, stacks: 1, id: -1 }, { hx: 132, w: 17, d: 19, ht: 1.12, st: 1.9, gap: 10, stacks: 2, id: 0 }];
     /* an integer hash of (where, which number), as a fraction */
@@ -35,6 +38,7 @@ const Layout = (() => {
        ht, the step of its rock terraces st, the sand left at its foot gap, its sea stacks */
     function block(b) {
       let out = blocks.get(b); if (out) return out;
+      if (!ROCKS) { out = []; blocks.set(b, out); return out; }
       out = []; const q = k => hash(b * 131 + 7919, k), x0 = b * BLOCK, rk = rocky(x0 + BLOCK / 2);
       for (const f of FIX) if (f.hx >= x0 && f.hx < x0 + BLOCK) out.push(Object.assign({}, f));
       const fits = h => !out.some(o => Math.abs(o.hx - h.hx) < 2.5 * (o.w + h.w)) && Math.abs(h.hx - WIN.x) > QUIET + 3 * h.w && h.hx - 2.6 * h.w > x0 && h.hx + 2.6 * h.w < x0 + BLOCK;
@@ -102,6 +106,7 @@ const Layout = (() => {
     const reefMemo = new Map();
     function reefBlock(b) {
       let out = reefMemo.get(b); if (out) return out;
+      if (!ROCKS) { out = []; reefMemo.set(b, out); return out; }
       out = []; const q = k => hash(b * 617 + 15485863, k), x0 = b * REEFB;
       for (const f of RFIX) if (f.x >= x0 && f.x < x0 + REEFB) out.push(Object.assign({}, f));
       const x = x0 + 60 + q(2) * (REEFB - 120), rk = rocky(x);
@@ -115,7 +120,7 @@ const Layout = (() => {
     const rCache = new Map();
     function reefsNear(x) { const b0 = Math.floor((x - 70) / REEFB), b1 = Math.floor((x + 70) / REEFB), key = b0 * 100003 + b1; let L = rCache.get(key); if (L) return L;
       L = []; for (let b = b0; b <= b1; b++) L.push(...reefBlock(b)); if (rCache.size > 128) rCache.clear(); rCache.set(key, L); return L; }
-    return { BLOCK, WMAX, REACH, hash, vn1, rocky, cell, near, heads, head, bays, shoreZ, shoreDZ, vegZ, reefs, reefsNear, win };
+    return { BLOCK, WMAX, REACH, ROCKS, hash, vn1, rocky, cell, near, heads, head, bays, shoreZ, shoreDZ, vegZ, reefs, reefsNear, win };
   })();
 
   /* where the world sits on the coast: world (x, z) is coast (x + O.x, z + O.z). It is (0, 0), the camp in its bay;
@@ -127,9 +132,9 @@ const Layout = (() => {
      shoreMeanZ where it does at the mean of the tide, which is what the coast's things are laid out from */
   const tide = { dz: 0, hi: 0 };
 
-  /* ── the island (island.js), when the page is asked for it (?island): the camp's bay is its east beach, the camp's own
-     shore as it always was, and the rest of the coast is the island's. (Built the first time anything asks) ── */
-  const isle = typeof window !== 'undefined' && !!(window.__coveIsle || (window.location && /[?&]island\b/.test(window.location.search)));
+  /* ── the round island (island.js), when the page is asked for it (?round): the camp's beach is its east shore, the camp's
+     own as it always was, and the rest of the beach goes on round the island. (Built the first time anything asks) ── */
+  const isle = typeof window !== 'undefined' && !!(window.__coveIsle || (window.location && /[?&](round|island)\b/.test(window.location.search)));
   let isleUp = false;
   const ISL = () => { if (!isleUp) { Island.build(); isleUp = true; } return Island; };
   /* (how far up each kind of shore the tide moves the water's edge: island.js) */
@@ -147,7 +152,7 @@ const Layout = (() => {
   const shoreMeanZ = isle ? iMean : x => Coast.shoreZ(x + O.x) - O.z;
   const shoreZ = isle ? iNow : x => Coast.shoreZ(x + O.x) - O.z + tide.dz, shoreDZ = isle ? iDZ : x => Coast.shoreDZ(x + O.x), vegZ = isle ? iVeg : x => Coast.vegZ(x + O.x) - O.z;
   const head = isle ? iHead : x => Coast.head(x + O.x);
-  const heads = isle ? (x0, x1) => Coast.heads(x0, x1).filter(h => h.id === -1 || h.id === 0).map(h => Object.assign({}, h))
+  const heads = isle ? () => []
     : (x0, x1) => Coast.heads(x0 + O.x, x1 + O.x).map(h => Object.assign({}, h, { hx: h.hx - O.x }));
 
   /* ── the shore, wherever it is, for anything that lives by it: from a world point, how far it is from the water's edge

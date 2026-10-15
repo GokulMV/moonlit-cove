@@ -1,17 +1,11 @@
 /* ─────────────────────────────────────────────────────────────
    island.js — the island: its shape, its shores, its ground.
-   An island off the north-west coast of Borneo, of the kind that
-   lie off Kota Kinabalu: about 2.4 km from its north end to its
-   south and 1.4 km across, a forested ridge down its length rising
-   to a summit of 260 m in the north and a second peak of 180 m in
-   the south, a saddle between them where a track crosses from one
-   side to the other. Its shores are rocky for the most part, a
-   fringing reef off them; three beaches: the camp's bay on the east
-   coast (its shore the camp's own, as it always was), a long beach
-   on the west coast where the sun goes down, and a small cove in
-   the south-east with the jetty and the ranger's hut. In the
-   south-west a tidal creek winds a few hundred metres inland, its
-   banks mangrove. Streams come down the main valleys.
+   A round island, a cay of the kind that lie off Borneo's north
+   coast: a beach all the way round it, a little over a mile and a
+   half of sand, and inside the beach the forest, on land that rises
+   gently from the beach's top to a low ridge down its middle, some
+   twenty metres up. On its east side the camp, its beach as it
+   always was, facing the sea and the sunrise.
    World axes as Layout's: y up, +x south, +z west; the camp at the
    origin, the sea in front of it to the east (-z).
    Built once (Island.build): the coastline (a closed line, a point
@@ -62,33 +56,26 @@ const Island = (() => {
      cliff (sheer, straight into deep water), mangrove (mud and roots). The camp's bay, between its two rocky points, is
      the camp's own shore (Layout's), blended into the island's line a few hundred metres either side ── */
   const KIND = { sand: 0, rock: 1, cliff: 2, mangrove: 3 };
-  const CTRL = [
-    [0, -8.6, 'sand'], [175, -6.5, 'sand'],
-    /* the east coast south of the camp: a rocky bay, a point, then the jetty's cove behind the next point */
-    [292, 30, 'rock'], [404, -14, 'rock'], [470, 34, 'rock'], [552, 118, 'sand'], [640, 168, 'sand'], [724, 150, 'rock'], [770, 92, 'rock'], [834, 118, 'rock'],
-    /* the south end: cliffs under the second peak, a point off it */
-    [900, 222, 'rock'], [972, 352, 'cliff'], [1050, 480, 'cliff'], [1076, 640, 'cliff'], [1022, 790, 'rock'],
-    /* the south-west: mangroves round the creek's mouth (the creek is laid in between the next two, below) */
-    [968, 918, 'mangrove'], ['creek'], [870, 1080, 'mangrove'], [780, 1172, 'rock'],
-    /* the west coast: a rocky point, the long west beach round its bay, a point, cliffs */
-    [652, 1282, 'rock'], [530, 1300, 'rock'], [400, 1350, 'rock'], [262, 1316, 'sand'], [96, 1262, 'sand'], [-110, 1246, 'sand'], [-300, 1268, 'sand'], [-414, 1318, 'rock'],
-    [-470, 1380, 'rock'], [-600, 1352, 'rock'], [-700, 1302, 'rock'], [-800, 1262, 'cliff'], [-918, 1180, 'cliff'], [-1060, 1066, 'cliff'],
-    /* the north end: a point to the north-west, a bay, the north tip, rocky round to the east */
-    [-1184, 956, 'rock'], [-1248, 860, 'rock'], [-1270, 760, 'rock'], [-1372, 640, 'rock'], [-1366, 470, 'rock'], [-1280, 330, 'rock'], [-1196, 238, 'rock'],
-    /* the east coast north of the camp: a rocky bay, a point, a smaller bay, to the camp's */
-    [-1060, 160, 'rock'], [-940, 70, 'rock'], [-828, 98, 'rock'], [-700, 30, 'rock'], [-616, -30, 'rock'], [-500, 30, 'rock'], [-346, -2, 'rock'], [-175, -8, 'sand']
-  ];
-  /* the creek: its middle line from the mouth inland, and its half-width there (m) */
-  const CREEK = [[926, 1002, 44], [872, 962, 26], [800, 920, 17], [720, 892, 12], [640, 874, 9], [566, 874, 6], [520, 884, 2.5]];
-  /* the camp's bay: the shore and the forest's edge there as they always were (Layout's own, for the camp's surroundings to
-     keep their places), and its two rocky points */
+  /* the camp's beach: the shore and the forest's edge there as they always were (Layout's own, for the camp's surroundings
+     to keep their places); no rocky points now */
   const SH = { base: -8.6, a1: 1.5, f1: 0.0552233084, p1: 0.7, a2: 0.55, f2: 0.177941771, p2: 2.0, tl: -4.88923985, kt: 0.00613592315 };
   const VG = { base: 1.7, a1: 0.9, f1: 0.0920388473, p1: 1.3, a2: 0.45, f2: 0.227029157, tl: -2.93354391 };
   const zOld = x => SH.base + SH.a1 * Math.sin(x * SH.f1 + SH.p1) + SH.a2 * Math.sin(x * SH.f2 + SH.p2) + SH.tl * Math.sin(x * SH.kt);
   const vOld = x => VG.base + VG.a1 * Math.sin(x * VG.f1 + VG.p1) + VG.a2 * Math.sin(x * VG.f2) + VG.tl * Math.sin(x * SH.kt);
-  const POINTS = [{ hx: -125, w: 16, d: 17 }, { hx: 132, w: 17, d: 19 }];
+  const POINTS = [];
   const headFix = x => { let a = 0; for (const h of POINTS) { const u = (x - h.hx) / h.w; if (u > -6 && u < 6) a += h.d * Math.exp(-u * u); } return a; };
-  const BAY = { r0: 175, r1: 460 };
+  /* the shape: a circle R0 metres round its middle, its radius wandering a few metres over a few hundred (never a headland,
+     never a bay), its east edge the camp's own shore. Its line through points round it, going south from the camp, round
+     by the west and the north and back */
+  const R0 = 280, radius = th => R0 * (1 + 0.011 * Math.sin(2 * th + 0.7) + 0.007 * Math.sin(3 * th + 2.1) + 0.0035 * Math.sin(5 * th + 4.0));
+  const ZC = radius(0) + zOld(0), CENTRE = [0, ZC];
+  const CTRL = Array.from({ length: 40 }, (_, i) => { const th = i / 40 * TAU, r = radius(th); return [r * Math.sin(th), ZC - r * Math.cos(th), 'sand']; });
+  /* (no creek on this island: its line, were there one, from the mouth inland, and its half-width there) */
+  const CREEK = [];
+  /* (within BAY.r0 of the camp the shore is the camp's own, its small waves along it, bent round with the circle; blended
+     into the circle by BAY.r1) */
+  const BAY = { r0: 14, r1: 70 };
+  const zCamp = x => zOld(x) - SH.tl * Math.sin(x * SH.kt) + x * x / (2 * radius(0));
 
   /* ── the line itself: a smooth closed curve through the points (centripetal Catmull-Rom), every metre along it; then
      its detail, in by how rough its kind of shore is (a beach's curve is smooth, rock is ragged at every scale); the
@@ -157,30 +144,26 @@ const Island = (() => {
       const rough = w[0] * 0.6 + w[1] * 5.0 + w[2] * 3.6 + w[3] * 2.4, fine = w[1] * 1.3 + w[2] * 1.0 + w[3] * 0.5;
       const at = i * 1.0;
       let off = rough * (0.62 * sn1(at / 46, 11) + 0.38 * sn1(at / 17, 13)) + fine * sn1(at / 5.3, 17) + 0.4 * fine * sn1(at / 1.9, 19);
-      off += (w[1] + w[2]) * 16 * sn1(at / 230, 9);
+      off += (w[1] + w[2]) * 6 * sn1(at / 120, 9);
       /* (where the shore is rock, the land's own shape comes down to it: a spur runs out into a point, a gully's mouth is
          a cove) */
-      off += 26 * (w[1] + 0.7 * w[2]) * spurAt(p.x, p.z) * (p.creek >= 0 ? 0 : 1);
+      if (w[1] + w[2] > 0.01) off += 9 * (w[1] + 0.7 * w[2]) * spurAt(p.x, p.z) * (p.creek >= 0 ? 0 : 1);
       if (p.creek >= 0) off *= 0.35;
       p.x += N0[i][0] * off; p.z += N0[i][1] * off;
       void xn;
     });
-    /* the camp's bay: within BAY.r0 of the camp the shore is the camp's own (and its two rocky points); blended into the
-       island's line by BAY.r1 */
+    /* the camp's beach: within BAY.r0 of the camp the shore is the camp's own; blended into the island's line by BAY.r1 */
     for (const p of L) {
       if (p.z > 200 || Math.abs(p.x) > BAY.r1) continue;
-      const W = sm(BAY.r0, BAY.r1, Math.abs(p.x)), zc = zOld(p.x) - headFix(p.x);
+      const W = sm(BAY.r0, BAY.r1, Math.abs(p.x)), zc = zCamp(p.x);
       p.z = mix(zc, p.z, W); p.bay = 1 - W;
-      /* (the points are rock) */
-      const hk = clamp(headFix(p.x) / 9) * (1 - W);
-      if (hk > 0) { const w = p.w; for (let k = 0; k < NK; k++) w[k] *= 1 - hk; w[KIND.rock] += hk; }
     }
     /* ── resampled a metre apart; where along the coast each point is (u, in metres): counted from the camp (u 0), so that
-       along the camp's bay u is (nearly) the camp's own x, south positive; the count starts (and comes round again) on the
-       cliffs of the north-west, where there is no beach for the seam to show on ── */
+       along the camp's beach u is (nearly) the camp's own x, south positive; the count starts (and comes round again) on
+       the far side of the island, the west ── */
     const R = resample(L, 1.0); L = R.pts; const P = R.total, n = L.length, ds = R.ds;
     const nearest = (x, z, f) => { let i0 = 0, bd = 1e18; L.forEach((p, i) => { const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd && (!f || f(p))) { bd = d; i0 = i; } }); return i0; };
-    const iCamp = nearest(0, zOld(0), p => p.z < 100), iSeam = nearest(-985, 1090);
+    const iCamp = nearest(0, zOld(0), p => p.z < 100), iSeam = nearest(CENTRE[0], CENTRE[1] + R0);
     L = L.slice(iSeam).concat(L.slice(0, iSeam));
     const u0 = ((iCamp - iSeam + n) % n) * ds;
     L.forEach((p, i) => { p.u = i * ds - u0; });
@@ -188,12 +171,14 @@ const Island = (() => {
     L.forEach((p, i) => { const a = L[(i - 3 + n) % n], b = L[(i + 3) % n], tx = b.x - a.x, tz = b.z - a.z, l = Math.hypot(tx, tz) || 1; p.tx = tx / l; p.tz = tz / l; p.nx = p.tz; p.nz = -p.tx; });
     /* what each stretch of shore is like: how wide its beach (to the forest's edge), how far its reef runs out, how open it
        is to the swell (the creek and the mangroves sheltered, the bays open) */
-    L.forEach(p => {
+    L.forEach((p, i) => {
       const w = p.w, a = p.u;
-      const sandW = 24 + 12 * sn1(a / 140, 31) + 4 * sn1(a / 37, 33);
+      /* (the beach's width, wider here and narrower there, in waves that come round to themselves: the coast closes on
+         itself, so nothing along it may jump where its count starts again) */
+      const ang = TAU * i / n, sandW = 21 + 3.5 * Math.sin(3 * ang + 0.9) + 2 * Math.sin(7 * ang + 2.3) + 0.8 * Math.sin(17 * ang + 0.4);
       p.W = w[0] * sandW + w[1] * (2.2 + 1.6 * vn1(a / 23, 35)) + w[2] * 0.4 + w[3] * (4 + 3 * vn1(a / 31, 37));
       if (p.bay) { const W0 = vOld(p.x) - 0.55 * headFix(p.x) - (zOld(p.x) - headFix(p.x)); p.W = mix(p.W, W0, p.bay); }
-      p.reef = w[1] * (55 + 45 * vn1(a / 160, 41)) + w[2] * 18 + w[3] * 4 + w[0] * (8 + 6 * vn1(a / 90, 43));
+      p.reef = w[1] * (28 + 26 * vn1(a / 110, 41)) + w[2] * 12 + w[3] * 4 + w[0] * (11 + 3 * Math.sin(5 * ang + 1.0));
       p.ex = p.creek >= 0 ? 0.08 * (1 - p.creek) : 0.15 + 0.85 * (1 - w[3]) * (1 - 0.35 * w[2]);
     });
     /* how open each place is to the swell, worked out from where the sea is: a bay's mouth facing the open sea gets the
@@ -209,7 +194,7 @@ const Island = (() => {
     /* ── the grid: signed distance to the shore and the nearest shore point's u, worked out exactly within a few metres
        of the line and carried out from there over the whole grid (each cell keeping the nearest shore point any of its
        neighbours knows of) ── */
-    const cell = o.cell || 2.5, X0 = -1560, Z0 = -360, X1 = 1260, Z1 = 1620, nx = Math.ceil((X1 - X0) / cell), nz = Math.ceil((Z1 - Z0) / cell);
+    const cell = o.cell || 2.5, X0 = -480, Z0 = -210, X1 = 480, Z1 = 760, nx = Math.ceil((X1 - X0) / cell), nz = Math.ceil((Z1 - Z0) / cell);
     const NC = nx * nz, S = new Float32Array(NC), Uu = new Float32Array(NC), near = new Int32Array(NC).fill(-1), inside = new Uint8Array(NC);
     /* (inside the island: an even-odd fill, row by row, at the cells' middles; each row looking only at the pieces of the
        line that cross it) */
@@ -421,11 +406,12 @@ const Island = (() => {
      the south; its flanks falling to the coast, ribbed with spurs and cut by the valleys the streams come down. At the
      shore it comes down to the beach, or straight to the water where the shore is cliff; out to sea, the floor: the reef
      flat off the rocky shores, shallow and level, its edge falling away to the deep; off a beach, sand shelving gently ── */
-  const CREST = [[-1170, 560, 95], [-960, 598, 196], [-740, 636, 262], [-540, 660, 212], [-330, 680, 146], [-130, 700, 112], [70, 718, 128], [270, 730, 160], [450, 722, 182], [630, 700, 152], [810, 640, 98], [940, 600, 58]];
+  /* (the round island's: a low ridge down its middle from north-west to south-east, its crest's height along it) */
+  const CREST = [[-125, 312, 12], [-55, 296, 18], [15, 280, 22], [85, 262, 17], [145, 246, 10]];
   /* the crest as a smooth line (every 10 m, its height along it), and over a 10 m grid each point's signed distance from
      it (+ west of it), how far along it, and its height there: so its shape is smooth round its bends (from the bare
      polyline, how far along jumps on the inside of every bend) */
-  const CF = { X0: -1600, Z0: -400, cell: 10, nx: 0, nz: 0, SD: null, AL: null, HC: null, L: 0, line: null };
+  const CF = { X0: -500, Z0: -230, cell: 5, nx: 0, nz: 0, SD: null, AL: null, HC: null, L: 0, line: null };
   function crestBuild() {
     if (CF.SD) return;
     const P = CREST, n = P.length, D = [];
@@ -435,9 +421,9 @@ const Island = (() => {
     }
     D.push(P[n - 1].slice());
     /* (the ends carried on a little, so beyond them the distance is from a line, not a point) */
-    for (const [i, j] of [[0, 1], [D.length - 1, D.length - 2]]) { const a = D[i], b = D[j], dx = a[0] - b[0], dz = a[1] - b[1], l = Math.hypot(dx, dz); const e = [a[0] + dx / l * 250, a[1] + dz / l * 250, a[2] * 0.35]; if (i === 0) D.unshift(e); else D.push(e); }
+    for (const [i, j] of [[0, 1], [D.length - 1, D.length - 2]]) { const a = D[i], b = D[j], dx = a[0] - b[0], dz = a[1] - b[1], l = Math.hypot(dx, dz); const e = [a[0] + dx / l * 120, a[1] + dz / l * 120, a[2] * 0.35]; if (i === 0) D.unshift(e); else D.push(e); }
     CF.line = D; const lens = lensOf(D); CF.L = lens.total;
-    const nx = Math.ceil(2900 / CF.cell), nz = Math.ceil(2100 / CF.cell); CF.nx = nx; CF.nz = nz;
+    const nx = Math.ceil(1000 / CF.cell), nz = Math.ceil(1010 / CF.cell); CF.nx = nx; CF.nz = nz;
     CF.SD = new Float32Array(nx * nz); CF.AL = new Float32Array(nx * nz); CF.HC = new Float32Array(nx * nz);
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const x = CF.X0 + (i + 0.5) * CF.cell, z = CF.Z0 + (j + 0.5) * CF.cell; let best = 1e18, bt = 0, bh = 0, sg = 1, acc = 0, at = 0;
@@ -458,21 +444,16 @@ const Island = (() => {
   }
   /* the spurs down the ridge's flanks: +1 along a spur's back, -1 down a gully, wandering, branching lower down */
   function spurAt(x, z) {
-    const cr = crestAt(x, z), sd = cr[0], dc = Math.abs(sd), along = cr[1], side = sd >= 0 ? 1 : -1, q = dc / 700;
-    const warp = 0.6 * pfbm(along / 280, dc / 210 + side * 9.1, 21, 2) + 0.25 * pfbm(x / 120, z / 120, 23, 2);
-    const a = Math.cos(TAU * (along / (165 + 70 * q) + warp + 0.31 * side)), b = Math.cos(TAU * (along / (82 + 30 * q) + 1.7 * warp + 0.13 * side));
-    const amp = 0.65 + 0.55 * pfbm(along / 330 + side * 3.3, dc / 330, 25, 2);
-    return clamp((a * 0.75 + b * 0.35 * sm(120, 420, dc)) * amp, -1, 1);
+    const cr = crestAt(x, z), sd = cr[0], dc = Math.abs(sd), along = cr[1], side = sd >= 0 ? 1 : -1, q = dc / 260;
+    const warp = 0.6 * pfbm(along / 140, dc / 110 + side * 9.1, 21, 2) + 0.25 * pfbm(x / 70, z / 70, 23, 2);
+    const a = Math.cos(TAU * (along / (92 + 40 * q) + warp + 0.31 * side)), b = Math.cos(TAU * (along / (46 + 18 * q) + 1.7 * warp + 0.13 * side));
+    const amp = 0.65 + 0.55 * pfbm(along / 180 + side * 3.3, dc / 180, 25, 2);
+    return clamp((a * 0.75 + b * 0.35 * sm(50, 170, dc)) * amp, -1, 1);
   }
   /* streams: from the sea up their valleys, the depth they cut (m) at their upper end, the width of the valley */
   /* (the creek's reach, as a box round its line, out as far as its valley goes) */
   const CREEKB = (() => { let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const p of CREEK) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); } const m = 300; return [a - m, b + m, c - m, d + m]; })();
-  const STREAMS = [
-    { pts: [[-262, -6], [-318, 140], [-352, 300], [-342, 470], [-300, 610]], cut: 34, w: 95 },
-    { pts: [[-58, 1384], [-74, 1200], [-62, 1010], [-92, 850]], cut: 30, w: 90 },
-    { pts: [[512, 884], [420, 868], [330, 832], [262, 790]], cut: 22, w: 85 },
-    { pts: [[636, 112], [578, 280], [520, 440], [470, 580]], cut: 28, w: 80 }
-  ];
+  const STREAMS = [];
   /* (each stream's reach: the box round its line, out as far as its valley can matter) */
   const boxOf = S => { let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const p of S.pts) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); } const m = 1.45 * S.w; return (S.box = [a - m, b + m, c - m, d + m]); };
   const streamD = new Float64Array(STREAMS.length * 2);
@@ -492,46 +473,14 @@ const Island = (() => {
     if (s === undefined) { s = sdf(x, z); u = uAt(x, z); }
     const sh = shore(u, SHT), d = -s;
     if (d < 0) return seaFloor(x, z, s, sh);
-    /* the ridge: its crest's height there, the flanks falling away from it convex at first and steepening (as a ridge of
-       hard rock wears), toward the ends more narrowly; spurs running down the flanks square to the crest, the gullies
-       between them, a little wandering, further apart lower down; and over all of it a finer roughness */
-    const cr = crestAt(x, z), dc = Math.abs(cr[0]), along = cr[1], hc = cr[2], tc = clamp(along / CF.L);
-    const wid = 560 + 160 * Math.sin(tc * Math.PI), q = dc / wid;
-    let H = hc * Math.max(0, 1 - Math.pow(q, 1.65)) * (1 - 0.2 * q);
-    /* (the spurs and their gullies, left out where a stream has its own valley; a stream's line only looked at near it) */
-    let nearS = 0; const SD = streamD;
-    for (let q = 0; q < STREAMS.length; q++) { const S = STREAMS[q], B = S.box || boxOf(S); if (x < B[0] || x > B[1] || z < B[2] || z > B[3]) { SD[q * 2] = 1e9; continue; }
-      const st = onLine(S.pts, x, z); SD[q * 2] = st[0]; SD[q * 2 + 1] = st[1]; nearS = Math.max(nearS, 1 - sm(0.5, 1.4, st[0] / S.w)); }
-    const sk = sm(20, 150, dc) * (1 - nearS);
-    H *= 1 + 0.24 * sk * spurAt(x, z);
-    H += 9 * pfbm(x / 70, z / 70, 41, 3) * sm(8, 50, H) + 3 * pfbm(x / 22, z / 22, 47, 2) * sm(4, 30, H);
-    /* the valleys: each stream's, deeper inland, its floor near the stream itself flat */
-    for (let q = 0; q < STREAMS.length; q++) {
-      const S = STREAMS[q], ds = SD[q * 2], ts = SD[q * 2 + 1], w = S.w * (0.55 + 0.45 * ts); if (ds > w) continue;
-      const qq = ds / w, depth = S.cut * (0.25 + 0.75 * ts), v = 1 - qq * qq;
-      H -= Math.min(H * 0.8, depth * v * v * (1 - 0.5 * sm(0.7, 1, ts)));
-    }
-    /* the creek's own valley: low ground either side of it, the mangroves' mud and then the forest's floor, rising gently
-       to the hills a couple of hundred metres off (a tidal creek winds through the low ground it has filled; it cuts no
-       gorge) */
-    if (x > CREEKB[0] && x < CREEKB[1] && z > CREEKB[2] && z < CREEKB[3]) {
-      const st = onLine(CREEK, x, z), hw = st[2], f = 0.04 + 0.96 * sm(hw + 6, hw + 230, st[0]) ** 1.3;
-      H *= f;
-    }
-    /* down to the coast. A beach is level sand from the water up to the forest and some metres into it (the sand is the
-       ground the sea is drawn with, at the sea's own level: the land stays just under it there, as the coast's hills
-       always did); the mud of the mangroves level too; behind, the land rises as steeply as the kind of shore says, and
-       a cliff stands straight up out of the water */
-    const W = sh.W, flat = W + 9 * sh.sand + 12 * sh.mangrove + 1.5 * sh.rock, slopeL = sh.sand * 60 + sh.rock * 44 + sh.cliff * (7 + 10 * vn1(u / 31, 87)) + sh.mangrove * 110;
-    let k = sm(flat, flat + slopeL, d);
-    /* (a cliff: the lower part of the land's rise, sheer, in ledges, each step of rock a little back from the one below;
-       above it the slope goes on up, less steeply, under the forest) */
-    if (sh.cliff > 0.01) {
-      const cf = 0.38 + 0.2 * vn1(u / 53, 93), n = 2 + 2 * vn1(u / 47, 89), q = sm(flat, flat + slopeL, d), st = q * n + 0.6 * vn1(u / 11, 91), f = st - Math.floor(st);
-      const kc = cf * mix(q, clamp((Math.floor(st) + sm(0.2, 0.85, f)) / n), 0.65) + (1 - cf) * sm(flat + slopeL * 0.6, flat + slopeL + 55, d);
-      k = mix(k, kc, sh.cliff);
-    }
-    return H * k + LEVEL * (1 - k);
+    /* the round island's ground: from the beach's top up to the ridge, the share of the way there eased in and out (so
+       the foot of the slope is gentle, its middle a long easy climb and the top of it rounded), in long soft swells and a
+       finer roughness over them; the beach level sand up to the forest's edge, the land rising out of it there in a low
+       bank. Nowhere steeper than a walk */
+    const cr = crestAt(x, z), dc = Math.abs(cr[0]), hc = cr[2], t = clamp(d / (d + dc + 1)), F = t * t * (3 - 2 * t);
+    const H = hc * F + 3.0 * pfbm(x / 90, z / 90, 41, 3) * sm(8, 70, d) + 1.0 * pfbm(x / 26, z / 26, 47, 2) * sm(4, 30, d);
+    const k = sm(sh.W - 1, sh.W + 16, d);
+    return (Math.max(0, H) + 1.1) * k + LEVEL * (1 - k);
   }
   /* the level of the sand: the ground the sea is drawn with is at 0; the land's surface keeps this far under it */
   const LEVEL = -0.06;
@@ -615,6 +564,6 @@ const Island = (() => {
   /* how far up a shore the tide moves the water's edge, as a share of how far it moves it up a beach: on rock a quarter as
      far, up a cliff hardly at all, over the mangroves' mud further than on the sand */
   const tideK = q => q.sand + 0.25 * q.rock + 0.04 * q.cliff + 1.3 * q.mangrove;
-  return { build, adopt, transfers, gpu, tideK, shore, sdf, uAt, aAt, lagAt, normalAt, height, heightAt, onLine, CREST, STREAMS, KIND, LEVEL, get data() { return I; }, zOld, vOld, headFix };
+  return { build, adopt, transfers, gpu, tideK, shore, sdf, uAt, aAt, lagAt, normalAt, height, heightAt, onLine, CREST, STREAMS, KIND, LEVEL, CENTRE, R0, get data() { return I; }, zOld, vOld, headFix };
 })();
 if (typeof module !== 'undefined') module.exports = Island;

@@ -215,7 +215,7 @@ void main(){
     C = mix(C, textureLod(uCol, t, lod), vTop); N = mix(N, textureLod(uNrm, t, lod), vTop); }
   /* (its edge soft over the samples of a pixel: the cover's own edge, sharpened to it) */
   float cov = clamp((C.a - 0.5)/max(fwidth(C.a), 1e-3) + 0.5, 0.0, 1.0);
-  if (cov < uCovCut) discard;
+  if (cov < (uA2C > 0.5 ? 0.02 : uCovCut)) discard;
   /* (each tree its own green, from yellower to bluer, lighter or darker; one in fifty in new leaf, bronze or pink, and
      now and then one in flower: on its leaves only, not its bark) */
   float leaf = N.a, die = vDie;
@@ -225,10 +225,12 @@ void main(){
   vec3 alb = C.rgb*C.rgb*mix(vec3(1.0), tint, leaf);
   vec3 n = octD(N.rg); float ao = N.b;
   n = vec3(n.x*cy + n.z*sy, n.y, -n.x*sy + n.z*cy);
+  /* (snow on the crown's top) */
+  if (uSnow.x > 0.002) alb = mix(alb, vec3(0.84, 0.87, 0.91), snowLeaf(n, vW, smoothstep(0.25, 0.9, isleSky3(vW).g))*(0.3 + 0.7*ao));
   vec3 V = normalize(cameraPosition - vW), L = uKeyDirT; float ndl = dot(n, L);
   /* (the sun, or the moon, as much as gets past the island's hill and forest to this crown) */
   vec3 kC = uKeyColT*isleShAt(vW);
-  vec3 c = alb*uAmbF*(0.42 + 0.58*clamp(n.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao);
+  vec3 c = alb*uAmbF*isleSky3(vW)*(0.42 + 0.58*clamp(n.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao);
   c += alb*kC*clamp((ndl + 0.2)/1.2, 0.0, 1.0)*mix(0.32, 1.0, ao);
   /* (light through the leaves at the crown's edge, looking toward the sun) */
   c += alb*vec3(1.08, 1.16, 0.42)*kC*clamp(-ndl, 0.0, 1.0)*pow(max(dot(-V, L), 0.0), 3.0)*0.35*ao*ao;
@@ -244,13 +246,13 @@ void main(){
   /* the cards' material, for an atlas from bake() */
   function material(atlas, o = {}) {
     const MAXP = Math.max(4, atlas.info.length);
-    const u = { uCol: { value: atlas.col }, uNrm: { value: atlas.nrm }, uAt: { value: new T.Vector4(atlas.cols, atlas.rows, atlas.pad / atlas.cell, atlas.cell) }, uMaxLod: { value: Math.max(0, Math.min(atlas.maxLod - 1, 4.5)) }, uCovCut: { value: o.a2c ? 0.02 : 0.5 }, uCellUV: { value: new T.Vector2(atlas.cell / atlas.W, atlas.cell / atlas.H) },
+    const u = { uCol: { value: atlas.col }, uNrm: { value: atlas.nrm }, uAt: { value: new T.Vector4(atlas.cols, atlas.rows, atlas.pad / atlas.cell, atlas.cell) }, uMaxLod: { value: Math.max(0, Math.min(atlas.maxLod - 1, 4.5)) }, uCovCut: { value: 0.5 }, uCellUV: { value: new T.Vector2(atlas.cell / atlas.W, atlas.cell / atlas.H) },
       uPr: { value: Array.from({ length: MAXP }, (_, i) => { const p = atlas.info[i]; return p ? new T.Vector4(p.S, p.cy, p.cell0, p.hide || 0) : new T.Vector4(); }) },
       uNear: { value: new T.Vector3(o.near ?? 0, o.fade ?? 8, 0) }, uTime: Mats.U.uTime, uWindV: { value: (typeof FloraLeaf !== 'undefined' && FloraLeaf.U.uWindV.value) || new T.Vector4(0.55, -0.83, 0.5, 0.5) },
-      uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog,
+      uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uKeyColT: Mats.U.uKeyColT, uFog: Mats.U.uFog, uSnow: Mats.U.uSnow,
       uTintA: { value: new T.Vector3(...(o.tintA || [0.88, 0.9, 0.86])) }, uTintB: { value: new T.Vector3(...(o.tintB || [1.1, 1.06, 1.0])) }, ...Mats.shadeU() };
     if (typeof FloraLeaf !== 'undefined') u.uWindV = FloraLeaf.U.uWindV;
-    return new T.ShaderMaterial({ uniforms: u, vertexShader: VS.replace('MAXP', String(MAXP)), fragmentShader: FS, side: T.DoubleSide, alphaToCoverage: o.a2c ?? false });
+    return new T.ShaderMaterial({ uniforms: u, vertexShader: VS.replace('MAXP', String(MAXP)), fragmentShader: FS, side: T.DoubleSide, alphaToCoverage: o.a2c ?? true });
   }
   /* a set of trees as cards: list [{ x, y, z, s (size), yaw, p (shape), tint, die }] */
   const QUAD = (() => { const g = new T.PlaneGeometry(1, 1); return g; })();

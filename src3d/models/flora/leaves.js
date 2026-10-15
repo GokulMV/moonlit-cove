@@ -330,17 +330,17 @@ uniform sampler2D map, nmap; uniform vec3 uAmbF, uKeyDirT, uKeyColT, uTint, uBac
 uniform vec3 uLeafK;                  /* its sheen, how broad it is, light through the leaves */
 uniform sampler2D uLeafShM; uniform mat4 uLeafShX; uniform vec4 uLeafShA; uniform vec2 uLeafShS;
 varying vec2 vUv; varying vec3 vN; varying vec3 vT; varying vec3 vB; varying vec3 vWPos; varying vec4 vL; varying vec3 vTint;
+${GLSL.LEAF_PCF}
 float leafShadow(vec3 wp){
   if (uLeafShA.w < 0.5 || length(wp.xz - uLeafShA.xy) > uLeafShA.z) return 1.0;
   vec4 sc = uLeafShX*vec4(wp, 1.0); sc.xyz /= sc.w;
   if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
-  vec2 tx = 1.5/uLeafShS; float z = sc.z - 0.0025;
-  return 0.25*(step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, -tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, -tx.y))))
-             + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(-tx.x, tx.y)))) + step(z, unpackRGBAToDepth(texture2D(uLeafShM, sc.xy + vec2(tx.x, tx.y)))));
+  float z = sc.z - 0.0025;
+  return lsPCF(sc.xy, z);
 }
 void main(){
   vec4 tx = texture2D(map, vUv);
-  if (tx.a < uCut) discard;
+  float cov = cutCov(tx.a, uCut); if (cov < CUT_MIN) discard;
   /* (the leaf's frame, guarded: where a blade narrows to its tip its two edges' directions can meet, and a frame of
      nothing would draw a pixel of nothing, or of everything, there) */
   float lt = dot(vT, vT), lb = dot(vB, vB);
@@ -357,8 +357,10 @@ void main(){
   vec3 alb = tx.rgb*uTint*vTint;
   /* (from beneath, a spray shows the leaves' undersides: paler, and in some species coppery or silvery) */
   if (face < 0.0) alb = min(alb*uBack, vec3(1.0));
+  /* (snow on the leaves facing up, out in the open; less of it deep in the crown or under the canopy) */
+  if (uSnow.x > 0.002) alb = mix(alb, vec3(0.84, 0.87, 0.91), snowLeaf(normalize(nb + vec3(0.0, 0.25, 0.0)), vWPos, smoothstep(0.25, 0.9, isleSky3(vWPos).g))*(0.3 + 0.7*ao)*(face > 0.0 ? 1.0 : 0.25));
   /* the sky's light, less deep in the crown and on the leaves turned down */
-  vec3 c = alb*uAmbF*(0.42 + 0.58*clamp(nb.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao)*(0.85 + 0.15*nl.y);
+  vec3 ambS = uAmbF*isleSky3(vWPos), c = alb*ambS*(0.42 + 0.58*clamp(nb.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao)*(0.85 + 0.15*nl.y);
   /* the sun, wrapped a little round a thin leaf */
   c += alb*uKeyColT*clamp((ndl + 0.2)/1.2, 0.0, 1.0)*vis;
   /* through the leaf from behind: yellow-green, brightest looking toward the light; strongest at the crown's edge,
@@ -368,7 +370,7 @@ void main(){
   /* a soft sheen, not a shine: the cuticle's broad gloss toward the sun, and the sky glancing off the leaves facing up */
   vec3 Hh = normalize(uKeyDirT + V); float F = 0.04 + 0.96*pow(1.0 - max(dot(nl, V), 0.0), 5.0);
   c += uKeyColT*uLeafK.x*pow(max(dot(nl, Hh), 0.0), uLeafK.y)*(0.3 + 0.7*F)*vis*step(0.0, ndl);
-  c += uAmbF*uLeafK.x*0.4*F*max(nl.y, 0.0)*(0.3 + 0.7*ao);
+  c += ambS*uLeafK.x*0.4*F*max(nl.y, 0.0)*(0.3 + 0.7*ao);
   /* and the light the crown scatters about inside itself, green from leaf to leaf */
   c += alb*uKeyColT*vec3(0.8, 1.0, 0.55)*0.045*(0.4 + 0.6*ao)*(0.3 + 0.7*sh)*tsh;
   if (torchNear(vWPos) || length(vWPos.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(vWPos.xz - uHead.xz) < 34.0)) c += alb*artLight(vWPos, nl)*(0.5 + 0.5*ao);
@@ -377,7 +379,7 @@ void main(){
   c = mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
   /* (and never a colour that is not one: a pixel gone to infinity blooms into a white blot round a black hole) */
   if (!(c.r >= 0.0 && c.g >= 0.0 && c.b >= 0.0 && c.r < 1e4 && c.g < 1e4 && c.b < 1e4)) c = vec3(0.02, 0.03, 0.015);
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(c, uA2C > 0.5 ? cov : 1.0);
   /* (no more than the renderer's own finish: nothing where the frame is drawn to a target, as the engine's is) */
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -402,7 +404,7 @@ void main(){ if (texture2D(map, vUv).a < uCut) discard; gl_FragColor = packDepth
   function material(kind) {
     if (matCache.has(kind)) return matCache.get(kind);
     const K = KINDS[kind], cs = cards(kind);
-    const leaves = cs.map(cd => new T.ShaderMaterial({ uniforms: Object.assign({}, Mats.U, U, { map: { value: cd.map }, nmap: { value: cd.nmap }, uCut: { value: CUT }, uTint: { value: new T.Vector3(1, 1, 1) }, uBack: { value: new T.Vector3(...K.back) }, uLeafK: { value: new T.Vector3(...K.gloss) } }), vertexShader: VS, fragmentShader: FS, side: T.DoubleSide }));
+    const leaves = cs.map(cd => new T.ShaderMaterial({ uniforms: Object.assign({}, Mats.U, U, { map: { value: cd.map }, nmap: { value: cd.nmap }, uCut: { value: CUT }, uTint: { value: new T.Vector3(1, 1, 1) }, uBack: { value: new T.Vector3(...K.back) }, uLeafK: { value: new T.Vector3(...K.gloss) } }), vertexShader: VS, fragmentShader: FS, side: T.DoubleSide, alphaToCoverage: true }));
     const depth = cs.map(cd => new T.ShaderMaterial({ uniforms: Object.assign({ map: { value: cd.map }, uCut: { value: CUT }, uTime: Mats.U.uTime }, U), vertexShader: DEPTH_VS, fragmentShader: DEPTH_FS, side: T.DoubleSide }));
     const out = { leaves, depth, K }; matCache.set(kind, out); return out;
   }
