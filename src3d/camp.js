@@ -41,8 +41,13 @@ void main(){
   float c = max(dot(n, V), 0.0), rim = pow(1.0 - c, 2.5);
   vec3 lit = uCol*uI*tw*(0.16 + 2.3*pow(c, 10.0) + 0.3*rim);
   float glint = pow(max(dot(reflect(-V, n), normalize(vec3(0.3, 1.0, 0.25))), 0.0), 70.0);
-  vec3 off = uOff*(0.35 + 1.3*rim)*(1.0 - 0.5*pow(c, 12.0)) + vec3(1.0, 0.98, 0.94)*glint*(0.5 + uOff.g*6.0);
-  gl_FragColor = vec4(mix(off, lit, on), 1.0);
+  /* (unlit, clear glass: see-through in the middle but for the dark filament across it, the sky's sheen round its rim,
+     a glint) */
+  float fil = smoothstep(0.93, 0.99, c)*0.8;
+  vec3 off = uOff*3.0*(0.45 + 1.25*rim) + vec3(1.0, 0.98, 0.94)*glint*(0.5 + uOff.g*6.0);
+  off = mix(off, vec3(0.015), fil);
+  float aOff = clamp(0.16 + 0.8*rim + glint + fil, 0.0, 1.0);
+  gl_FragColor = vec4(mix(off, lit, on), mix(aOff, 1.0, on));
 }`;
 
   /* inside the van, seen through its open door and every window: one room traced through by each of them in the van's
@@ -202,7 +207,7 @@ void main(){
   function instancedLights(points, radius, uniforms) {
     const geo = new T.SphereGeometry(radius, 14, 10);
     geo.setAttribute('aOrder', new T.InstancedBufferAttribute(new Float32Array(points.map(p => p.order)), 1));
-    const mat = new T.ShaderMaterial({ uniforms, vertexShader: BULB_VS, fragmentShader: BULB_FS });
+    const mat = new T.ShaderMaterial({ uniforms, vertexShader: BULB_VS, fragmentShader: BULB_FS, transparent: true });
     const inst = new T.InstancedMesh(geo, mat, points.length);
     const m4 = new T.Matrix4();
     points.forEach((p, i) => { m4.makeTranslation(p.p.x, p.p.y, p.p.z); inst.setMatrixAt(i, m4); });

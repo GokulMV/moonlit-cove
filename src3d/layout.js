@@ -164,12 +164,15 @@ const Layout = (() => {
     },
     pt(a, s, o = {}) { const q = ISL().shore(a, SQ); o.x = q.x + q.nx * s; o.z = q.z + q.nz * s; o.nx = q.nx; o.nz = q.nz; return o; },
     info(a, o = {}) { const q = ISL().shore(a, SQ); Object.assign(o, { W: q.W, sand: q.sand, rock: q.rock, cliff: q.cliff, mangrove: q.mangrove, reef: q.reef, ex: q.ex, creek: q.creek, tide: tideK(q) }); return o; },
+    /* how much further than its distance from the water's edge the swell comes to (x, z), m (island.js lagAt) */
+    lag: (x, z) => ISL().lagAt(x, z),
     /* how far round the coast is (the island's perimeter: a comes round again after it) */
     P: () => ISL().data.line.P
   } : {
     at(x, z, o = {}) { const g = shoreDZ(x), k = 1 / Math.sqrt(1 + g * g); o.s = (shoreZ(x) - z) * k; o.a = x; o.nx = g * k; o.nz = -k; return o; },
     pt(a, s, o = {}) { const g = shoreDZ(a), k = 1 / Math.sqrt(1 + g * g); o.x = a + g * k * s; o.z = shoreMeanZ(a) - k * s; o.nx = g * k; o.nz = -k; return o; },
     info(a, o = {}) { Object.assign(o, { W: vegZ(a) - shoreMeanZ(a), sand: 1, rock: 0, cliff: 0, mangrove: 0, reef: 0, ex: 1, creek: -1, tide: 1 }); return o; },
+    lag: () => 0,
     P: () => Infinity
   };
 

@@ -242,7 +242,9 @@ float topAt(vec2 p){
   float open = 1.0;
   for (int i = 0; i < 4; i++){ vec4 c = uClr[i]; if (c.z > 0.0) open *= smoothstep(c.z*0.8, c.z + 5.0, length(p - c.xy)); }
   float mg = smoothstep(0.25, 0.6, mang), roof = smoothstep(0.02, 0.22, forest);
-  return max(f.w, 0.0) + (roof*mix(26.0, 10.0, mg) + (1.0 - roof)*fringe*8.0)*open;
+  /* (and the mangroves themselves, from out in the water to well up the mud, lower than the forest) */
+  float mgr = mg*smoothstep(-12.0, -6.0, d)*(1.0 - smoothstep(18.0, 36.0, d))*13.0;
+  return max(f.w, 0.0) + max(roof*mix(26.0, 14.0, mg) + (1.0 - roof)*fringe*8.0, mgr)*open;
 }
 void main(){
   vec2 p = uIsG.xy + vUv/uIsG.zw;
@@ -288,8 +290,8 @@ void main(){
         const forest = Math.max(ss(W + 16, W + 46, d) * q.sand, ss(W + 6, W + 20, d) * (q.rock + q.cliff), ss(16, 44, d) * q.mangrove) * (1 - rk);
         const fringe = q.sand * ss(W - 4, W + 1, d) * (1 - ss(0.3, 0.6, q.mangrove));
         let open = 1; for (const c of clr) open *= ss(c[2] * 0.8, c[2] + 5, Math.hypot(x - c[0], z - c[1]));
-        const mg = ss(0.25, 0.6, q.mangrove), roof = ss(0.02, 0.22, forest);
-        return Math.max(I.height(x, z), 0) + (roof * (26 + (10 - 26) * mg) + (1 - roof) * fringe * 8) * open;
+        const mg = ss(0.25, 0.6, q.mangrove), roof = ss(0.02, 0.22, forest), mgr = mg * ss(-12, -6, d) * (1 - ss(18, 36, d)) * 13;
+        return Math.max(I.height(x, z), 0) + Math.max(roof * (26 + (14 - 26) * mg) + (1 - roof) * fringe * 8, mgr) * open;
       }
       function at(x, z) {
         if (!n) return 1;
@@ -305,7 +307,9 @@ void main(){
         }
         if (memo.size > 64) memo.clear(); memo.set(key, v); return v;
       }
-      return { update, at, rt, get ms() { return ms; }, get n() { return n; } };
+      /* (and the top of whatever stands at a world point, the ground or the forest's canopy over it: for the explore
+         camera, to keep its view clear of the trees) */
+      return { update, at, top: (x, z) => topAt(x, z), rt, get ms() { return ms; }, get n() { return n; } };
     })();
     function treeStep(t, slice) {
       if (!t.tjob) t.tjob = forest.plan(t.x, t.z, TS, late);

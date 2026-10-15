@@ -23,6 +23,17 @@
     <span class="sky-text"><b id="skyPhase">Moon</b><span id="skyTime">--:--</span></span>
   </button>
 
+  <!-- the map: where you are, in the corner; the whole of it in a dialog (minimap.js) -->
+  <button class="minimap glass" id="map" type="button" aria-label="Map of where you are: open the whole map" aria-haspopup="dialog" aria-expanded="false"><canvas id="mapC" aria-hidden="true"></canvas><span class="mm-n" aria-hidden="true">N</span></button>
+  <div class="mapbig" id="mapBig" hidden role="dialog" aria-modal="true" aria-labelledby="mbTitle">
+    <div class="mb-card glass">
+      <div class="mb-head"><div><p class="eyebrow">Where you are</p><h2 id="mbTitle">The island</h2></div><button class="icon" id="mbClose" type="button" aria-label="Close the map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <canvas id="mapBC" role="img" aria-label="Map, north up"></canvas>
+      <p class="mb-note" id="mbNote" aria-live="polite"></p>
+      <ul class="mb-key" id="mbKey" aria-label="Key"></ul>
+    </div>
+  </div>
+
   <div id="spots" aria-label="Places in the scene"></div>
 
   <nav class="dock glass" id="dock" aria-label="Chapters"></nav>
@@ -63,7 +74,7 @@
     <button type="button" id="bPark">Park here <kbd>E</kbd></button>
   </div>
   <div class="drivehud walkhud glass" id="walkHud" hidden>
-    <span class="dh-keys"><kbd>W A S D</kbd> walk · drag, or rest the pointer near an edge, to look · <kbd>Shift</kbd> jog</span>
+    <span class="dh-keys"><kbd>W A S D</kbd> walk · drag to look · <kbd>Shift</kbd> jog</span>
     <button type="button" class="wh-auto" id="bWalkAuto" aria-pressed="false" title="Walk on, looking about, on your own">Auto</button>
     <button type="button" class="wh-auto wh-torch" id="bTorch" aria-pressed="false" title="A torch, for after dark">Torch <kbd>F</kbd></button>
     <div class="seg wh-pace" role="radiogroup" aria-label="Pace"><button type="button" role="radio" data-pace="stroll" aria-checked="false">Stroll</button><button type="button" role="radio" data-pace="walk" aria-checked="true">Walk</button><button type="button" role="radio" data-pace="jog" aria-checked="false">Jog</button></div>
@@ -152,6 +163,7 @@
       <label class="srow" for="lMotion"><span>Motion</span><input id="lMotion" type="range" min="0.3" max="1.2" step="0.01" value="0.7"></label>
       <div class="srow"><span>Lights</span><div class="seg" role="radiogroup" aria-label="Lights"><button type="button" role="radio" data-lights="auto" aria-checked="true">Auto</button><button type="button" role="radio" data-lights="on" aria-checked="false">On</button><button type="button" role="radio" data-lights="off" aria-checked="false">Off</button></div></div>
       <div class="srow"><span>Name in the corner</span><button class="sw" id="lBrand" type="button" role="switch" aria-checked="true" aria-label="Show the name in the corner"><i></i></button></div>
+      <div class="srow"><span>Map in the corner</span><button class="sw" id="lMap" type="button" role="switch" aria-checked="true" aria-label="Show the map in the corner"><i></i></button></div>
     </div>
     <div class="sgroup">
       <button type="button" class="srow linkrow" data-open-credits><span>Credits and licences</span><span aria-hidden="true">→</span></button>

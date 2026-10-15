@@ -160,10 +160,10 @@ const IsleFauna = (() => {
           const near = spots[k].map(sp => [Math.hypot(sp.x - cx, sp.z - cz), sp]).filter(q => q[0] < OUT && !(spooked.get(q[1]) > t)).sort((p, q) => p[0] - q[0]);
           const want = near.length ? near[0][1] : null, mine = out.filter(a => a.k === k);
           /* (a group keeps to one spot; those out at a spot gone out of reach go home) */
-          for (const a of mine) if (!want || a.sp !== want) { if (Math.hypot(a.x - cx, a.z - cz) > OUT * 0.8) { give(k, a.g); out.splice(out.indexOf(a), 1); } }
+          for (const a of mine) if (!a.held && (!want || a.sp !== want)) { if (Math.hypot(a.x - cx, a.z - cz) > OUT * 0.8) { give(k, a.g); out.splice(out.indexOf(a), 1); } }
           if (want && !mine.some(a => a.sp === want) && performance.now() > buildDue) {
             /* (no more of a kind out than it has: those at a spot left behind go first) */
-            for (const a of out.filter(a => a.k === k)) { give(k, a.g); out.splice(out.indexOf(a), 1); }
+            for (const a of out.filter(a => a.k === k && !a.held)) { give(k, a.g); out.splice(out.indexOf(a), 1); }
             const n = Math.min(K.n, K.group || 1);
             for (let j = 0; j < n; j++) spawn(k, want, j, t);
             /* (a kind built for the first time takes a while: the next waits a moment) */
@@ -176,9 +176,10 @@ const IsleFauna = (() => {
         /* (the flying foxes, in the twilight: a stream of them out over the camp toward the mainland, east (-z), or back) */
         const bats = out.filter(a => a.k === 'flyingfox');
         if (dusk && !bats.length && performance.now() > buildDue) { const dir = setting ? -1 : 1; for (let j = 0; j < KINDS.flyingfox.n; j++) { const a = spawn('flyingfox', { x: cx, z: cz }, j, t); if (a) { a.dir = dir; a.off = (hash(j, 31) - 0.5) * 90; a.lag = j * 12.5 + hash(j, 32) * 6; } } buildDue = performance.now() + 400; }
-        else if (!dusk && bats.length) for (const a of bats) { give('flyingfox', a.g); out.splice(out.indexOf(a), 1); }
+        else if (!dusk && bats.length) for (const a of bats) if (!a.held) { give('flyingfox', a.g); out.splice(out.indexOf(a), 1); }
       }
-      for (const a of out.slice()) { step(a, dt, t, cam); if (a.gone) { if (a.k === 'kingfisher') { spooked.set(a.sp, t + 60); snag.visible = false; } give(a.k, a.g); out.splice(out.indexOf(a), 1); } }
+      tNow = t;
+      for (const a of out.slice()) { if (a.held) continue; step(a, dt, t, cam); if (a.gone) { if (a.k === 'kingfisher') { spooked.set(a.sp, t + 60); snag.visible = false; } give(a.k, a.g); out.splice(out.indexOf(a), 1); } }
     }
     const _e = new T.Euler();
     function step(a, dt, t, cam) {
@@ -253,8 +254,23 @@ const IsleFauna = (() => {
       a.g.position.set(a.x, gy, a.z); a.g.rotation.set(0, a.h, 0); a.g.updateMatrixWorld();
       a.rig.update(dt);
     }
+    /* ── for the inspect view (inspect.js): the animals out round the eye, each to be held up and looked at close, and let
+       go. While it is held its own self is away; let go, it is back where it was, and off at once ── */
+    const PICK = { pig: [0.5, 0.45], macaque: [0.3, 0.25], monitor: [0.35, 0.12], egret: [0.3, 0.35], mudskipper: [0.08, 0.03], fiddler: [0.05, 0.02], hornbill: [0.6, 0], kite: [0.5, 0], proboscis: [0.4, 0.35], proboscisF: [0.35, 0.3], kingfisher: [0.15, 0.1], flyingfox: [0.5, 0] };
+    let tNow = 0;
+    function pickables(Lst, cam) {
+      if (!group.visible) return;
+      for (const a of out) {
+        if (a.held || a.gone || !a.g.visible) continue;
+        const P = a.g.position, q = PICK[a.k] || [0.3, 0.2]; if (Math.hypot(P.x - cam.x, P.y - cam.y, P.z - cam.z) > 280) continue;
+        Lst.push({ kind: a.k === 'proboscisF' ? 'proboscis' : a.k, x: P.x, y: P.y + q[1] * a.s, z: P.z, r: q[0] * a.s, size: a.s, yaw: a.h, opts: Object.assign({ seed: 3 }, a.K.opts),
+          info: a.k === 'proboscisF' ? () => ({ name: 'Proboscis monkey', latin: 'Nasalis larvatus', note: 'Found only on Borneo, in the mangroves and along its rivers. The females’ noses are small and turned up; it is the males’ that grow so big.' }) : null,
+          take: () => { a.held = true; a.g.visible = false; },
+          give: () => { a.held = false; a.g.visible = true; if (a.K.move === 'ground' || a.K.move === 'wader' || a.K.move === 'critter') { a.state = 'flee'; a.until = tNow + 3 + 2 * hash(a.g.id, 3); } } });
+      }
+    }
     const stats = () => ({ kinds: Object.keys(made).filter(k => made[k]).length, out: out.length, spots: Object.fromEntries(Object.entries(spots).map(([k, v]) => [k, v.length])) });
-    return { update, stats, out, spots, make, flies };
+    return { update, stats, out, spots, make, flies, pickables };
   }
   return { build, KINDS, copyOf };
 })();

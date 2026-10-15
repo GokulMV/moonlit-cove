@@ -299,7 +299,59 @@ const Island = (() => {
       const r0 = UA2[c], w = v => { let d = v - r0; d -= P * Math.round(d / P); return d; }, d1 = w(UA2[c + 1]), d2 = w(UA2[c + nx2]), d3 = w(UA2[c + nx2 + 1]);
       UA[j * nx + i] = Math.max(Math.abs(d1), Math.abs(d2), Math.abs(d3)) > 8 * c2 ? UA2[c + (tx < 0.5 ? 0 : 1) + (tz < 0.5 ? 0 : nx2)] : r0 + mix(mix(0, d1, tx), mix(d2, d3, tx), tz);
     }
-    const grid = { X0, Z0, cell, nx, nz, S, U: Uu, UA, NX: NXa, NZ: NZa, H: null, RB, EB };
+    /* ── when the swell gets here. A swell comes in from the open sea square to the shore, and reaches each point as soon
+       as its distance from the water's edge says, off a straight beach or round a headland alike. Into a cove, though, or
+       up a creek, it has further to come — in through the mouth, not across the land between — and reaches the cove's
+       back later than its sides: its crests lie straight across a cove, as they do in one, not in rings round its beach.
+       So: how far the swell travels in from a line far out (SF from the shore), through the water only (on cells twice
+       the size, in sweeps from each corner that carry the nearest way in), kept as how much further that is than the
+       plain distance from the shore says (m), carried a little way up the land behind for the swash, and eased off where
+       it would be very long (the swells kept about are the ones arriving round now: glsl.js WAVEH, engine.js) ── */
+    const SF = 150, h3 = cell * 2, nx3 = Math.ceil(nx / 2), nz3 = Math.ceil(nz / 2), N3 = nx3 * nz3, TT = new Float32Array(N3), SS = new Float32Array(N3), FIX = new Uint8Array(N3);
+    for (let j = 0; j < nz3; j++) for (let i = 0; i < nx3; i++) {
+      const c = j * nx3 + i, i0 = 2 * i, i1 = Math.min(nx - 1, i0 + 1), j0 = 2 * j, j1 = Math.min(nz - 1, j0 + 1);
+      const s = (S[j0 * nx + i0] + S[j0 * nx + i1] + S[j1 * nx + i0] + S[j1 * nx + i1]) / 4; SS[c] = s;
+      if (s < 0) TT[c] = Infinity;
+      else if (s >= SF || i === 0 || j === 0 || i === nx3 - 1 || j === nz3 - 1) { TT[c] = SF - s; FIX[c] = 1; }
+      else TT[c] = Infinity;
+    }
+    const upd = c => {
+      if (FIX[c] || SS[c] < 0) return 0;
+      const i = c % nx3, a = Math.min(i > 0 ? TT[c - 1] : Infinity, i < nx3 - 1 ? TT[c + 1] : Infinity), b = Math.min(c >= nx3 ? TT[c - nx3] : Infinity, c < N3 - nx3 ? TT[c + nx3] : Infinity);
+      if (a === Infinity && b === Infinity) return 0;
+      const t = Math.abs(a - b) >= h3 ? Math.min(a, b) + h3 : (a + b + Math.sqrt(2 * h3 * h3 - (a - b) * (a - b))) / 2;
+      if (t < TT[c] - 1e-3) { TT[c] = t; return 1; } return 0;
+    };
+    for (let it = 0; it < 8; it++) {
+      let ch = 0;
+      for (let j = 0; j < nz3; j++) for (let i = 0; i < nx3; i++) ch += upd(j * nx3 + i);
+      for (let j = 0; j < nz3; j++) for (let i = nx3 - 1; i >= 0; i--) ch += upd(j * nx3 + i);
+      for (let j = nz3 - 1; j >= 0; j--) for (let i = 0; i < nx3; i++) ch += upd(j * nx3 + i);
+      for (let j = nz3 - 1; j >= 0; j--) for (let i = nx3 - 1; i >= 0; i--) ch += upd(j * nx3 + i);
+      if (!ch) break;
+    }
+    /* (the lag in the water; up the land behind, its nearest water's, a cell further at a time) */
+    const LG3 = new Float32Array(N3).fill(NaN);
+    for (let c = 0; c < N3; c++) if (SS[c] >= 0 && TT[c] < Infinity) LG3[c] = Math.max(0, SS[c] + TT[c] - SF);
+    for (let pass = 0; pass < 8; pass++) {
+      const nxt = LG3.slice();
+      for (let c = 0; c < N3; c++) {
+        if (LG3[c] === LG3[c]) continue;
+        const i = c % nx3; let acc = 0, k = 0;
+        for (const d of [i > 0 ? -1 : 0, i < nx3 - 1 ? 1 : 0, c >= nx3 ? -nx3 : 0, c < N3 - nx3 ? nx3 : 0]) if (d) { const v = LG3[c + d]; if (v === v) { acc += v; k++; } }
+        if (k) nxt[c] = acc / k;
+      }
+      LG3.set(nxt);
+    }
+    /* (onto the grid's own cells, between the coarse ones; eased toward a longest of LGM) */
+    const LGM = 40, LG = new Float32Array(NC);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const fx = Math.max(0, Math.min(nx3 - 1.001, i / 2 - 0.25)), fz = Math.max(0, Math.min(nz3 - 1.001, j / 2 - 0.25)), a = Math.floor(fx), b = Math.floor(fz), tx = fx - a, tz = fz - b, c = b * nx3 + a;
+      const v = q => { const w = LG3[q]; return w === w ? w : 0; };
+      const l = mix(mix(v(c), v(c + 1), tx), mix(v(c + nx3), v(c + nx3 + 1), tx), tz);
+      LG[j * nx + i] = LGM * Math.tanh(l / LGM);
+    }
+    const grid = { X0, Z0, cell, nx, nz, S, U: Uu, UA, NX: NXa, NZ: NZa, H: null, RB, EB, LG };
     I.grid = grid;
     /* the ground over the grid */
     const H = new Float32Array(NC);
@@ -346,6 +398,9 @@ const Island = (() => {
   /* the nearest shore point's u; and where along the coast a point is for the waves (aAt: smooth out at sea, as the
      shaders have it) */
   const uAt = (x, z) => uOf(I.grid.U, x, z), aAt = (x, z) => uOf(I.grid.UA, x, z);
+  /* how much further than its distance from the water's edge the swell has to come to (x, z), in metres (into a cove,
+     up a creek; none off the grid) */
+  const lagAt = (x, z) => { const G = I.grid; if (!G.LG) return 0; const [fx, fz] = cellAt(x, z); return fx < 0 || fz < 0 || fx > G.nx - 1 || fz > G.nz - 1 ? 0 : bil(G.LG, x, z); };
   /* which way the sea lies from (x, z): [nx, nz], a unit vector */
   const NRM = [0, 0];
   function normalAt(x, z) { const a = bil(I.grid.NX, x, z), b = bil(I.grid.NZ, x, z), l = Math.hypot(a, b) || 1; NRM[0] = a / l; NRM[1] = b / l; return NRM; }
@@ -524,11 +579,13 @@ const Island = (() => {
       k1[c * 4] = b8(tideK(q) / 1.5); k1[c * 4 + 1] = b8(mix(L.W[i], L.W[j], t) / 50); k1[c * 4 + 2] = b8(q.sand); k1[c * 4 + 3] = b8(G.EB[c]);
       k2[c * 4] = b8(q.rock); k2[c * 4 + 1] = b8(q.cliff); k2[c * 4 + 2] = b8(q.mangrove); k2[c * 4 + 3] = b8(G.RB[c] / 128);
     }
-    return { field, u: G.UA, line, k1, k2, nx: G.nx, nz: G.nz, X0: G.X0, Z0: G.Z0, cell: G.cell, LW, rows, n: L.n, P: L.P, u0: L.u0, ds: L.ds };
+    /* (u, and how much later than its distance from the shore says the swell gets there: full floats, side by side) */
+    const u = new Float32Array(NC * 2); for (let c = 0; c < NC; c++) { u[c * 2] = G.UA[c]; u[c * 2 + 1] = G.LG ? G.LG[c] : 0; }
+    return { field, u, line, k1, k2, nx: G.nx, nz: G.nz, X0: G.X0, Z0: G.Z0, cell: G.cell, LW, rows, n: L.n, P: L.P, u0: L.u0, ds: L.ds };
   }
   /* how far up a shore the tide moves the water's edge, as a share of how far it moves it up a beach: on rock a quarter as
      far, up a cliff hardly at all, over the mangroves' mud further than on the sand */
   const tideK = q => q.sand + 0.25 * q.rock + 0.04 * q.cliff + 1.3 * q.mangrove;
-  return { build, adopt, transfers, gpu, tideK, shore, sdf, uAt, aAt, normalAt, height, heightAt, onLine, CREST, STREAMS, KIND, LEVEL, get data() { return I; }, zOld, vOld, headFix };
+  return { build, adopt, transfers, gpu, tideK, shore, sdf, uAt, aAt, lagAt, normalAt, height, heightAt, onLine, CREST, STREAMS, KIND, LEVEL, get data() { return I; }, zOld, vOld, headFix };
 })();
 if (typeof module !== 'undefined') module.exports = Island;

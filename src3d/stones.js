@@ -30,12 +30,13 @@ const IsleStones = (() => {
     const land = o.land, L = I.data.line, group = new T.Group(); group.name = 'stones'; group.matrixAutoUpdate = false; root.add(group);
     const t0 = performance.now();
     /* ── the shapes, each at its three levels ── */
-    const protos = SHAPES.map(([shape, seed]) => DET.map(detail => { const g = StoneKit.boulder({ size: 1, shape, seed, detail, sink: 0.16 }); g.computeBoundingSphere(); return g; }));
-    /* the material: the sea rocks' own (wet and dark at the water, weed at the line, lichen up out of the spray), its near
-       level fading out beyond NEAR, the others in within it, dithered pixel by pixel so the two never show at once */
+    const protos = SHAPES.map(([shape, seed]) => DET.map(detail => { const g = StoneKit.boulder({ size: 1, shape, seed, detail, sink: 0.24 }); g.computeBoundingSphere(); return g; }));
+    /* the material: granite by the sea (Mats' 'granw': its crystals, its streaks, the sea's bands across it — the black
+       lichen of the splash zone, the barnacles, the wet rock and its weed at the water), its near level fading out
+       beyond NEAR, the others in within it, dithered pixel by pixel so the two never show at once */
     const fadeU = { value: new T.Vector2(NEAR, NEAR + FADE) };
     const mat = near => {
-      const m = Mats.lit({ vertexColors: true, roughness: 0.86 }, 'rockw'), prev = m.onBeforeCompile;
+      const m = Mats.lit({ vertexColors: true, roughness: 0.86 }, 'granw'), prev = m.onBeforeCompile;
       m.onBeforeCompile = (sh, r) => {
         prev(sh, r); sh.uniforms.uRkFade = fadeU;
         sh.fragmentShader = sh.fragmentShader.replace('void main() {', `uniform vec2 uRkFade;

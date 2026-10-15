@@ -42,7 +42,7 @@ const Mats = (() => {
   function isleUp(D) {
     const T = THREE, tx = (data, w, h, fmt, type, lin) => { const t = new T.DataTexture(data, w, h, fmt, type); t.minFilter = t.magFilter = lin ? T.LinearFilter : T.NearestFilter; t.generateMipmaps = false; t.wrapS = t.wrapT = T.ClampToEdgeWrapping; t.needsUpdate = true; return t; };
     coastU.uIsF.value = tx(D.field, D.nx, D.nz, T.RGBAFormat, T.HalfFloatType, true);
-    coastU.uIsU.value = tx(D.u, D.nx, D.nz, T.RedFormat, T.FloatType, false);
+    coastU.uIsU.value = tx(D.u, D.nx, D.nz, T.RGFormat, T.FloatType, false);
     coastU.uIsL.value = tx(D.line, D.LW, D.rows * 2, T.RGBAFormat, T.HalfFloatType, false);
     /* (the shore's two planes one over the other, in one texture: glsl.js isK, isC) */
     const kc = new Uint8Array(D.nx * D.nz * 8); kc.set(D.k1, 0); kc.set(D.k2, D.nx * D.nz * 4);
@@ -191,6 +191,9 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
+        /* (a vertex with no normal at all — where a model's surface folds to a point — would be lit as nothing, a black
+           speck with black triangles round it: it is given one) */
+        .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n  if (dot(objectNormal, objectNormal) < 1e-12) objectNormal = vec3(0.0, 1.0, 0.0);')
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;' + (key === 'land' || key === 'reef' ? '\nattribute float aRock; varying float vRock;' : '') + (key === 'land' && Layout.isle ? '\nattribute float aCov, aMud, aPath; varying float vCov, vMud, vPath;' : ''))
         .replace('#include <begin_vertex>', '#include <begin_vertex>' + (key === 'land' || key === 'reef' ? '\n  vRock = aRock;' : '') + (key === 'land' && Layout.isle ? '\n  vCov = aCov; vMud = aMud; vPath = aPath;' : ''))
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
@@ -229,6 +232,41 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     vec3 g = vec3(rkH(vWPos + vec3(e, 0.0, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, e, 0.0), nk, ck) - h0, rkH(vWPos + vec3(0.0, 0.0, e), nk, ck) - h0)/e;
     vec3 gv = mat3(viewMatrix)*(g*smoothstep(70.0, 12.0, rkD2));
     normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
+      /* granite (models/rocks/granite.js; the island's boulders, stones.js): its crystals up close — black mica, pinkish
+         feldspar, grey glassy quartz between — a gentle mottle further off, the dark streaks the rain runs down its steep
+         faces; its grain's relief and a little of the stone's own swell, and its fine cracks. Its flutes, its spalled
+         sheets and its pits are its shape's own, and darken its vertex colours. By the sea ('granw'), the sea's bands
+         across it, level from stone to stone: high up the black lichen of the splash zone, below it the barnacles' pale
+         crust, at the water the wet dark rock and its weed; glossy where the waves keep it wet */
+      if (key === 'gran' || key === 'granw') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+  float gWet = 0.0;
+  { float gD = distance(vWPos, cameraPosition), gK = smoothstep(7.0, 1.2, gD), gK2 = smoothstep(60.0, 6.0, gD);
+    vec3 gN = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz);
+    float n1 = vnz(vWPos*190.0), n2 = vnz(vWPos*120.0 + 7.3), n3 = vnz(vWPos*60.0 + 2.1);
+    float mica = smoothstep(0.74, 0.8, n1), fel = smoothstep(0.5, 0.62, n2);
+    vec3 c = diffuseColor.rgb*mix(vec3(0.88, 0.89, 0.92), vec3(1.12, 1.03, 0.95), fel);
+    c *= mix(1.0, 0.3, mica); c *= 0.93 + 0.14*n3;
+    diffuseColor.rgb = mix(diffuseColor.rgb*(0.97 + 0.06*n3), c, gK);
+    diffuseColor.rgb *= mix(1.0, (0.93 + 0.14*vnz(vWPos*1.1 + 3.0))*(0.96 + 0.08*vnz(vWPos*3.7 + 8.0)), gK2);
+    float st = smoothstep(0.6, 0.82, vnz(vec3(vWPos.x*5.0, vWPos.y*0.42, vWPos.z*5.0) + 11.0))*smoothstep(0.92, 0.4, abs(gN.y));
+    diffuseColor.rgb *= 1.0 - 0.26*st;${key === 'granw' ? `
+    float sea = smoothstep(4.0, -0.5, -shoreS(vWPos.xz)), y = vWPos.y + 0.1*(vnz(vWPos*vec3(1.3, 0.2, 1.3)) - 0.5), hw = 0.45 + 0.25*sea;
+    float blk = smoothstep(hw - 0.04, hw + 0.1, y)*smoothstep(hw + 0.4 + 0.8*sea, hw + 0.12 + 0.3*sea, y)*mix(0.35, 1.0, sea)*(0.55 + 0.45*smoothstep(0.3, 0.62, vnz(vWPos*2.6 + 2.0)));
+    float bar = smoothstep(hw + 0.03, hw - 0.08, y)*smoothstep(-0.4, -0.08, y)*sea, low = smoothstep(0.02, -0.3, y)*sea;
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.032, 0.032, 0.03)*(0.8 + 0.4*vnz(vWPos*23.0)), blk*0.85);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.35, 0.32)*(0.7 + 0.45*smoothstep(0.5, 0.8, vnz(vWPos*65.0 + 1.0))), bar*0.7);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.6*vec3(0.85, 1.0, 0.8), low*0.6);
+    gWet = smoothstep(hw + 0.25 + 0.6*sea, 0.05, vWPos.y)*mix(0.15, 1.0, sea);
+    diffuseColor.rgb *= mix(1.0, 0.55, gWet);` : ''} }`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+  roughnessFactor *= mix(1.0, 0.45, gWet);`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  { float d = distance(vWPos, cameraPosition), k = smoothstep(6.0, 1.0, d), kk = smoothstep(35.0, 3.0, d); const float e = 0.004;
+    #define GRH(p) (0.0012*k*vnz(p*120.0 + 7.3) + 0.0007*k*vnz(p*260.0) + 0.003*kk*vnz(p*8.0 + 1.0) + 0.0016*kk*vnz(p*21.0 + 4.0))
+    float h0 = GRH(vWPos);
+    vec3 g = vec3(GRH(vWPos + vec3(e, 0.0, 0.0)) - h0, GRH(vWPos + vec3(0.0, e, 0.0)) - h0, GRH(vWPos + vec3(0.0, 0.0, e)) - h0)/e;
+    #undef GRH
+    vec3 gv = mat3(viewMatrix)*g; normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
       if (key === 'land' || key === 'reef') sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `${bump.replace('BUMPK', '0.08*vRock')}
   /* where it is bare rock, the boulders' relief, and the joints between its blocks */
   if (vRock > 0.02){ float rkD2 = distance(vWPos, cameraPosition);

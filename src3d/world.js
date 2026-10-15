@@ -438,8 +438,9 @@ ${GLSL.WAVEH}
 vec2 lastHit(float x, float z){
   /* (timed along the coast as the waves are: by where along it the rock stands) */
   float s0 = shoreS(vec2(x, z)), s = max(s0, 0.0), al = shoreA(vec2(x, z)), t = uWaveT, tr = 99.0, A = 0.0;
-  for (int j = 0; j < 6; j++){ vec4 W = uWv[j]; if (W.y <= 0.0) continue;
-    float d = t - (W.x + 0.9*sin(al*0.11 + W.z) + al*0.03*W.w - s/WC); if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
+  float lg = shoreLag(vec2(x, z));
+  for (int j = 0; j < NWV; j++){ vec4 W = uWv[j]; if (W.y <= 0.0) continue;
+    float d = t - (swPh(al, W) - s/WC) - lg/WC; if (d > -0.05 && d < tr){ tr = d; A = W.y; } }
   for (int k = 0; k < ${GLSL.MAXUW}; k++){ if (k >= uNUw) break; vec4 U = uwAt(k); if (U.y <= 0.0) continue;
     float T0 = U.x - s/CU, d = t - T0, a = userAmp(U, al, T0);
     if (d > -0.05 && d < 4.0 && a > 0.04){ tr = d; A = max(A, 1.0 + 2.4*a); } }
@@ -466,9 +467,13 @@ void main(){
   if (vSea < 0.01) discard;
   vec2 q = vUv*2.0 - 1.0; float d = length(q);
   float surge = exp(-max(vHit.x, 0.0)*0.55)*min(vHit.y, 2.0);
-  float ring = smoothstep(1.0, 0.7 - 0.25*surge, d)*smoothstep(0.30, 0.55, d);
+  /* (the foam hugs the rock where the water meets it, thickest right at it, and trails off in tongues and patches as far
+     out as the water carries it there — further on one side than another, not a ring round it; more of it just after a
+     wave has hit) */
   float n = texture2D(uNoise, vW.xz*0.33 + vec2(uTime*0.012, -uTime*0.008)).r*0.6 + texture2D(uNoise, vW.xz*1.1 - vec2(uTime*0.02, 0.0)).a*0.4;
-  float a = ring*smoothstep(0.5 - 0.3*surge, 0.68, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
+  float n2 = texture2D(uNoise, vW.xz*0.13 + vec2(-uTime*0.005, uTime*0.009)).g, reach = min(0.95, 0.5 + 0.4*n2 + 0.2*surge);
+  float ring = smoothstep(0.3, 0.44, d)*(1.0 - smoothstep(reach - 0.18, reach, d))*(1.0 - 0.6*smoothstep(0.42, reach, d));
+  float a = ring*smoothstep(0.46 - 0.28*surge, 0.7, n)*(0.22 + 0.8*min(surge, 1.0))*vSea;
   if (a < 0.01) discard;
   float fd = distance(vW, cameraPosition);
   vec3 c = mix((uAmbF*1.6 + uKeyColT*isleSh(vW.xz)*0.55)*(0.85 + 0.3*n), uFog.rgb, 1.0 - exp(-max(fd - 40.0, 0.0)/(700.0/max(uFog.w, 0.05))));

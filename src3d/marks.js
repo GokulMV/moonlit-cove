@@ -46,17 +46,16 @@ const Marks = (() => {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) dep[(H - 1 - y) * W + x] = px[(y * W + x) * 4] / 255;   /* (toes up the texture: forward) */
     return relief(dep, W, H, 9, 0.6);
   }
-  /* a tyre's rut across the texture, its tread along it (repeating): a flat bottom, steep walls, lugs pressed deeper in
-     a chevron, a ridge each side */
+  /* a tyre's rut across the texture (the same all along it): a rounded trough, its walls falling away softly as dry
+     sand does, a low ridge of the sand it shoved aside each side. Its tread (marks FS) is pressed in only where the
+     sand is damp enough to hold it */
   function treadTex() {
-    const W = 48, H = 96, dep = new Float32Array(W * H);
+    const W = 64, H = 4, dep = new Float32Array(W * H);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const u = (x + 0.5) / W - 0.5, v = (y + 0.5) / H, au = Math.abs(u);
-      const rut = 1 - Math.min(1, Math.max(0, (au - 0.3) / 0.06));
-      const lug = (((v * 6 + au * 1.6) % 1) + 1) % 1 < 0.42 && au < 0.27 ? 0.3 : 0;
-      dep[y * W + x] = rut * (0.62 + lug);
+      const u = (x + 0.5) / W - 0.5, au = Math.abs(u), w = Math.min(1, Math.max(0, (au - 0.2) / 0.16));
+      dep[y * W + x] = 0.7 * (1 - w * w * (3 - 2 * w)) * (0.92 + 0.08 * (1 - au / 0.2));
     }
-    return relief(dep, W, H, 6.5, 0.7);
+    return relief(blur(dep, W, H, 1), W, H, 4.2, 0.55);
   }
 
   const VS = `
@@ -83,15 +82,30 @@ void main(){
 uniform sampler2D uMap; uniform vec3 uL; uniform float uKey, uNow, uLife;
 varying vec2 vUv, vWxz; varying vec4 vMark; varying vec3 vU, vV;
 ${GLSL.ISLE_SH}
+float mkH(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+float mkN(vec2 p){ vec2 i = floor(p), f = p - i; f = f*f*(3.0 - 2.0*f); return mix(mix(mkH(i), mkH(i + vec2(1.0, 0.0)), f.x), mix(mkH(i + vec2(0.0, 1.0)), mkH(i + vec2(1.0, 1.0)), f.x), f.y); }
+#ifdef RIBBON
+/* the tread: chevrons of lugs across the rut, 6 to the texture's length along it (0.34 m) */
+float treadH(vec2 uv){ float au = abs(uv.x - 0.5), c = fract(uv.y*6.0 + au*1.6); return smoothstep(0.0, 0.1, c)*smoothstep(0.46, 0.34, c)*smoothstep(0.3, 0.24, au); }
+#endif
 void main(){
   vec4 m = texture2D(uMap, vUv, -0.7);                           /* (a little sharper than the mip level would have it) */
   if (m.a < 0.01) discard;
   vec2 n2 = m.rg*2.0 - 1.0;
+  /* (its edge crumbles: dry sand slumps back in, here more, there less) */
+  float crum = mkN(vWxz*9.0)*0.6 + mkN(vWxz*23.0)*0.4;
+  m.a *= smoothstep(0.05, 0.35, m.a + 0.25*(crum - 0.5));
+#ifdef RIBBON
+  /* (the tread, pressed in as the sand's dampness lets it: crisp in wet sand, a blur in damp, nothing in dry) */
+  { float wk = smoothstep(0.15, 0.7, vMark.z), e = 0.01, h0 = treadH(vUv);
+    vec2 g = vec2(treadH(vUv + vec2(e, 0.0)) - h0, treadH(vUv + vec2(0.0, e)) - h0)/e;
+    n2 -= g*vec2(0.008, 0.007)*wk*smoothstep(0.3, 0.6, m.b); m.b += 0.18*h0*wk*smoothstep(0.3, 0.6, m.b); }
+#endif
   /* the dent's slopes, turned into the world */
   vec3 N = normalize(vU*n2.x + vV*n2.y + vec3(0.0, 1.0, 0.0));
   float ly = max(uL.y, 0.22);
   float lit = (max(dot(N, uL), 0.0) - max(uL.y, 0.0))/ly;          /* lighter or darker than the flat sand round it */
-  float occ = m.b*(0.4 + 0.25*vMark.z);                          /* deeper is darker, more so in wet sand */
+  float occ = m.b*(0.12 + 0.3*vMark.z);                          /* deeper is a little darker, more so in wet sand */
   float churn = clamp(m.a - m.b*1.6, 0.0, 1.0)*(1.0 - vMark.z);  /* the dry sand kicked up round the edge is paler */
   float age = uNow - vMark.x, fade = (1.0 - smoothstep(uLife*0.55, uLife, age))*(1.0 - smoothstep(0.0, 0.7, uNow - vMark.y));
   /* (in the shade of the land and the forest the sun picks out no dents: only their hollows are darker) */

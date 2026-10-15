@@ -68,6 +68,32 @@ const Inspect = (() => {
      own age, which goes on ripening (and going over) in the hand; thrown, it comes down on the ground ahead and lies
      there rotting as those under the trees do, the tree taking it back; put down, it drops where it was. What it is like
      just now (its name and a line about it) the fruit says itself (a candidate's info()) */
+  /* the island's animals (isfauna.js): looked at up close in the hand as the dolphin is, and let go back where they were
+     (off they go at once). r: how big to aim at, as they stand */
+  Object.assign(KINDS, {
+    pig: { model: 'wild/pig', name: 'Bearded pig', latin: 'Sus barbatus', home: 'land', big: true, reach: 90, view: [-2.0, 0.3],
+      note: 'Named for the pale bristles flaring back along its snout. When the forest’s trees all fruit at once, whole herds of them travel for miles after the fallen fruit.' },
+    macaque: { model: 'wild/macaque', name: 'Long-tailed macaque', latin: 'Macaca fascicularis', home: 'land', big: true, reach: 90, view: [-2.0, 0.3],
+      note: 'Also called the crab-eating macaque: along the shore and in the mangroves it swims, and forages for crabs and shellfish at low tide. Its tail is longer than its body.' },
+    monitor: { model: 'wild/monitor', name: 'Asian water monitor', latin: 'Varanus salvator', home: 'land', big: true, reach: 80, view: [-2.1, 0.5],
+      note: 'One of the biggest lizards there is. It swims as well as it walks, driving itself with its flattened tail, and tastes the air with its forked tongue.' },
+    egret: { model: 'wild/egret', name: 'Little egret', latin: 'Egretta garzetta', home: 'land', big: true, reach: 90, view: [-2.0, 0.25],
+      note: 'Black legs and yellow feet: it stirs the mud with one foot to startle the small fish and shrimp it stabs with its bill.' },
+    mudskipper: { model: 'wild/mudskipper', name: 'Mudskipper', latin: 'Periophthalmus', home: 'land', big: true, reach: 30, view: [-2.1, 0.55],
+      note: 'A fish that lives out of the water. It breathes through its skin and the lining of its mouth, carries water in its gills, and walks on its front fins.' },
+    fiddler: { model: 'wild/fiddler', name: 'Fiddler crab', latin: 'Ocypodidae', home: 'land', big: true, reach: 26, view: [-2.2, 0.6],
+      note: 'The male’s one great claw can weigh nearly as much as the rest of him. He waves it to court the females and warn off his rivals, and eats with the small one.' },
+    hornbill: { model: 'wild/hornbill', name: 'Rhinoceros hornbill', latin: 'Buceros rhinoceros', home: 'air', big: true, reach: 220, view: [-2.0, 0.25],
+      note: 'The horn over its bill is a hollow casque, light for its size. The female seals herself into a hole in a tree to nest, and the male feeds her through a slit.' },
+    kite: { model: 'wild/kite', name: 'Brahminy kite', latin: 'Haliastur indus', home: 'air', big: true, reach: 260, view: [-2.0, 0.25],
+      note: 'It hunts along coasts and harbours, snatching fish and crabs from the surface of the water without landing.' },
+    proboscis: { model: 'wild/proboscis', name: 'Proboscis monkey', latin: 'Nasalis larvatus', home: 'land', big: true, reach: 90, view: [-2.0, 0.3],
+      note: 'Found only on Borneo, in the mangroves and along its rivers. The male’s great nose swells his honking calls; their feet are partly webbed, and they swim well.' },
+    kingfisher: { model: 'wild/kingfisher', name: 'Stork-billed kingfisher', latin: 'Pelargopsis capensis', home: 'air', big: true, reach: 70, view: [-2.0, 0.3],
+      note: 'One of the biggest kingfishers, a third of it bill. It sits still over the water and plunges head first for fish.' },
+    flyingfox: { model: 'wild/flyingfox', name: 'Large flying fox', latin: 'Pteropus vampyrus', home: 'air', big: true, reach: 200, view: [-2.0, 0.3],
+      note: 'One of the biggest bats in the world, nearly a metre and a half across the wings. It finds the fruit it eats by sight and smell, not by echo, and flies far each night to it.' }
+  });
   for (const k of ['mango', 'rambutan', 'durian', 'cempedak', 'papaya', 'banana', 'coconut']) KINDS[k] = { model: 'fruit/one', name: k, latin: '', home: 'ground', reach: 26, fruit: true, view: [-2.3, k === 'banana' ? 1.0 : 0.55], note: '' };
   const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -157,7 +183,7 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
     function throwIt(t, dir) {
       if (!held || held.phase !== 'hold') return false;
       /* (a dolphin or a whale is let go: back it goes to where it was, with a splash as it goes in) */
-      if (held.K.big) { const at = held.from.clone(); putBack(t); held.splashAt = at; return { to: 'sea', at: [at.x, at.y, at.z] }; }
+      if (held.K.big) { const at = held.from.clone(), home = held.K.home; putBack(t); if (home === 'sea') held.splashAt = at; return { to: home, at: [at.x, at.y, at.z] }; }
       const h = held, K = h.K, sp = h.sp, p0 = sp.pivot.position.clone(), fwd = new T.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
       const f2 = new T.Vector2(fwd.x, fwd.z); if (f2.lengthSq() < 1e-6) f2.set(0, -1); f2.normalize();
       /* (a flick sideways sends it that way a little) */

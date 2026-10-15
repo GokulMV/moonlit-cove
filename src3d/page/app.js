@@ -369,6 +369,13 @@
   $('bBrandShow').addEventListener('click', () => setBrand(true));
   $('lBrand').addEventListener('click', () => setBrand(!st.brand));
   syncBrand();
+  /* ── the map in the corner (minimap.js): where you are, and which way you face; tap it for the whole map. Shown or
+     hidden, remembered ── */
+  st.map = store.get('map', true);
+  Minimap.init();
+  function syncMap() { setSw($('lMap'), st.map); Minimap.show(st.map); }
+  $('lMap').addEventListener('click', () => { st.map = !st.map; store.set('map', st.map); syncMap(); });
+  syncMap();
 
   /* ── full screen: the page and nothing over it, the screen kept from sleeping, for watching a long while; the
      browser's own Esc (or the button, which hides itself until the pointer moves) brings everything back ── */
@@ -582,7 +589,9 @@
   /* the home view taken apart: where it stands and where it looks, from the camp on the sand */
   const V0 = Layout.cameras.wide, P0 = [Layout.camp.x, 0, Layout.camp.z];
   const OP = V0.pos.map((v, i) => v - P0[i]), OL = V0.look.map((v, i) => v - P0[i]), RYZ = Math.hypot(OP[1], OP[2]), EL0 = Math.atan2(OP[1], OP[2]);
-  const ORB = { elMin: 0.14, elMax: 1.05, zMin: Math.log(0.35), zMax: Math.log(1.7), glide: 0.26, boost: 4.5 };
+  /* (round the island the view may draw much further back, and tip up nearly overhead, as a map) */
+  const ISLE = !!Layout.isle;
+  const ORB = { elMin: 0.14, elMax: ISLE ? 1.32 : 1.05, zMin: Math.log(0.35), zMax: Math.log(ISLE ? 7 : 1.7), glide: 0.26, boost: 4.5 };
   /* the open sand at x: the waterline, the forest edge, and the foot of a headland's rock where one stands on the beach
      (looked for a little beyond the trees, so that the edge of the sand moves smoothly as the rock comes and goes) */
   function sandAt(x, C) {
@@ -598,12 +607,39 @@
   /* where the point may go: from the shallows to the trees, or to a little short of the rock */
   const pvC = { x: NaN }, pvLo = C => C.sz - 0.5, pvHi = C => Math.max(C.sz + 1, Math.min(C.vz + 0.5, C.foot - 0.8));
   /* five axes, each a value easing to a target with a critically damped spring: the turn, the tilt (the camera's
-     elevation seen from the point), the zoom (log of the distance), and the point itself, as x along the beach and
-     the fraction of the way across the sand, so that it follows the coast as it moves */
+     elevation seen from the point), the zoom (log of the distance), and the point itself. Along the coast that never
+     ends, the point is x along the beach and the fraction of the way across the sand, so that it follows the coast as
+     it moves; round the island it goes anywhere, as on a map (x and z), over the sea, the sand, the treetops and the
+     hills, held a little over whatever is there */
   const Y = 0, E = 1, Z = 2, X = 3, U = 4, OMEGA = [13, 13, 9, 11, 11];
-  const C0 = sandAt(P0[0], { x: NaN }), HOME = [0, EL0, 0, P0[0], (P0[2] - pvLo(C0)) / (pvHi(C0) - pvLo(C0))];
+  const C0 = sandAt(P0[0], { x: NaN }), HOME = ISLE ? [0, EL0, 0, P0[0], P0[2]] : [0, EL0, 0, P0[0], (P0[2] - pvLo(C0)) / (pvHi(C0) - pvLo(C0))];
+  /* (how far the point may go round the island: the island's own grid, and a few hundred metres of sea round it) */
+  const IB = (() => { if (!ISLE) return null; const G = Layout.island().data.grid; return [G.X0 - 300, G.X0 + G.nx * G.cell + 300, G.Z0 - 300, G.Z0 + G.nz * G.cell + 300]; })();
   const orb = { v: Float64Array.from(HOME), dv: new Float64Array(5), T: Float64Array.from(HOME), g: new Float64Array(5),
-                el: EL0, Fs: ORB.elMin, pz: P0[2], boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
+                el: EL0, Fs: ORB.elMin, px: P0[0], pz: P0[2], py: 0, boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
+  /* round the island, the height the point is held at: the top of whatever is round it (the sand, the rock, the forest's
+     canopy, the sea), looked at a little way about so that it rises and falls smoothly as the point crosses the forest's
+     edge; round the camp less the camp's own sand, so that at home it is nothing, as the home view has it */
+  let H0 = NaN;
+  function surfAt(x, z) {
+    const W = Engine.world, top = W && W.shade && W.shade.top; if (!top) return 0;
+    let h = top(x, z) * 0.4; for (let i = 0; i < 6; i++) { const a = i * TAU / 6; h += top(x + 9 * Math.cos(a), z + 9 * Math.sin(a)) * 0.1; }
+    return h;
+  }
+  /* (the point's place in the world, from (x, u) or, round the island, (x, z); with dt its height there eased toward what
+     it should be, without, set to it) */
+  function orbPoint(dt) {
+    const v = orb.v;
+    if (v[X] === HOME[X] && v[U] === HOME[U]) { orb.px = P0[0]; orb.pz = P0[2]; orb.py = 0; return; }
+    if (ISLE) {
+      orb.px = v[X]; orb.pz = v[U];
+      if (!(H0 === H0) && Engine.world && Engine.world.shade) H0 = surfAt(P0[0], P0[2]);
+      const h = H0 === H0 ? Math.max(0, surfAt(orb.px, orb.pz) - H0 * (1 - sstep(30, 110, Math.hypot(orb.px - P0[0], orb.pz - P0[2])))) : 0;
+      orb.py = dt ? orb.py + (h - orb.py) * (1 - Math.exp(-dt / 0.3)) : h; return;
+    }
+    const C = sandAt(v[X], pvC), lo = pvLo(C); orb.px = v[X]; orb.pz = lo + v[U] * (pvHi(C) - lo); orb.py = 0;
+  }
+  const orbYaw = () => orb.v[Y];
   const orbCam = { pos: V0.pos.slice(), look: V0.look.slice(), fov: V0.fov, focus: V0.focus };
   V.wide = orbCam; st.from = st.to = orbCam;
   function spring(i, dt) {
@@ -620,21 +656,27 @@
   }
   /* the lowest tilt at which the camera, and its line of sight down to the point, clear the sand, the rock and the trees
      (worked out again only when the camera has moved) */
-  const flr = { y: NaN, z: NaN, x: NaN, pz: NaN, el: 0 };
+  const flr = { y: NaN, z: NaN, x: NaN, pz: NaN, py: NaN, el: 0 };
   function elFloor() {
-    const v = orb.v; if (v[Y] === flr.y && v[Z] === flr.z && v[X] === flr.x && orb.pz === flr.pz) return flr.el;
-    const k = Math.exp(v[Z]), sy = Math.sin(v[Y]), cy = Math.cos(v[Y]), W = Engine.world;
+    const v = orb.v; if (v[Y] === flr.y && v[Z] === flr.z && v[X] === flr.x && orb.pz === flr.pz && orb.py === flr.py) return flr.el;
+    const k = Math.exp(v[Z]), yw = orbYaw(), sy = Math.sin(yw), cy = Math.cos(yw), W = Engine.world, top = W && W.shade && W.shade.top;
+    /* (round the island the point is held over whatever is there: what stands round it is measured from the point's own
+       height; over the camera itself, the highest of what is round it) */
+    const base = ISLE ? orb.py : 0, away = ISLE ? sstep(30, 110, Math.hypot(orb.px - P0[0], orb.pz - P0[2])) : 0;
     let el = ORB.elMin;
     for (let it = 0; it < 2; it++) {
       const R = k * RYZ * Math.cos(el); let need = ORB.elMin;
       for (let i = 1; i <= 12; i++) {
-        const r = R * Math.pow(i / 12, 1.3), x = v[X] + sy * r, z = orb.pz + cy * r;
-        need = Math.max(need, Math.atan2(Math.max(0, W ? W.land(x, z) : 0) + canopy(x, z) + (i === 12 ? 1.6 : 0.4), r));
+        const r = R * Math.pow(i / 12, 1.3), x = orb.px + sy * r, z = orb.pz + cy * r;
+        let h;
+        if (ISLE && top) { h = top(x, z); if (i === 12 && away > 0) h += away * (Math.max(h, top(x + 2.5, z), top(x - 2.5, z), top(x, z + 2.5), top(x, z - 2.5)) - h); h -= base; }
+        else h = Math.max(0, W ? W.land(x, z) : 0) + canopy(x, z);
+        need = Math.max(need, Math.atan2(h + (i === 12 ? 1.6 + 0.8 * away : 0.4), r));
       }
       if (need <= el + 1e-4) break;
       el = need;
     }
-    flr.y = v[Y]; flr.z = v[Z]; flr.x = v[X]; flr.pz = orb.pz;
+    flr.y = v[Y]; flr.z = v[Z]; flr.x = v[X]; flr.pz = orb.pz; flr.py = orb.py;
     return (flr.el = Math.min(el, ORB.elMax + 0.25));
   }
   function stepOrbit(dt) {
@@ -656,13 +698,16 @@
     const zHi = orb.fly ? ORB.zMax + 0.6 : ORB.zMax;
     if (T[E] < ORB.elMin || T[E] > ORB.elMax) { T[E] = clamp(T[E], ORB.elMin, ORB.elMax); g[E] = 0; }
     if (T[Z] < ORB.zMin || T[Z] > zHi) { T[Z] = clamp(T[Z], ORB.zMin, zHi); g[Z] = 0; }
-    if (T[U] < 0 || T[U] > 1) { T[U] = clamp(T[U], 0, 1); g[U] = 0; }
+    if (ISLE) {
+      /* (round the island: as far as a few hundred metres out to sea) */
+      if (T[X] < IB[0] || T[X] > IB[1]) { T[X] = clamp(T[X], IB[0], IB[1]); g[X] = 0; }
+      if (T[U] < IB[2] || T[U] > IB[3]) { T[U] = clamp(T[U], IB[2], IB[3]); g[U] = 0; }
+    } else if (T[U] < 0 || T[U] > 1) { T[U] = clamp(T[U], 0, 1); g[U] = 0; }
     for (let i = 0; i < 5; i++) spring(i, dt);
-    v[E] = clamp(v[E], ORB.elMin - 0.02, ORB.elMax + 0.02); v[Z] = clamp(v[Z], ORB.zMin - 0.02, ORB.zMax + 0.6); v[U] = clamp(v[U], 0, 1);
+    v[E] = clamp(v[E], ORB.elMin - 0.02, ORB.elMax + 0.02); v[Z] = clamp(v[Z], ORB.zMin - 0.02, ORB.zMax + 0.6); if (!ISLE) v[U] = clamp(v[U], 0, 1);
     /* (whole turns are taken off now and then, only to keep the numbers small; a glide home takes them off first) */
     if (!orb.fly && Math.abs(T[Y]) > 40 * Math.PI) { const k = Math.round(T[Y] / TAU) * TAU; T[Y] -= k; v[Y] -= k; }
-    const C = sandAt(v[X], pvC), lo = pvLo(C);
-    orb.pz = v[X] === P0[0] && v[U] === HOME[U] ? P0[2] : lo + v[U] * (pvHi(C) - lo);
+    orbPoint(dt);
     /* never into the sand, the rock or the trees: the camera rises over them at once, and settles back slowly */
     const F = elFloor(); orb.Fs += (F - orb.Fs) * (1 - Math.exp(-dt / (F > orb.Fs ? 0.12 : 0.6)));
     orb.el = Math.max(v[E], orb.Fs);
@@ -670,7 +715,7 @@
     return orbCam;
   }
   function orbPose() {
-    const v = orb.v, k = Math.exp(v[Z]), a = orb.el - EL0, ca = Math.cos(a), sa = Math.sin(a), cy = Math.cos(v[Y]), sy = Math.sin(v[Y]);
+    const v = orb.v, k = Math.exp(v[Z]), a = orb.el - EL0, ca = Math.cos(a), sa = Math.sin(a), yw = orbYaw(), cy = Math.cos(yw), sy = Math.sin(yw);
     /* tilted about the point and scaled: where the camera stands and looks, from the point */
     const cx = OP[0] * k, ch = (OP[1] * ca + OP[2] * sa) * k, cz = (OP[2] * ca - OP[1] * sa) * k;
     const lx = OL[0] * k; let ly = (OL[1] * ca + OL[2] * sa) * k, lz = (OL[2] * ca - OL[1] * sa) * k;
@@ -678,9 +723,9 @@
     const dl = 0.21 * sstep(EL0 + 0.08, ORB.elMax, orb.el);
     if (dl > 0) { const dy = ly - ch, dz = lz - cz, c = Math.cos(dl), s = Math.sin(dl); ly = ch + dy * c + dz * s; lz = cz + dz * c - dy * s; }
     /* turned about the point and set on it; written as the home view plus the differences, so at home it is that view exactly */
-    const px = v[X] - P0[0], pz = orb.pz - P0[2], p = orbCam.pos, l = orbCam.look;
-    p[0] = V0.pos[0] + px + (cx * cy + cz * sy - OP[0]); p[1] = V0.pos[1] + (ch - OP[1]); p[2] = V0.pos[2] + pz + (cz * cy - cx * sy - OP[2]);
-    l[0] = V0.look[0] + px + (lx * cy + lz * sy - OL[0]); l[1] = V0.look[1] + (ly - OL[1]); l[2] = V0.look[2] + pz + (lz * cy - lx * sy - OL[2]);
+    const px = orb.px - P0[0], pz = orb.pz - P0[2], p = orbCam.pos, l = orbCam.look;
+    p[0] = V0.pos[0] + px + (cx * cy + cz * sy - OP[0]); p[1] = V0.pos[1] + orb.py + (ch - OP[1]); p[2] = V0.pos[2] + pz + (cz * cy - cx * sy - OP[2]);
+    l[0] = V0.look[0] + px + (lx * cy + lz * sy - OL[0]); l[1] = V0.look[1] + orb.py + (ly - OL[1]); l[2] = V0.look[2] + pz + (lz * cy - lx * sy - OL[2]);
     orbCam.focus = V0.focus * k;
     /* and if it is in the ground anyway (a sudden rock under a quick turn), it is lifted clear */
     if (Engine.world) { const gd = Engine.world.land(p[0], p[2]) + 0.45; if (p[1] < gd) { l[1] += gd - p[1]; p[1] = gd; } }
@@ -690,23 +735,27 @@
     /* the shortest way round: whole turns taken off first */
     const T = orb.T, k = Math.round(T[Y] / TAU) * TAU; T[Y] -= k; orb.v[Y] -= k;
     to = to.slice(); to[Y] = T[Y] + wrapA(to[Y] - T[Y]);
-    const d = Math.abs(to[X] - T[X]) + Math.abs(to[U] - T[U]) * 8;
+    const d = ISLE ? Math.hypot(to[X] - T[X], to[U] - T[U]) : Math.abs(to[X] - T[X]) + Math.abs(to[U] - T[U]) * 8;
     orb.fly = { t: 0, from: Array.from(T), to, dur: clamp(1.1 + 0.55 * Math.log2(1 + d / 10) + 0.25 * Math.abs(to[Y] - T[Y]), 1.1, 3.6), hop: Math.min(0.55, d / 250) };
     orb.g.fill(0);
   }
-  const orbHome = () => orbFly(HOME.slice());
+  const orbHome = () => orbFly(HOME);
   function orbToVan() {
     if (!ready) return;
-    const P = Engine.vanPose(), C = sandAt(P.x, pvC), lo = pvLo(C), hi = pvHi(C);
+    const P = Engine.vanPose();
+    if (ISLE) { orbFly([orb.T[Y], orb.T[E], Math.min(orb.T[Z], Math.log(0.8)), P.x, P.z]); return; }
+    const C = sandAt(P.x, pvC), lo = pvLo(C), hi = pvHi(C);
     orbFly([orb.T[Y], orb.T[E], Math.min(orb.T[Z], Math.log(0.8)), P.x, clamp((P.z - lo) / (hi - lo), 0, 1)]);
   }
   /* the point set down at once (where you stopped walking, where the van was parked), facing the way you were */
   function orbAt(x, z, yaw, zoom) {
-    const C = sandAt(x, pvC), lo = pvLo(C), hi = pvHi(C), s = [wrapA(yaw), EL0, zoom, x, clamp((z - lo) / (hi - lo), 0, 1)];
+    let s;
+    if (ISLE) s = [wrapA(yaw), EL0, zoom, clamp(x, IB[0], IB[1]), clamp(z, IB[2], IB[3])];
+    else { const C = sandAt(x, pvC), lo = pvLo(C), hi = pvHi(C); s = [wrapA(yaw), EL0, zoom, x, clamp((z - lo) / (hi - lo), 0, 1)]; }
     for (let i = 0; i < 5; i++) { orb.T[i] = orb.v[i] = s[i]; orb.dv[i] = orb.g[i] = 0; }
-    orb.fly = null; orb.keys.clear(); orb.pz = lo + s[U] * (hi - lo); orb.Fs = elFloor();
+    orb.fly = null; orb.keys.clear(); orb.el = s[E]; orbPoint(); orb.Fs = elFloor(); orb.el = Math.max(s[E], orb.Fs); orbPoint(); orb.Fs = elFloor();
   }
-  const orbNearCamp = () => Math.hypot(orb.v[X] - P0[0], orb.pz - P0[2]) < 40;
+  const orbNearCamp = () => Math.hypot(orb.px - P0[0], orb.pz - P0[2]) < 40;
   /* a pin on a thing shows when the camera is round the camp, or, walking, when you have come up to it */
   const pinNear = a => wk.on ? Math.hypot((a.x ?? a[0]) - wk.x, (a.z ?? a[2]) - wk.z) < 6.5 : orbNearCamp();
 
@@ -716,7 +765,8 @@
   const insp = { on: false, info: null, c: null, drag: null, seen: new Set(store.get('seenLife', [])) };
   const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on && !sketch.on && !tbox.on && !insp.on;
   const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
-  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
+  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = ISLE ? 'Tap a glowing dot to open it. Tap the sea to send a wave, or an animal, a shell or a flower to look at it close. Drag to look around, two fingers to move over the island and zoom.' : 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
+  else if (ISLE) $('hint').textContent = 'Click a glowing dot to open it. Click the sea to send a wave, or an animal, a shell, a flower or a fruit to look at it close. Drag to look around, right-drag to move over the island, scroll to zoom.';
   /* a new swipe (or pinch, or burst of scrolling): straight after the last one it goes further, each time up to four
      and a half times as far; after a pause it is gentle again */
   function gestureStart(t) {
@@ -742,19 +792,21 @@
   }
   /* let go: it glides on at the speed it was moving, and comes to rest. A single swipe glides only a little way; the
      speed a glide may keep grows with the run of swipes, as the swipes themselves do */
-  const GCAP = [1.6, 0.8, 1.2, 40, 1.5];
+  const GCAP = [1.6, 0.8, 1.2, 40, ISLE ? 40 : 1.5];
   function gestureEnd(fling, t) {
     orb.lastEnd = performance.now() / 1000;
     if (!fling) return;
     const v = velAt(t), b = orb.boost;
-    for (let i = 0; i < 5; i++) orb.g[i] = clamp(v[i], -GCAP[i] * b, GCAP[i] * b);
+    /* (round the island a glide over the map goes as far, on the screen, however far out the view is drawn) */
+    const kz = ISLE ? Math.exp(orb.v[Z]) : 1;
+    for (let i = 0; i < 5; i++) { const c = GCAP[i] * b * (i >= X ? kz : 1); orb.g[i] = clamp(v[i], -c, c); }
   }
   /* a step of a gesture, in each axis's own units, at time t: onto the targets, and into the record of its speed */
   function orbNudge(dy, de, dz, dx, du, t) {
     const T = orb.T;
     /* tilting down stops at the ground (or the treetops), and tilting up answers at once */
     if (de) { const lo = Math.max(ORB.elMin, orb.Fs - 0.004); T[E] = clamp(Math.max(T[E], lo) + de, lo, ORB.elMax); }
-    T[Y] += dy; T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); T[X] += dx; T[U] = clamp(T[U] + du, 0, 1);
+    T[Y] += dy; T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); T[X] += dx; T[U] = ISLE ? T[U] + du : clamp(T[U] + du, 0, 1);
     cum[Y] += dy; cum[E] += de; cum[Z] += dz; cum[X] += dx; cum[U] += du; velMark(t);
   }
   /* one finger (or the left button): across turns round the point, up and down tilts. Whatever is under the hand
@@ -764,13 +816,16 @@
     const s = ex.ax + ex.ay + 1e-6, b = orb.boost;
     orbNudge(dx * 2.3 / Math.max(320, view.w) * b * sstep(0.2, 0.45, ex.ax / s), -dy * 1.05 / Math.max(320, view.h) * b * sstep(0.2, 0.45, ex.ay / s), 0, 0, 0, t);
   }
-  /* moving the point: the sand under the hand stays under it, along the beach and a little across */
+  /* moving the point: the sand under the hand stays under it, along the beach and a little across (round the island,
+     the ground under it, whichever way) */
   const PD = [0, 0];
   function panDelta(dx, dy) {
     const aspect = view.w / view.h, fov = V0.fov * (aspect < 1.2 ? Math.min(1.6, 1 + (1.2 - aspect) * 0.75) : 1);
     const s = 2 * Math.exp(orb.v[Z]) * RYZ * Math.tan(fov * Math.PI / 360) / Math.max(320, view.h) * orb.boost, sz = s / Math.max(0.3, Math.sin(orb.el));
-    const cy = Math.cos(orb.v[Y]), sy = Math.sin(orb.v[Y]), C = sandAt(orb.v[X], pvC);
-    PD[0] = -dx * s * cy - dy * sz * sy; PD[1] = (dx * s * sy - dy * sz * cy) / (pvHi(C) - pvLo(C));
+    const yw = orbYaw(), cy = Math.cos(yw), sy = Math.sin(yw), wx = -dx * s * cy - dy * sz * sy, wz = dx * s * sy - dy * sz * cy;
+    if (ISLE) { PD[0] = wx; PD[1] = wz; return PD; }
+    const C = sandAt(orb.v[X], pvC);
+    PD[0] = wx; PD[1] = wz / (pvHi(C) - pvLo(C));
     return PD;
   }
   function orbPanBy(dx, dy, t) { const d = panDelta(dx, dy); orbNudge(0, 0, 0, d[0], d[1], t); }
@@ -860,10 +915,10 @@
   $('bWalkCamp').addEventListener('click', () => { orbHome(); hintOff(); });
   $('bWalkVan').addEventListener('click', () => { orbToVan(); hintOff(); });
   const wbar = { camp: -2, van: -2, n: 0, vx: Layout.van.x, vz: Layout.van.z };
-  const sideOf = (x, z) => { const dx = x - orb.v[X], dz = z - orb.pz, r = (dx * Math.cos(orb.v[Y]) - dz * Math.sin(orb.v[Y])) / (Math.hypot(dx, dz) || 1); return r < -0.35 ? 0 : r > 0.35 ? 2 : 1; };
+  const sideOf = (x, z) => { const dx = x - orb.px, dz = z - orb.pz, yw = orbYaw(), r = (dx * Math.cos(yw) - dz * Math.sin(yw)) / (Math.hypot(dx, dz) || 1); return r < -0.35 ? 0 : r > 0.35 ? 2 : 1; };
   function syncWalkBar() {
     if (ready && !(wbar.n++ % 15)) { const P = Engine.vanPose(); wbar.vx = P.x; wbar.vz = P.z; }
-    const on = canExplore() && st.camT >= 1 && !car.camK && !wk.camK && !orb.fly, px = orb.v[X], pz = orb.pz;
+    const on = canExplore() && st.camT >= 1 && !car.camK && !wk.camK && !orb.fly, px = orb.px, pz = orb.pz;
     const away = Math.hypot(px - P0[0], pz - P0[2]) > 4 || Math.abs(wrapA(orb.v[Y])) > 0.35 || Math.abs(orb.v[Z]) > 0.4 || Math.abs(orb.el - EL0) > 0.22;
     const camp = on && away ? sideOf(P0[0], P0[2]) : -1, van = on && Math.hypot(wbar.vx - px, wbar.vz - pz) > 25 ? sideOf(wbar.vx, wbar.vz) : -1;
     const label = (s, t) => s === 0 ? '← ' + t : s === 2 ? t + ' →' : t;
@@ -975,6 +1030,20 @@
   /* stuck against something: put the van back on open sand nearby, pointing along the beach */
   function respawn() {
     const x0 = car.x, dir = Math.cos(car.h) >= 0 ? 1 : -1;
+    /* (round the island: along its own shore, on its sand, facing along it the way the van was going) */
+    if (Layout.isle) {
+      const S = Layout.Shore, q = S.at(car.x, car.z, {}), A = {}, B = {}, I = {};
+      for (let k = 0; k < 40; k++) {
+        const a = q.a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 3, inf = S.info(a, I), sd = -Math.min(3.5, Math.max(1.2, (inf.W || 4) * 0.4));
+        S.pt(a, sd, A); S.pt(a + 1, sd, B); const x = A.x, z = A.z;
+        const W = Engine.world; if (W && W.massif(x, z) > 0.1) continue;
+        if (obstaclesNear(x, z).some(([dx, dz, rad]) => Math.hypot(dx, dz) < rad + 2.2)) continue;
+        const along = Math.atan2(-(B.z - A.z), B.x - A.x), fwd = Math.cos(car.h) * (B.x - A.x) - Math.sin(car.h) * (B.z - A.z) >= 0;
+        Object.assign(car, { x, z, h: fwd ? along : along + Math.PI, v: 0, stuckT: 0, wheels: null });
+        return true;
+      }
+      return false;
+    }
     for (let k = 0; k < 40; k++) {
       const x = x0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 3, sz = Layout.shoreZ(x), z = sz + Math.min(3.5, (Layout.vegZ(x) - sz) * 0.4);
       const W = Engine.world; if (W && W.massif(x, z) > 0.1) continue;
@@ -1031,12 +1100,14 @@
     }
     car.pitch = body.p; car.roll = body.r;
   }
+  const CQ = {}, CQI = {};
   function stepCar(dt) {
     const k = keys, has = (...a) => a.some(x => k.has(x));
     const thr = (has('w', 'arrowup') ? 1 : 0) - (has('s', 'arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
     const str = (has('a', 'arrowleft') ? 1 : 0) - (has('d', 'arrowright') ? 1 : 0) + (touch.on ? -touch.x : 0);
     const boost = has('shift') ? 1.6 : 1, brake = has(' ');
-    const sea = Layout.shoreZ(car.x) - car.z, inWater = sea > -0.4;
+    /* (how far out into the water it is: along the coast from its shore line, round the island from its own shore) */
+    const sea = Layout.isle ? Layout.Shore.at(car.x, car.z, CQ).s : Layout.shoreZ(car.x) - car.z, inWater = sea > -0.4;
     if (brake) car.v -= Math.sign(car.v) * Math.min(Math.abs(car.v), 16 * dt);
     else if (Math.abs(thr) > 0.1) { if (Math.sign(thr) !== Math.sign(car.v) && Math.abs(car.v) > 0.4) car.v += thr * 12 * dt; else car.v += thr * (thr > 0 ? 4.4 * boost : 3) * dt; }
     else car.v -= Math.sign(car.v) * Math.min(Math.abs(car.v), 2.4 * dt);
@@ -1062,9 +1133,17 @@
         if (d < min) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, push = min - d + 0.002; car.x += nx * push; car.z += nz * push; moved = true;
           const into = -(fx * nx + fz * nz) * car.v; if (into > impact) { impact = into; hit = o; } }
       }
-      /* the beach's edges: deep water, the forest (the coast itself runs on for ever) */
-      const zMin = Layout.shoreZ(car.x) - 2.6, zMax = Layout.vegZ(car.x) + 1.4;
-      if (car.z < zMin) { car.z = zMin; moved = true; } if (car.z > zMax) { car.z = zMax; moved = true; hit = hit || ['edge']; }
+      /* the beach's edges: deep water, the forest (the coast itself runs on for ever). Round the island, its own shore's
+         sand, whichever way that runs: from a little way into the water up to short of the bushes and palms along the
+         forest's foot, narrow below rock */
+      if (Layout.isle) {
+        const q = Layout.Shore.at(car.x, car.z, CQ), inf = Layout.Shore.info(q.a, CQI), top = -Math.max(2.2, (inf.W || 4) * (1 - 0.7 * Math.max(inf.rock || 0, inf.cliff || 0)) - 4.5);
+        if (q.s > 2.6) { const d = q.s - 2.6; car.x -= q.nx * d; car.z -= q.nz * d; moved = true; }
+        else if (q.s < top) { const d = top - q.s; car.x += q.nx * d; car.z += q.nz * d; moved = true; hit = hit || ['edge']; }
+      } else {
+        const zMin = Layout.shoreZ(car.x) - 2.6, zMax = Layout.vegZ(car.x) + 1.4;
+        if (car.z < zMin) { car.z = zMin; moved = true; } if (car.z > zMax) { car.z = zMax; moved = true; hit = hit || ['edge']; }
+      }
       /* the headlands: the van can't climb the rock; wherever it touches, it slides back down onto the sand */
       const W = Engine.world;
       if (W) for (const l of [-1.45, 0, 1.45]) {
@@ -1100,7 +1179,9 @@
     const wNow = wheelWorld(car.x, car.z, car.h);
     if (!car.wheels) car.wheels = wNow;
     if (car.trackOdo > 0.12) {
-      if (!inWater && Engine.marks) wNow.forEach((w, i) => Engine.marks.tyre(i, car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, 0.85 + 0.15 * Math.min(1, Math.abs(car.v) / 6), sandWet(w[0], w[1]), st.t));
+      /* (round the island, only in the sand: not on the rock, the grass, a trail's earth or the jetty's deck) */
+      const sandy = (x, z) => !Layout.isle || !Engine.world || !Engine.world.walk || ((k) => k === 'sand' || k === 'camp')(Engine.world.walk(x, z).kind);
+      if (!inWater && Engine.marks) wNow.forEach((w, i) => { if (sandy(w[0], w[1])) Engine.marks.tyre(i, car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, 0.85 + 0.15 * Math.min(1, Math.abs(car.v) / 6), sandWet(w[0], w[1]), st.t); });
       car.wheels = wNow; car.trackOdo = 0;
     }
     /* water splashes */
@@ -1427,7 +1508,9 @@
     wk.cam.focus += (fd - wk.cam.focus) * 0.08;
   }
   /* how wet the sand is at a point: soaked at the water's edge, dry a few metres up the beach */
-  function sandWet(x, z) { const g = Layout.shoreDZ(x), up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g); return clamp(1 - (up - 0.4) / 2.6, 0, 1); }
+  /* how wet the sand is at (x, z): soaked at the water's edge, dry a few metres up (round the island, up its own shore) */
+  const SWQ = {};
+  function sandWet(x, z) { let up; if (Layout.isle) up = -Layout.Shore.at(x, z, SWQ).s; else { const g = Layout.shoreDZ(x); up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g); } return clamp(1 - (up - 0.4) / 2.6, 0, 1); }
   /* a footprint, left and right in turn a hand's width either side of the line walked, toes the way the walker is going,
      turned out a touch as feet are; deeper and darker in wet sand, none in the water (a ripple instead) */
   function footstep(wade) {
@@ -1450,15 +1533,20 @@
     for (const l of [-1.45, 0, 1.45]) wk.van.push(P.x + vc * l, P.z - vs * l, 0.95);
     /* where to stand: out of the van, beside it, if it was being driven (or the view is on it); at the camp, just
        behind the picnic, looking out to sea; otherwise on the point the view turns round, facing the way it faces */
-    let x = orb.v[X], z = orb.pz, h = orb.v[Y];
+    let x = orb.px, z = orb.pz, h = orbYaw();
     if (!fromVan && Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 5) { x = Layout.camp.x; z = Layout.camp.z + 3; h = 0; }
     else if (fromVan || Math.hypot(x - P.x, z - P.z) < 4) {
       const ok = sd => { const qx = P.x + vs * sd * 1.9, qz = P.z + vc * sd * 1.9; return qz > Layout.shoreZ(qx) - 0.5 && qz < Layout.vegZ(qx) + 1 && !(Engine.world && Engine.world.massif(qx, qz) > 0.4); };
       const sd = ok(1) ? 1 : -1; x = P.x + vs * sd * 1.9; z = P.z + vc * sd * 1.9; h = Math.atan2(-vc, vs);
     }
-    /* (round the island, if that is somewhere no one can stand, the nearest place that isn't: a beach, a trail, a deck) */
+    /* (round the island, if that is somewhere no one can stand, the nearest place that isn't: a beach, a trail, a deck;
+       looked for in widening rings, as far as the view may have been over the forest or out at sea) */
     if (Layout.isle && Engine.world && Engine.world.walk && !Engine.world.walk(x, z).ok) {
-      let best = null; for (let r = 2; r < 90 && !best; r += 2) for (let k = 0; k < 24; k++) { const a = k / 24 * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (Engine.world.walk(px, pz).ok) { best = [px, pz]; break; } }
+      let best = null;
+      for (let r = 2; r < 700 && !best; r = r < 40 ? r + 2 : r * 1.12) {
+        const n = Math.min(64, Math.max(24, Math.ceil(r * TAU / 8)));
+        for (let k = 0; k < n; k++) { const a = k / n * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (Engine.world.walk(px, pz).ok) { best = [px, pz]; break; } }
+      }
       if (best) { x = best[0]; z = best[1]; }
     }
     Object.assign(wk, { on: true, x, z, h, hT: h, turn: 0, v: 0, my: 0, mp: 0, pitchT: -0.05, ox: x, oz: z });
@@ -1761,6 +1849,8 @@
 
     extras(dtR);
     syncWalkBar();
+    /* the map: you (or the van, while you drive it) and the van; put away while something else is open */
+    Minimap.frame({ driving: car.on, van: Engine.vanPose(), hide: !st.entered || rd.on || !!st.chapter || insp.on || sketch.on || tbox.on || !$('settings').hidden || !$('credits').hidden || Engine.pitching });
     /* (a fruit in the hand goes on ripening: its card keeps up) */
     if (insp.on && insp.info && insp.info.fruit && (insp.fruitT += dtR) > 0.25) { insp.fruitT = 0; const h = Engine.inspect.held; if (h && h.info && h.info.name !== $('iName').textContent) fruitCard(h.info); else if (h && h.info) $('iKeep').hidden = !h.info.edible; }
     /* the sea's verdict */
@@ -2714,6 +2804,7 @@
      crickets from the trees, the crackle from the fire. Each fades with distance (the fire, a point, quickly; the long
      line of the surf more slowly; trees muffle the sea), the air takes the highs off what is far, and each pans to the
      side it is on */
+  const HQ = {}, HQI = {};
   function hearing(cam) {
     const cp = cam.pos, lk = cam.look, fx0 = lk[0] - cp[0], fz0 = lk[2] - cp[2], fl = Math.hypot(fx0, fz0) || 1, rx = -fz0 / fl, rz = fx0 / fl;
     const side = (dx, dz) => { const l = Math.hypot(dx, dz) || 1; return (dx * rx + dz * rz) / l; };
@@ -2721,12 +2812,15 @@
     /* the fire */
     const F = Layout.fire, fdx = F.x - x, fdz = F.z - z, fd = Math.hypot(fdx, fdz, cp[1] - 0.35);
     const fire = { g: 1.25 * Math.pow(2.5 / Math.max(2.5, fd), 1.3), pan: side(fdx, fdz) * 0.8 * Math.min(1, fd / 1.5), lp: clamp(18000 * Math.pow(3 / Math.max(3, fd), 0.55), 2500, 18000) };
-    /* the surf: how far up the beach from the waterline, and how high; muffled once well inside the trees */
-    const k = Math.hypot(1, Layout.shoreDZ(x)), up = (z - Layout.shoreZ(x)) / k, sd = Math.hypot(Math.max(0, up), y);
-    const inTrees = clamp((z - Layout.vegZ(x) - 3) / 12, 0, 1);
-    const sea = { g: Math.max(0.07, 1.15 * Math.pow(10 / Math.max(10, sd), 0.7)) * (1 - 0.4 * inTrees), pan: side(Layout.shoreDZ(x) / k, -1 / k) * 0.55, lp: clamp(15000 * Math.pow(12 / Math.max(12, sd), 0.55), 2500, 15000) * (1 - 0.5 * inTrees) };
+    /* the surf: how far up the beach from the waterline, and how high; muffled once well inside the trees. Along the coast
+       its shore line, the sea down -z; round the island its own shore, the sea whichever way that faces */
+    let up, toSea, toVeg, nx, nz;
+    if (Layout.isle) { const q = Layout.Shore.at(x, z, HQ), W = Layout.Shore.info(q.a, HQI).W || 6; up = -q.s; toVeg = W - up; nx = q.nx; nz = q.nz; }
+    else { const k = Math.hypot(1, Layout.shoreDZ(x)); up = (z - Layout.shoreZ(x)) / k; toVeg = Layout.vegZ(x) - z; nx = Layout.shoreDZ(x) / k; nz = -1 / k; }
+    const sd = Math.hypot(Math.max(0, up), y), inTrees = clamp((-toVeg - 3) / 12, 0, 1);
+    const sea = { g: Math.max(0.07, 1.15 * Math.pow(10 / Math.max(10, sd), 0.7)) * (1 - 0.4 * inTrees), pan: side(nx, nz) * 0.55, lp: clamp(15000 * Math.pow(12 / Math.max(12, sd), 0.55), 2500, 15000) * (1 - 0.5 * inTrees) };
     /* the trees: birds by day, crickets by night (which carry further) */
-    const vd = Math.hypot(Math.max(0, Layout.vegZ(x) - z), y * 0.6), vp = side(0, 1) * 0.5 * Math.min(1, vd / 4);
+    const vd = Math.hypot(Math.max(0, toVeg), y * 0.6), vp = side(-nx, -nz) * 0.5 * Math.min(1, vd / 4);
     return { fire, sea, forest: { g: Math.max(0.06, Math.pow(7 / Math.max(7, vd), 0.8)), pan: vp }, crick: { g: Math.max(0.15, Math.pow(7 / Math.max(7, vd), 0.55)), pan: vp } };
   }
   /* the radio is a thing in the world too: loud beside it, faint across the beach. (A station is a stream from another

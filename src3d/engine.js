@@ -397,17 +397,21 @@ const Engine = (() => {
     const prof = x < 0 ? Math.exp(-x * x / (lf * lf)) : Math.exp(-x * x / (lb * lb)), k = spd > 2 ? 0.27 / (1 + 0.08 * Math.max(amp - 1.5, 0)) : 0.16;
     return amp * k * shoal * (1 + (bore - 1) * broken) * prof * smJ(-0.3, 1.4, s);
   }
+  /* when tide swell (x0 its time, ph its phase, ob how aslant) reaches a along the shore: as glsl.js swPh */
+  const swPhJS = (a, x0, ph, ob) => x0 + 0.9 * Math.sin(a * 0.11 + ph) + 1.7 * Math.sin(a * 0.023 + 2.3 * ph) + 1.0 * Math.sin(a * 0.052 + 4.1 * ph) + a * 0.03 * ob;
   function waveAt(x0, z, wt = waveNow) {
     const q = shAt(x0, z), s = q.s, x = q.a; if (s < -0.5 || !gU) return 0;
+    /* (into a cove, up a creek, the swell comes that much later) */
+    const lgm = Layout.Shore.lag(x0, z);
     const nA = 0.5 + 0.24 * Math.sin(x * 0.19 + 1.3) + 0.18 * Math.sin(x * 0.071 + 0.4) + 0.12 * Math.sin(x * 0.53 + 2.0);
     /* (how open the shore is to the swell, and how much breaks out on a reef: as the shaders have it) */
     const I = Layout.isle ? Layout.Shore.info(x, _shi) : null, ex = I ? I.ex : 1, rk = I ? Math.min(1, I.rock + 0.6 * I.cliff) : 0, R = I ? I.reef : 0;
     let h = 0;
-    const lag = rk * Math.max(R - 6, 0) / 1.55;
-    for (const W of gU.uWv.value) { if (W.y <= 0) continue; const sb0 = 3 + 7 * nA * W.y; h += swellJS(s, wt - (W.x + 0.9 * Math.sin(x * 0.11 + W.z) + x * 0.03 * W.w) - lag, W.y * ex, 1.55, sb0 + (Math.max(R, 4) + 1.5 * W.y - sb0) * rk); }
+    const lag = rk * Math.max(R - 6, 0) / 1.55 + lgm / 1.55;
+    for (const W of gU.uWv.value) { if (W.y <= 0) continue; const sb0 = 3 + 7 * nA * W.y; h += swellJS(s, wt - swPhJS(x, W.x, W.z, W.w) - lag, W.y * ex, 1.55, sb0 + (Math.max(R, 4) + 1.5 * W.y - sb0) * rk); }
     for (const w of surge.waves) {
       const amp = userAmpJS(w, x, wt) * smJ(w.x - w.s0 / CU, w.x - w.s0 / CU + 1.8, wt); if (amp < 0.01) continue;
-      h += swellJS(s, wt - w.x, amp, CU, Math.min((3 + 4.6 * amp) * (0.88 + 0.24 * nA), Math.max(4, 0.5 * w.s0 * (0.9 + 0.2 * nA))));
+      h += swellJS(s, wt - w.x - lgm / CU, amp, CU, Math.min((3 + 4.6 * amp) * (0.88 + 0.24 * nA), Math.max(4, 0.5 * w.s0 * (0.9 + 0.2 * nA))));
     }
     return h;
   }
@@ -547,9 +551,9 @@ const Engine = (() => {
      that chase the water's edge and the crabs that keep out of it */
   function swashFront(x, wt) {
     const WT = 9.0, k0 = Math.floor(wt / WT); let r = 0;
-    for (let k = k0 - 3; k <= k0 + 2; k++) {
+    for (let k = k0 - 5; k <= k0 + 2; k++) {
       const h = n => hash(k * n + 0.37), amp = (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * roughNow), ph = h(2.71) * 6.283;
-      const tau = wt - (k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(x * 0.11 + ph) + x * 0.03 * (h(0.93) - 0.5)), T_ = tsOf(amp);
+      const tau = wt - swPhJS(x, k * WT + (h(1.37) - 0.5) * 2.0, ph, h(0.93) - 0.5), T_ = tsOf(amp);
       if (tau <= 0 || tau > T_ + 1) continue;
       const [R, dl] = reach(x, amp, seedW({ z: ph })), u = (tau - dl) / T_;
       if (u > 0 && u < 1) r = Math.max(r, swashEdge(R, u));
@@ -564,9 +568,9 @@ const Engine = (() => {
     const WT = 9.0;
     for (const p of world.wetNear(cx, cz, maxD)) {
       const d = Math.hypot(p.x - cx, p.z - cz), i = p.id;
-      const qr = shAt(p.x, p.z), s = Math.max(0, qr.s), al = qr.a;
-      for (let k = Math.floor(wt0 / WT) - 1; k <= Math.ceil(wt1 / WT) + 1; k++) {
-        const h = n => hash(k * n + 0.37), T0 = k * WT + (h(1.37) - 0.5) * 2.0 + 0.9 * Math.sin(al * 0.11 + h(2.71) * 6.283) + al * 0.03 * (h(0.93) - 0.5) - s / WCJ;
+      const qr = shAt(p.x, p.z), s = Math.max(0, qr.s), al = qr.a, lg = Layout.Shore.lag(p.x, p.z) / WCJ;
+      for (let k = Math.floor((wt0 - lg) / WT) - 1; k <= Math.ceil(wt1 / WT) + 1; k++) {
+        const h = n => hash(k * n + 0.37), T0 = swPhJS(al, k * WT + (h(1.37) - 0.5) * 2.0, h(2.71) * 6.283, h(0.93) - 0.5) - s / WCJ + lg;
         if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'r' + k + '_' + i, wave: 'w' + k, x: T0, amp: 0.55 + 0.6 * h(3.33), d, rad: p.rad, px: p.x });
       }
       for (const w of surge.waves) { const T0 = w.x - s / CU; if (T0 >= wt0 && T0 <= wt1) out.push({ id: 'ru' + w.t0.toFixed(2) + '_' + i, wave: 'u' + w.t0.toFixed(2), x: T0, amp: 1 + 0.6 * userAmpJS(w, al, T0), d, rad: p.rad, px: p.x }); }
@@ -682,6 +686,8 @@ const Engine = (() => {
     /* the sea is seen at grazing angles: filter its textures along the view, or the distance smears */
     { const an = Math.min(8, R.capabilities.getMaxAnisotropy()); waterTex.anisotropy = an; noiseTex.anisotropy = an; }
     const sd = Textures.sand(), sandTex = Mats.dataTex(sd.data, sd.size, sd.size, { repeat: true });
+    /* (and the sand, seen along the ground at your feet as much as the sea is: without it the grain smears to a blur) */
+    sandTex.anisotropy = Math.min(8, R.capabilities.getMaxAnisotropy());
 
     keyLight = new T.DirectionalLight(0xffffff, 1);
     keyLight.castShadow = true;
@@ -760,7 +766,7 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uNearT: { value: new T.Vector4(0, 0, 1, 0) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5, 6, 7].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uNearT: { value: new T.Vector4(0, 0, 1, 0) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
       uSunVis: { value: null }
     });
     /* (the clouds' own uniforms, the very same, for their shadows on the sand and the sea) */
@@ -805,7 +811,7 @@ const Engine = (() => {
     orchard = Orchard.build(natG, world, { palms: nature.palms }); Object.assign(api, { orchard });
     /* the small lives that can be picked up and held, and thrown back where they belong (inspect.js); and the fruit */
     inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
-      sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c)],
+      sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c), (L, c) => { if (isFauna) isFauna.pickables(L, c); }],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
     post = makePost(); gU.uSunVis.value = post.visTex;
@@ -1028,7 +1034,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0; gU.uPud.value = o.pud || 0; Mats.U.uFlood.value = o.flood || 0;
     const wt = o.waveT ?? t;
     { const WT = 9.0, kb = Math.floor(wt / WT);
-      for (let j = 0; j < 6; j++) { const k = kb - 3 + j, h = n => hash(k * n + 0.37);
+      /* (eight: the ones arriving round now, and those come long enough before to be arriving now at the back of a cove) */
+      for (let j = 0; j < 8; j++) { const k = kb - 5 + j, h = n => hash(k * n + 0.37);
         gU.uWv.value[j].set(k * WT + (h(1.37) - 0.5) * 2.0, (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * (o.rough || 0)), h(2.71) * 6.283, h(0.93) - 0.5); }
       surgeUpload(wt); }
     updateSurge(wt);
