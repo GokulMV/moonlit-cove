@@ -22,10 +22,13 @@ try {
       window.__coveCamFix = v.pos ? { pos: v.pos, look: v.look, fov: v.fov || 55, focus: Math.hypot(v.pos[0] - v.look[0], v.pos[1] - v.look[1], v.pos[2] - v.look[2]) } : null; }, v);
     if (isle && v.pos) await page.evaluate(([x, y, z]) => Engine.world.prime(x, z, y, true), v.pos);
     else if (isle) await page.evaluate(() => Engine.world.prime());
-    /* (enough frames for the light round the camp, the reflections' picture of the sky, to catch up with the new hour) */
+    /* (enough frames for the light round the camp, the reflections' picture of the sky, to catch up with the new hour; and
+       along the coast for its shade's heights to be worked out, if they are not yet) */
     await frames(16);
-    const S = await page.evaluate(() => { const S = window.__cove.st.S, sh = Engine.world && Engine.world.shade; return { sAlt: S.sAlt, mAlt: S.mAlt, path: S.path, sun: S.sunDirV, moon: S.moonDirV, key: S.keyDir, shade: sh ? [sh.n, Math.round(sh.ms)] : null }; });
-    if (S.shade) console.log(`   (the island's shade drawn ${S.shade[0]} times, the last in ${S.shade[1]} ms)`);
+    for (let i = 0; i < 40 && await page.evaluate(() => { const sh = Engine.world && Engine.world.shade; return !!(sh && 'pending' in sh && (sh.pending > 0 || !sh.ready)); }); i++) await frames(8);
+    const S = await page.evaluate(() => { const S = window.__cove.st.S, sh = Engine.world && Engine.world.shade; return { sAlt: S.sAlt, mAlt: S.mAlt, path: S.path, sun: S.sunDirV, moon: S.moonDirV, key: S.keyDir, exp: S.exposure,
+      shade: sh ? [sh.n, Math.round(sh.ms), sh.built, sh.pending, sh.ready, +sh.at(Layout.camp.x, Layout.camp.z).toFixed(2)] : null }; });
+    if (S.shade) console.log(`   (the ${isle ? 'island' : 'coast'}'s shade drawn ${S.shade[0]} times, the last in ${S.shade[1]} ms${S.shade[2] !== undefined ? `; ${S.shade[2]} columns worked out, ${S.shade[3]} to go, ${S.shade[4] ? 'ready' : 'not ready'}` : ''}; light at the camp ${S.shade[5]}; exposure ${S.exp.toFixed(2)})`);
     const f = a => a.map(x => x.toFixed(2)).join(',');
     console.log(`  ${v.name}: ${v.hour}h ${S.path}, sun ${S.sAlt.toFixed(1)}° (${f(S.sun)}), moon ${S.mAlt.toFixed(1)}° (${f(S.moon)}), key (${f(S.key)})`);
     ok(S.path === v.path, `${v.name}: drawn on the ${v.path} path`);

@@ -791,7 +791,22 @@ void main(){
   }
 
   /* ── the coast, chunk by chunk ── */
-  function build(root, U, noiseTex) {
+  /* ── the top of whatever stands at a coast point, for the shade it casts: the land (or the sea), and the forest over it —
+     the canopy as high as its crowns stand (higher over the mountains, where they are bigger), and in front of it the
+     front rows of palms and trees, a lower roof (thinner on the coast's open stretches, a little taller in its casuarina
+     belts); neither on a headland's bare rock, nor the front rows where they are cleared (cleared(x, z): the camp's
+     clearing; campX: the camp's x along the coast) ── */
+  function topAt(x, z, campX, cleared) {
+    const h = hill(x, z), m = massif(x, z), r = range(x, z), g = Math.max(h, m, r, reefH(x, z), 0), e = z - Co.vegZ(x);
+    if (e < -1) return g;
+    const d = e - D0(x, campX), rock = 1 - sm(0.5, 3, m - Math.max(h, r));
+    let f = 0;
+    if (d > 0 && d < DEEP) f = (9.5 + 5 * fbmX(x, z, 0.017, 3.3, 3) + 4 * sm(300, 500, d)) * sm(0, 10, d) * sm(DEEP, DEEP - 40, d);
+    if (e < 44 && !cleared(x, z)) { const Z = zoneAt(x), k = Z.k; f = Math.max(f, sm(-1, 3, e) * (1 - sm(30, 44, e)) * (8.5 + 1.8 * Z.cas * k) * (1 - 0.65 * Z.open * k)); }
+    return g + f * rock;
+  }
+
+  function build(root, U, noiseTex, opts = {}) {
     /* rocks: a few shapes, shared by every chunk, and the same in fewer facets for further off */
     const R = { small: SMALL.map((sh, i) => rockProto(31 + i * 17, sh, 6)), big: BIG.map((sh, i) => rockProto(301 + i * 23, sh, 8)), stack: rockProto(777, [1.2, 1.0, 1.1], 10, { top: 0.6, strata: 11 }) };
     const far = new Map([...R.small.map((p, i) => [p, rockProto(31 + i * 17, SMALL[i], 2)]), ...R.big.map((p, i) => [p, rockProto(301 + i * 23, BIG[i], 3)]), [R.stack, rockProto(777, [1.2, 1.0, 1.1], 3, { top: 0.6, strata: 11 })]]);
@@ -829,6 +844,142 @@ void main(){
     /* the forest's clearing round the camp, in the world's coordinates */
     const clear = (x, z) => (Math.abs(x) < 17 && z < 30) || (Math.abs(x - Layout.camp.x) < 10 && z < Layout.vegZ(x) + 6);
     const claimed = (ch, x, z) => { for (const [cx, cz, r] of ch.claims) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return false; };
+
+    /* ── what the coast's hills, headlands, mountains and forest shade from the key light, the sun by day and the moon by
+       night: over the coast round the camera, how much of the light reaches each point of the ground, the sea or the
+       forest's top, looking from it toward the light over the land and the forest (topAt). The heights go on a grid of
+       4 m cells, a kilometre and a half along the coast (more of it on the light's side) and from 200 m out at sea to
+       over the mountains (from 250 m inland every other cell, filled in between); they are worked out a few milliseconds
+       a frame and slid along the coast as the camera goes, in a ring, so only the new columns are; the looking toward the
+       light is done on the GPU, again whenever the light has moved or the heights have. GLSL.ISLE_SH reads it ── */
+    let lastCam = Layout.camp.x;
+    const shade = (() => {
+      const R = opts.R; if (!R) return null;
+      const cu = Mats.coastU, C = 4, NX = 384, NZ = 320, ZA = -200, JF = 112, NC = NX * NZ, NONE = -2147483648, toH = T.DataUtils.toHalfFloat;
+      const hf = new Float32Array(NC), hh = new Uint16Array(NC), slot = new Int32Array(NX).fill(NONE), colTop = new Float32Array(NX);
+      const hTex = new T.DataTexture(hh, NX, NZ, T.RedFormat, T.HalfFloatType);
+      hTex.minFilter = hTex.magFilter = T.LinearFilter; hTex.wrapS = T.RepeatWrapping; hTex.wrapT = T.ClampToEdgeWrapping; hTex.generateMipmaps = false; hTex.needsUpdate = true;
+      const rt = new T.WebGLRenderTarget(NX, NZ, { depthBuffer: false, stencilBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter, generateMipmaps: false, type: T.UnsignedByteType });
+      rt.texture.name = 'coast-shade';
+      const mat = new T.ShaderMaterial({
+        uniforms: { uHF: { value: hTex }, uHW: { value: new T.Vector4(0, NX, NZ, C) }, uL: { value: new T.Vector3(0, 1, 0) }, uTopH: { value: 420 } },
+        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+        fragmentShader: `
+uniform highp sampler2D uHF;   /* the heights (m), in a ring along the coast */
+uniform vec4 uHW;              /* the window's first column's place in the ring, how many columns, how many rows, the cell (m) */
+uniform vec3 uL;               /* toward the light */
+uniform float uTopH;           /* the highest anything stands on the grid */
+varying vec2 vUv;
+/* the top of what stands at c (in cells, from the window's first column and from its first row): past the window's ends
+   along the coast as at them, out past the first row the sea, inland past the last as on it */
+float topC(vec2 c){
+  c.x = clamp(c.x, 0.0, uHW.y - 1.0);
+  if (c.y < 0.0) return 0.0;
+  c.y = min(c.y, uHW.z - 1.0);
+  return texture2D(uHF, vec2((c.x + uHW.x + 0.5)/uHW.y, (c.y + 0.5)/uHW.z)).r;
+}
+void main(){
+  vec2 c0 = floor(vUv*uHW.yz);
+  float top = topC(c0);
+  vec2 Lh = uL.xz; float lh = length(Lh);
+  if (lh < 1e-4 || uL.y > 0.999){ gl_FragColor = vec4(1.0, 1.0, clamp(top/400.0, 0.0, 1.0), 0.0); return; }
+  Lh /= lh;
+  /* (and how high a ray from here would have to start to get past everything: for what lies off the grid, beyond here) */
+  /* (only at the grid's edges is that wanted: elsewhere, once there is no light left, no need to look further) */
+  float tg = uL.y/lh, h0 = top + 0.8, vis = 1.0, tMin = 1000.0, t = 2.0, req = 0.0;
+  vec2 dc = Lh/uHW.w; bool edge = min(min(c0.x, c0.y), min(uHW.y - 1.0 - c0.x, uHW.z - 1.0 - c0.y)) < 3.0;
+  for (int i = 0; i < 64; i++){
+    float hr = h0 + t*tg; vec2 c = c0 + dc*t;
+    if (hr > uTopH || c.y < -40.0) break;   /* (over everything the coast has, or well out over the sea) */
+    float tq = topC(c), v = clamp(0.5 - (tq - hr)/(1.4 + t*0.0093), 0.0, 1.0);   /* (into what is in the way, over the width of the sun's disc there) */
+    if (v < vis){ vis = v; tMin = t; }
+    req = max(req, tq - t*tg);
+    if (vis <= 0.0 && !edge) break;
+    t = t*1.08 + 1.5;
+  }
+  gl_FragColor = vec4(vis, clamp(tMin/1000.0, 0.0, 1.0), clamp(top/400.0, 0.0, 1.0), clamp(req/400.0, 0.0, 1.0));
+}`, depthTest: false, depthWrite: false, toneMapped: false });
+      const sc = new T.Scene(), cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), qd = new T.Mesh(new T.PlaneGeometry(2, 2), mat); qd.frustumCulled = false; sc.add(qd);
+      const L = new T.Vector3(0, 1, 0), last = new T.Vector3(0, -9, 0), memo = new Map(), ring = ix => ((ix % NX) + NX) % NX;
+      let want = NONE, drawn = NONE, queue = [], qi = 0, dirty = false, ready = false, n = 0, ms = 0, lastT = -1e9, built = 0, topH = 420;
+      const cleared = (x, z) => clear(x - o.x, z - o.z);
+      const put = (k, j, v) => { const i = j * NX + k; hf[i] = v; hh[i] = toH(v); };
+      /* column ix (x = ix·C along the coast): near the shore every cell; from row JF on, the even columns every other row
+         with the rows between filled in, the odd ones between their neighbours (worked out first) when they have them */
+      function column(ix) {
+        const k = ring(ix), x = ix * C, cx = Layout.camp.x + o.x, ka = ring(ix - 1), kb = ring(ix + 1);
+        for (let j = 0; j < JF; j++) put(k, j, topAt(x, ZA + j * C, cx, cleared));
+        const a = slot[ka] === ix - 1, b = slot[kb] === ix + 1;
+        if ((ix & 1) === 0 || (!a && !b)) {
+          for (let j = JF; j < NZ; j += 2) put(k, j, topAt(x, ZA + j * C, cx, cleared));
+          for (let j = JF + 1; j < NZ; j += 2) put(k, j, j + 1 < NZ ? 0.5 * (hf[(j - 1) * NX + k] + hf[(j + 1) * NX + k]) : hf[(j - 1) * NX + k]);
+        } else for (let j = JF; j < NZ; j++) put(k, j, a && b ? 0.5 * (hf[j * NX + ka] + hf[j * NX + kb]) : hf[j * NX + (a ? ka : kb)]);
+        let mx = 0; for (let j = 0; j < NZ; j++) mx = Math.max(mx, hf[j * NX + k]);
+        slot[k] = ix; colTop[k] = mx; built++;
+      }
+      /* the window wanted now: round the camera, a little more of it on the light's side along the coast (the shade a low
+         sun throws comes from there); a new one once that has moved 128 m: its new columns, nearest the camera first */
+      function plan() {
+        const lh = Math.hypot(L.x, L.z), lx = lh > 1e-3 && L.y < 0.95 ? L.x / lh : 0, cc = Math.round((lastCam + o.x) / C), w0 = Math.round((lastCam + o.x + 260 * lx) / C) - NX / 2;
+        if (want !== NONE && Math.abs(w0 - want) < 32) return;
+        want = w0; queue = []; qi = 0;
+        for (let p = 0; p < 2; p++) { const Q = []; for (let ix = w0; ix < w0 + NX; ix++) if ((ix & 1) === p && slot[ring(ix)] !== ix) Q.push(ix); Q.sort((a, b) => Math.abs(a - cc) - Math.abs(b - cc)); for (const ix of Q) queue.push(ix); }
+        if (!queue.length) { hTex.needsUpdate = true; dirty = true; }
+      }
+      function draw() {
+        const t0 = performance.now(), prt = R.getRenderTarget(), pac = R.autoClear;
+        let top = 0; for (let k = 0; k < NX; k++) top = Math.max(top, colTop[k]);
+        mat.uniforms.uL.value.copy(L); mat.uniforms.uHW.value.x = ring(want); mat.uniforms.uTopH.value = top + 2;
+        R.autoClear = false; R.setRenderTarget(rt); R.render(sc, cam); R.setRenderTarget(prt); R.autoClear = pac;
+        drawn = want; topH = top + 2; last.copy(L); lastT = performance.now(); ms = lastT - t0; n++; memo.clear(); ready = true;
+        cu.uIsSh.value = rt.texture; cu.uIsShL.value.copy(L); cu.uIsShOn.value = 1;
+      }
+      /* every frame: the light's way (toward it), and the frame's share of the heights' work; drawn again when the window
+         is ready, or the light has moved a twentieth of a degree (no more than four times a second as the time-lapse runs,
+         unless it has jumped). The map is where it was drawn, on the coast: in the world, wherever the origin is now */
+      function update(dir, force) {
+        L.set(dir[0], dir[1], dir[2]).normalize();
+        plan();
+        if (qi < queue.length) {
+          /* (more a frame when there is no map yet, or the camera has gone somewhere else altogether) */
+          const t0 = performance.now(), budget = !ready || queue.length - qi > 96 ? 6 : 2.5;
+          while (qi < queue.length && performance.now() - t0 < budget) column(queue[qi++]);
+          if (qi >= queue.length) { queue = []; qi = 0; hTex.needsUpdate = true; dirty = true; }
+        }
+        if (qi === 0 && !queue.length && want !== NONE) {
+          const ang = Math.acos(Math.max(-1, Math.min(1, L.dot(last)))), now = performance.now();
+          if (dirty || force || ang >= 0.035 || (ang >= 0.0009 && now - lastT >= 250)) { draw(); dirty = false; }
+        }
+        if (drawn === NONE) { cu.uIsShOn.value = 0; return false; }
+        cu.uIsShG.value.set(drawn * C - C / 2 - o.x, ZA - C / 2 - o.z, 1 / (NX * C), 1 / (NZ * C));
+        return true;
+      }
+      /* (the coast moved under the camp: its clearing is somewhere else now, so every column is worked out again; no
+         shade till then) */
+      function invalidate() { slot.fill(NONE); want = drawn = NONE; queue = []; qi = 0; ready = false; memo.clear(); cu.uIsShOn.value = 0; }
+      /* how much of the light reaches the world point (x, z), for what the engine wants to know of it (how much shade the
+         camera is in): the same look toward the light, here from the heights themselves */
+      function hAt(cx, cz) {
+        cx = Math.max(0, Math.min(NX - 1, cx)); if (cz < 0) return 0; cz = Math.min(NZ - 1, cz);
+        const i0 = Math.min(NX - 2, Math.floor(cx)), j0 = Math.min(NZ - 2, Math.floor(cz)), fx = cx - i0, fz = cz - j0, k0 = ring(drawn + i0), k1 = ring(drawn + i0 + 1);
+        return (hf[j0 * NX + k0] * (1 - fx) + hf[j0 * NX + k1] * fx) * (1 - fz) + (hf[(j0 + 1) * NX + k0] * (1 - fx) + hf[(j0 + 1) * NX + k1] * fx) * fz;
+      }
+      function at(x, z) {
+        if (!ready || drawn === NONE) return 1;
+        const key = Math.round(x / 2) * 100003 + Math.round(z / 2); let v = memo.get(key); if (v !== undefined) return v;
+        const lh = Math.hypot(last.x, last.z); v = 1;
+        if (lh > 1e-4 && last.y < 0.999) {
+          const c0x = (x + o.x) / C - drawn, c0z = (z + o.z - ZA) / C, ux = last.x / lh / C, uz = last.z / lh / C, tg = last.y / lh, h0 = hAt(c0x, c0z) + 0.8;
+          for (let i = 0, t = 2; i < 64; i++) {
+            const hr = h0 + t * tg, cz = c0z + uz * t; if (hr > topH || cz < -40) break;
+            v = Math.min(v, Math.max(0, Math.min(1, 0.5 - (hAt(c0x + ux * t, cz) - hr) / (1.4 + t * 0.0093)))); if (v <= 0) break;
+            t = t * 1.08 + 1.5;
+          }
+        }
+        if (memo.size > 64) memo.clear(); memo.set(key, v); return v;
+      }
+      return { update, at, invalidate, rt, hTex, get ms() { return ms; }, get n() { return n; }, get built() { return built; }, get pending() { return queue.length - qi; }, get ready() { return ready; } };
+    })();
 
     /* a chunk: its groups for each level of detail, what it holds, what the van must drive round, the rocks in the water */
     function chunk(c) {
@@ -1014,6 +1165,7 @@ void main(){
     /* every frame: lay out the chunks around the camera, draw each at its level of detail, and spend about `budget`
        milliseconds building what is missing, nearest first (more when the chunk under the camera is not there yet) */
     function update(camX, budget = 4) {
+      lastCam = camX;
       if (Layout.coastVer !== ver) reset();
       const cx = camX + o.x, c0 = Math.floor((cx - X0) / CW), span = Math.ceil(LOD.view / CW) + 1;
       for (let c = c0 - span; c <= c0 + span; c++) {
@@ -1039,7 +1191,12 @@ void main(){
     /* the chunk round the camp, built at once so the first frame is whole (the worst step counts from here on) */
     function prime() { const t0 = performance.now(), c = campC(), ch = chunks.get(c) || chunk(c); ch.d = 0; finish(ch, 0); stat.prime = performance.now() - t0; stat.worst = 0; }
     /* start again from nothing (the coast moved under the camp: Layout.setOrigin) */
-    function reset() { while (live.length) recycle(live[live.length - 1]); o.x = Layout.O.x; o.z = Layout.O.z; ver = Layout.coastVer; prime(); }
+    function reset() {
+      const moved = o.x !== Layout.O.x || o.z !== Layout.O.z;
+      while (live.length) recycle(live[live.length - 1]); o.x = Layout.O.x; o.z = Layout.O.z; ver = Layout.coastVer;
+      if (shade && moved) shade.invalidate();
+      prime();
+    }
 
     /* what the van must drive round near a world point: rocks, trunks, and whatever hooks added (the obstacles
        themselves, [x, z, radius, kind]; the list is reused by the next call) */
@@ -1082,7 +1239,7 @@ void main(){
       return n;
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
-    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0,
+    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },

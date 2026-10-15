@@ -351,7 +351,7 @@ void main(){
   vec3 nl = normalize(Tg*tn.x + Bt*tn.y + Nc*max(tn.z, 0.05))*face;
   vec3 nb = normalize(vN);
   /* (sh: the shadow map's, and round the island the shade of its hill and forest) */
-  float tsh = isleSh(vWPos.xz), ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT), sh = leafShadow(vWPos)*tsh;
+  float tsh = isleShAt(vWPos), ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT), sh = leafShadow(vWPos)*tsh;
   /* how much of the sun gets this far into the crown */
   float vis = mix(0.1, 1.0, smoothstep(-0.4, 0.6, cr))*mix(0.32, 1.0, ao)*sh;
   vec3 alb = tx.rgb*uTint*vTint;

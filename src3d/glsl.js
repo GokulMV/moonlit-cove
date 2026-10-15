@@ -18,43 +18,66 @@ const GLSL = (() => {
   /* the island (island.js, when the page is asked for it): over a grid of 2.5 m cells round it, the distance to the shore
      at the mean of the tide, the way to the sea from there, the ground's height or the sea floor's (uIsF); where along the
      coast the nearest shore is (uIsU: exact, and joined across cells only where the cells agree); what that shore is like
-     (uIsK: how far the tide moves the water up it, its beach's width, how much of it is sand, how open it is to the swell;
-     uIsC: how much rock, cliff and mangrove, how far its reef runs out); and the coastline itself, a texel a metre (uIsL,
+     (uIsKC, in two planes: how far the tide moves the water up it, its beach's width, how much of it is sand, how open
+     it is to the swell; how much rock, cliff and mangrove, how far its reef runs out); and the coastline itself, a texel a metre (uIsL,
      in two planes, as island.js packs it) */
-  /* how much of the key light (the sun by day, the moon by night) reaches a point past the island's hill and its forest
-     (isle.js works it out over the grid, for the light's direction as it moves: r how much, g how far off what is in the
-     way, as a share of a kilometre); off the island, all of it. Its edges as ragged as the crowns that cast them when what
-     casts them is near (a canopy's edge), smooth when it is far (the hill's). Standalone, for any shader */
-  const ISLE_SH = Layout.isle ? `
+  /* how much of the key light (the sun by day, the moon by night) reaches a point past the land and the forest that
+     stand toward it: round the island its hill and forest (isle.js), along the coast its hills, headlands, mountains and
+     forest (world.js), each worked out over a map of the ground round the camera for the light's direction as it moves:
+     r how much, g how far off what is in the way (a share of a kilometre), b the top of what stands there (a share of
+     400 m), a how high a ray from there must start to clear everything toward the light (the same). Its edges as ragged as
+     the crowns that cast them when what casts them is near (a canopy's edge), smooth when it is far (a hill's). Off the
+     map, from where the way toward the light comes onto it: how high it comes, against how high it has to. Standalone,
+     for any shader; all the light when there is no map (uIsShOn 0) */
+  const ISLE_SH = `
 #ifndef ISLE_SH
 #define ISLE_SH
 uniform sampler2D uIsSh; uniform vec4 uIsShG; uniform float uIsShOn; uniform vec3 uIsShL;
 float isShH(vec2 i){ return fract(sin(dot(i, vec2(127.1, 311.7)))*43758.5453); }
 float isShN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
   return mix(mix(isShH(i), isShH(i + vec2(1.0, 0.0)), f.x), mix(isShH(i + vec2(0.0, 1.0)), isShH(i + vec2(1.0, 1.0)), f.x), f.y); }
+/* (off the map: the way toward the light, from p at the height of the sea, onto the map; there, what a ray needs to get by.
+   Where that way never comes onto it, the map's nearest edge as it is: the coast beyond goes on as it was) */
+float isShOff(vec2 p){
+  vec2 Lh = uIsShL.xz; float lh = length(Lh); if (lh < 1e-4) return 1.0;
+  Lh /= lh; float tg = uIsShL.y/lh;
+  vec2 sz = 1.0/uIsShG.zw, iv = 1.0/(Lh + vec2(Lh.x < 0.0 ? -1e-5 : 1e-5, Lh.y < 0.0 ? -1e-5 : 1e-5));
+  vec2 t0 = (uIsShG.xy - p)*iv, t1 = (uIsShG.xy + sz - p)*iv, tn = min(t0, t1), tf = max(t0, t1);
+  float tin = max(max(tn.x, tn.y), 0.0), tout = min(tf.x, tf.y);
+  if (tout <= tin) return texture2D(uIsSh, clamp((p - uIsShG.xy)*uIsShG.zw, vec2(0.003), vec2(0.997))).r;
+  vec4 s = texture2D(uIsSh, clamp((p + Lh*tin - uIsShG.xy)*uIsShG.zw, vec2(0.003), vec2(0.997)));
+  return clamp(0.5 - (s.a*400.0 - 0.8 - tin*tg)/(1.4 + (tin + s.g*1000.0)*0.0093), 0.0, 1.0);
+}
 float isleSh(vec2 p){
   if (uIsShOn < 0.5) return 1.0;
   vec2 uv = (p - uIsShG.xy)*uIsShG.zw;
-  if (uv.x <= 0.001 || uv.y <= 0.001 || uv.x >= 0.999 || uv.y >= 0.999) return 1.0;
+  if (uv.x <= 0.002 || uv.y <= 0.002 || uv.x >= 0.998 || uv.y >= 0.998) return isShOff(p);
   vec4 s = texture2D(uIsSh, uv); float v = s.r, e = 4.0*v*(1.0 - v)*(1.0 - smoothstep(0.08, 0.4, s.g));
   if (e > 0.01) v = clamp(v + (isShN(p*0.21)*0.62 + isShN(p*0.63 + 7.3)*0.38 - 0.5)*1.25*e, 0.0, 1.0);
   return v;
 }
-/* (for something up in the air, that high over the ground: the shade where the light comes down past it to the ground,
-   further from the light the higher it is, so a gull over a beach in the hill's shade can still be in the last sun) */
-float isleShUp(vec3 w, float above){ vec3 L = uIsShL; return isleSh(w.xz - L.xz*(clamp(above, 0.0, 60.0)/max(L.y, 0.06))); }
-#endif
-` : `
-#ifndef ISLE_SH
-#define ISLE_SH
-float isleSh(vec2 p){ return 1.0; }
-float isleShUp(vec3 w, float above){ return 1.0; }
+/* (for a point anywhere: on the ground or the forest's top, as isleSh; higher than that — a palm's crown over the sand, a
+   gull, a tree standing out of the canopy — the shade where the light comes down past it, further from the light the
+   higher it is, so a crown over a shaded beach can still be in the last sun) */
+float isleShAt(vec3 w){
+  if (uIsShOn < 0.5) return 1.0;
+  vec2 uv = (w.xz - uIsShG.xy)*uIsShG.zw;
+  float top = uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0 ? texture2D(uIsSh, uv).b*400.0 : 0.0;
+  float above = w.y - top - 0.8, k = smoothstep(1.5, 4.0, above);
+  return isleSh(w.xz - uIsShL.xz*(k*min(above, 150.0)/max(uIsShL.y, 0.06)));
+}
 #endif
 `;
   const ISLE_GL = `
-uniform highp sampler2D uIsF, uIsU, uIsL; uniform sampler2D uIsK, uIsC;
+uniform highp sampler2D uIsF, uIsU, uIsL;
+/* (what the nearest shore is like, in two planes one over the other in a single texture — a GPU gives a shader only so
+   many — the first over the grid's top half, the second over its bottom: tide, beach width, sand, swell; rock, cliff,
+   mangrove, reef) */
+uniform sampler2D uIsKC;
 uniform vec4 uIsG;   /* the grid's corner (x, z), and one over its size in metres (x, z) */
 uniform vec4 uIsD;   /* how many cells across and down, metres a cell, cells a metre */
+vec4 isK(vec2 uv){ float h = 0.5/uIsD.y; return texture(uIsKC, vec2(uv.x, clamp(uv.y, h, 1.0 - h)*0.5)); }
+vec4 isC(vec2 uv){ float h = 0.5/uIsD.y; return texture(uIsKC, vec2(uv.x, 0.5 + clamp(uv.y, h, 1.0 - h)*0.5)); }
 uniform vec4 uIsN;   /* the coast's length round, how far along it the camp is from where it starts, its texels, texels a metre */
 vec2 isUV(vec2 p){ return (p - uIsG.xy)*uIsG.zw; }
 vec4 isF(vec2 p){
@@ -78,18 +101,18 @@ vec4 isLine(float u, int plane){
 }
 struct ShoreQ { float s; float sm; float a; vec2 n; vec4 k1; vec4 k2; float h; };
 ShoreQ shoreQ(vec2 p){
-  ShoreQ q; vec4 f = isF(p); vec2 uv = isUV(p); vec4 k1 = texture(uIsK, uv), k2 = texture(uIsC, uv);
+  ShoreQ q; vec4 f = isF(p); vec2 uv = isUV(p); vec4 k1 = isK(uv), k2 = isC(uv);
   q.k1 = vec4(k1.x*1.5, k1.y*50.0, k1.z, k1.w); q.k2 = vec4(k2.xyz, k2.w*128.0);
   q.sm = f.x; q.s = f.x + uTideZ*q.k1.x; q.n = f.yz*inversesqrt(max(dot(f.yz, f.yz), 1e-6)); q.a = isU(p); q.h = f.w;
   return q;
 }
-float shoreS(vec2 p){ return isF(p).x + uTideZ*texture(uIsK, isUV(p)).x*1.5; }
+float shoreS(vec2 p){ return isF(p).x + uTideZ*isK(isUV(p)).x*1.5; }
 float shoreMeanS(vec2 p){ return isF(p).x; }
 vec2 shoreN(vec2 p){ vec2 n = isF(p).yz; return n*inversesqrt(max(dot(n, n), 1e-6)); }
 float shoreA(vec2 p){ return isU(p); }
-float shoreVeg(vec2 p){ return -isF(p).x - texture(uIsK, isUV(p)).y*50.0; }
-vec4 shoreK1(vec2 p){ vec4 k = texture(uIsK, isUV(p)); return vec4(k.x*1.5, k.y*50.0, k.z, k.w); }
-vec4 shoreK2(vec2 p){ vec4 k = texture(uIsC, isUV(p)); return vec4(k.xyz, k.w*128.0); }
+float shoreVeg(vec2 p){ return -isF(p).x - isK(isUV(p)).y*50.0; }
+vec4 shoreK1(vec2 p){ vec4 k = isK(isUV(p)); return vec4(k.x*1.5, k.y*50.0, k.z, k.w); }
+vec4 shoreK2(vec2 p){ vec4 k = isC(isUV(p)); return vec4(k.xyz, k.w*128.0); }
 float shoreFloor(vec2 p, float s){ return isF(p).w; }
 `;
   const COAST = `
@@ -695,9 +718,13 @@ vec2 nearQ(vec2 p){ vec2 d = p - uNearT.xy; return vec2(d.x*uNearT.z - d.y*uNear
 ${WAVEH}
 ${NEARQ}
 varying vec3 vW; varying vec3 vNg; varying float vH;
+/* (how much of the sun (left) and the moon (right) shows past the clouds, from the camera: the same everywhere, so read
+   here rather than in every pixel, where it would take one of the few textures a GPU gives a shader) */
+uniform sampler2D uSunVis; varying vec2 vVis;
 void main(){
   vec4 wp = modelMatrix*vec4(position, 1.0);
   vNg = vec3(0.0, 1.0, 0.0); vH = 0.0;
+  vVis = vec2(smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.25, 0.5)).r), smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.75, 0.5)).r));
   #ifdef NEAR
     vec2 nq = nearQ(wp.xz);
     float fade = smoothstep(uNearRect.x, uNearRect.x + 18.0, nq.x)*smoothstep(uNearRect.z, uNearRect.z - 18.0, nq.x)*smoothstep(uNearRect.y, uNearRect.y + 16.0, nq.y);
@@ -758,7 +785,7 @@ float vanAO(vec3 wp){
 uniform vec4 uDecalRect; uniform vec2 uShadowSize; uniform mat4 uShadowMatrix;
 uniform vec3 uAmb, uKeyDir, uKeyCol, uMoonGlit, uSunGlit;
 ${CLOUDSHADOW}
-uniform sampler2D uSunVis;  /* how much of the sun (left) and the moon (right) shows past the clouds, from the camera */
+varying vec2 vVis;           /* how much of the sun (x) and the moon (y) shows past the clouds, from the camera */
 ${WAVEH}
 uniform int uNRip;          /* click splashes (row 1 of uSurgeT: x, z, start time, strength), uNRip of them */
 uniform float uUwMax;       /* the biggest clicked swell about (how far up the sand to look for its swash) */
@@ -983,7 +1010,7 @@ void main(){
   float cs = cloudShadow(p)*isleSh(p);
   vec3 keyC = uKeyCol*cs;
   /* (the glitter is so bright that even a tenth of it still shines: a thin cloud lets some through, a thick one none) */
-  float visS = smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.25, 0.5)).r), visM = smoothstep(0.04, 0.9, texture2D(uSunVis, vec2(0.75, 0.5)).r);
+  float visS = vVis.x, visM = vVis.y;
   gSunK = visS;
   vec3 sunG = uSunGlit*visS*(0.35 + 0.65*cs), moonG = uMoonGlit*visM*(0.35 + 0.65*cs);
   /* artificial light only where there is any: round the camp, round the van, and in its headlights' reach */

@@ -227,7 +227,7 @@ void main(){
   n = vec3(n.x*cy + n.z*sy, n.y, -n.x*sy + n.z*cy);
   vec3 V = normalize(cameraPosition - vW), L = uKeyDirT; float ndl = dot(n, L);
   /* (the sun, or the moon, as much as gets past the island's hill and forest to this crown) */
-  vec3 kC = uKeyColT*isleSh(vW.xz);
+  vec3 kC = uKeyColT*isleShAt(vW);
   vec3 c = alb*uAmbF*(0.42 + 0.58*clamp(n.y*0.5 + 0.5, 0.0, 1.0))*(0.22 + 0.78*ao);
   c += alb*kC*clamp((ndl + 0.2)/1.2, 0.0, 1.0)*mix(0.32, 1.0, ao);
   /* (light through the leaves at the crown's edge, looking toward the sun) */

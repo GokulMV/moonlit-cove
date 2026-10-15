@@ -64,13 +64,14 @@ attribute vec4 aMark;           /* when it was made, when the sea took it, how w
 #ifdef RIBBON
   attribute vec2 aDir;          /* the way the wheel was rolling */
 #endif
-varying vec2 vUv; varying vec4 vMark; varying vec3 vU, vV;   /* the texture's across (u) and along (v), in the world */
+varying vec2 vUv, vWxz; varying vec4 vMark; varying vec3 vU, vV;   /* the texture's across (u) and along (v), in the world */
 void main(){
   vUv = uv; vMark = aMark;
   mat4 m = modelMatrix;
   #ifdef USE_INSTANCING
     m = m*instanceMatrix;
   #endif
+  vWxz = (m*vec4(position, 1.0)).xz;
   #ifdef RIBBON
     vU = vec3(-aDir.y, 0.0, aDir.x); vV = vec3(aDir.x, 0.0, aDir.y);
   #else
@@ -80,7 +81,8 @@ void main(){
 }`;
   const FS = `
 uniform sampler2D uMap; uniform vec3 uL; uniform float uKey, uNow, uLife;
-varying vec2 vUv; varying vec4 vMark; varying vec3 vU, vV;
+varying vec2 vUv, vWxz; varying vec4 vMark; varying vec3 vU, vV;
+${GLSL.ISLE_SH}
 void main(){
   vec4 m = texture2D(uMap, vUv, -0.7);                           /* (a little sharper than the mip level would have it) */
   if (m.a < 0.01) discard;
@@ -92,11 +94,12 @@ void main(){
   float occ = m.b*(0.4 + 0.25*vMark.z);                          /* deeper is darker, more so in wet sand */
   float churn = clamp(m.a - m.b*1.6, 0.0, 1.0)*(1.0 - vMark.z);  /* the dry sand kicked up round the edge is paler */
   float age = uNow - vMark.x, fade = (1.0 - smoothstep(uLife*0.55, uLife, age))*(1.0 - smoothstep(0.0, 0.7, uNow - vMark.y));
-  float d = (uKey*lit*1.15 - occ + 0.08*churn)*fade*m.a*vMark.w;
+  /* (in the shade of the land and the forest the sun picks out no dents: only their hollows are darker) */
+  float d = (uKey*isleSh(vWxz)*lit*1.15 - occ + 0.08*churn)*fade*m.a*vMark.w;
   gl_FragColor = vec4(vec3(clamp(0.5 + 0.5*d, 0.0, 1.0)), 1.0);
 }`;
   function material(map, life, ribbon) {
-    return new T.ShaderMaterial({ uniforms: { uMap: { value: map }, uL: { value: new T.Vector3(0, 1, 0) }, uKey: { value: 0.5 }, uNow: { value: 0 }, uLife: { value: life } }, defines: ribbon ? { RIBBON: 1 } : {},
+    return new T.ShaderMaterial({ uniforms: Object.assign({ uMap: { value: map }, uL: { value: new T.Vector3(0, 1, 0) }, uKey: { value: 0.5 }, uNow: { value: 0 }, uLife: { value: life } }, Mats.shadeU()), defines: ribbon ? { RIBBON: 1 } : {},
       vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false, side: T.DoubleSide,   /* (a left foot is a right one mirrored, which turns it over) */ polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
       blending: T.CustomBlending, blendEquation: T.AddEquation, blendSrc: T.DstColorFactor, blendDst: T.SrcColorFactor });   /* 2× multiply: 0.5 leaves the sand as it is */
   }

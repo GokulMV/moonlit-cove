@@ -562,8 +562,8 @@ void main(){
   vec3 nl = normalize(Tg*tn.x + Bt*tn.y + Nc*max(tn.z, 0.05))*face;
   vec3 nb = normalize(vN);
   float ao = vL.x, ndl = dot(nl, uKeyDirT), cr = dot(nb, uKeyDirT);
-  /* (sh: the shadow map's, and round the island the shade of its hill and forest) */
-  float tsh = isleSh(vWPos.xz), sh = leafShadow(vWPos)*tsh;
+  /* (sh: the shadow map's, and the shade of the land and the forest toward the light) */
+  float tsh = isleShAt(vWPos), sh = leafShadow(vWPos)*tsh;
   /* how much of the key light gets this far into the crown */
   float vis = mix(0.1, 1.0, smoothstep(-0.35, 0.6, cr))*mix(0.4, 1.0, ao)*sh;
   vec3 alb = tx.rgb*uTint*vTint*(0.88 + 0.24*vL.z);
@@ -667,6 +667,7 @@ void main(){
 }`;
   const CROWN_FS = `
 ${GLSL.CLOUDSHADOW}
+${GLSL.ISLE_SH}
 uniform sampler2D uCrownT; uniform vec3 uAmbF, uKeyDirT, uKeyCol; uniform vec4 uFog;
 varying vec2 vUv; varying vec3 vR; varying vec3 vU; varying vec3 vF; varying vec3 vW; varying vec3 vC;
 void main(){
@@ -676,7 +677,7 @@ void main(){
   if (t.a < 0.5 || cu.x < 0.02 || cu.x > 0.98 || cu.y < 0.02 || cu.y > 0.98) discard;
   vec2 q = t.rg*2.0 - 1.0; vec3 nb = vec3(q, sqrt(max(0.0, 1.0 - dot(q, q))));
   vec3 n = normalize(vR*nb.x + vU*nb.y + vF*nb.z);
-  float ao = t.b*(255.0/225.0), ndl = dot(n, uKeyDirT), cs = cloudShadow(vW.xz);
+  float ao = t.b*(255.0/225.0), ndl = dot(n, uKeyDirT), cs = cloudShadow(vW.xz)*isleShAt(vW);
   vec3 c = vC*uAmbF*(0.42 + 0.58*max(n.y, 0.0))*ao;
   c += vC*uKeyCol*max(ndl, 0.0)*cs*mix(0.2, 1.0, ao);
   c += vC*vec3(0.92, 1.06, 0.42)*uKeyCol*max(-ndl, 0.0)*0.45*ao*ao*cs*(1.0 - nb.z);
@@ -689,7 +690,7 @@ void main(){
   function crownMaterial(U) {
     const u = { uCrownT: { value: crownAtlas() }, uTime: Mats.U.uTime, uWindK: Mats.U.uWindK, uAmbF: Mats.U.uAmbF, uKeyDirT: Mats.U.uKeyDirT, uFog: Mats.U.uFog, uKeyCol: U.uKeyCol };
     for (const k of ['uWeather', 'uDriftW', 'uWind', 'uAltoD', 'uLdM', 'uCumulus', 'uStratus', 'uStorm', 'uAlto']) u[k] = U[k];
-    return new T.ShaderMaterial({ uniforms: u, vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
+    return new T.ShaderMaterial({ uniforms: Object.assign(u, Mats.shadeU()), vertexShader: CROWN_VS, fragmentShader: CROWN_FS });
   }
   /* painted card pixels (colour and normal, top row first) as textures: rows turned bottom-up, colours grown out under
      the transparent parts, coverage-kept mip levels (for the forest's own leaf cards, models/flora/) */

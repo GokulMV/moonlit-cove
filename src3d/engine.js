@@ -783,7 +783,7 @@ const Engine = (() => {
     /* (or the island's land, when the page is asked for the island, and its forest) */
     /* (the forest's and the fruit trees' bark and leaves painted at half the studio's fineness: a quarter of the time to wait) */
     FloraKit.Q.tex = opts.texQ ?? 0.5;
-    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest }) : World.build(natG, gU, noiseTex);
+    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest }) : World.build(natG, gU, noiseTex, { R });
     /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
     if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon !== false) {
       horizon = IsleHorizon.build(scene, { sky: skyU, U: Mats.U, mist: gU.uMist }); Object.assign(api, { horizon });

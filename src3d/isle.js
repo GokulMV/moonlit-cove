@@ -218,19 +218,21 @@ const IsleWorld = (() => {
       rt.texture.name = 'isle-shade';
       const clr = [[Layout.camp.x, Layout.camp.z, 25]].concat(park ? [[park.plan.hut.x, park.plan.hut.z, 13]] : []);
       const mat = new T.ShaderMaterial({
-        uniforms: { uIsF: cu.uIsF, uIsK: cu.uIsK, uIsC: cu.uIsC, uIsG: cu.uIsG, uL: { value: new T.Vector3(0, 1, 0) },
-          uClr: { value: [0, 1, 2, 3].map(i => new T.Vector4(...(clr[i] || [0, 0, 0]), 0)) } },
+        uniforms: { uIsF: cu.uIsF, uIsKC: cu.uIsKC, uIsG: cu.uIsG, uIsD: cu.uIsD, uL: { value: new T.Vector3(0, 1, 0) },
+          uClr: { value: [0, 1, 2, 3].map(i => new T.Vector4(...(clr[i] || [0, 0, 0]), 0)) }, uEd: { value: new T.Vector2(3 / W2, 3 / H2) } },
         vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
         fragmentShader: `
-uniform highp sampler2D uIsF; uniform sampler2D uIsK, uIsC; uniform vec4 uIsG;
+uniform highp sampler2D uIsF; uniform sampler2D uIsKC; uniform vec4 uIsG, uIsD;
 uniform vec3 uL;          /* toward the light */
 uniform vec4 uClr[4];     /* the clearings: x, z, radius */
+uniform vec2 uEd;         /* three texels, as a share of the grid across and down */
 varying vec2 vUv;
 /* the top of whatever stands at p: the ground (or the sea's surface), and the forest's canopy over it */
 float topAt(vec2 p){
   vec2 uv = (p - uIsG.xy)*uIsG.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  vec4 f = texture2D(uIsF, uv), k1 = texture2D(uIsK, uv), k2 = texture2D(uIsC, uv);
+  float hv = 0.5/uIsD.y, vk = clamp(uv.y, hv, 1.0 - hv)*0.5;
+  vec4 f = texture2D(uIsF, uv), k1 = texture2D(uIsKC, vec2(uv.x, vk)), k2 = texture2D(uIsKC, vec2(uv.x, 0.5 + vk));
   float d = -f.x, W = k1.y*50.0, sand = k1.z, rock = k2.x, cliff = k2.y, mang = k2.z;
   /* (where forest.js grows it: back from a beach's top, behind the bare rock of a rocky shore, on the mangroves' mud) */
   float rk = (rock + cliff)*(1.0 - smoothstep(W + 4.0, W + 18.0, d));
@@ -244,20 +246,24 @@ float topAt(vec2 p){
 }
 void main(){
   vec2 p = uIsG.xy + vUv/uIsG.zw;
-  vec2 Lh = uL.xz; float lh = length(Lh);
-  if (lh < 1e-4 || uL.y > 0.999){ gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0); return; }
+  vec2 Lh = uL.xz; float lh = length(Lh), top = topAt(p);
+  if (lh < 1e-4 || uL.y > 0.999){ gl_FragColor = vec4(1.0, 1.0, clamp(top/400.0, 0.0, 1.0), 0.0); return; }
   Lh /= lh; float tg = uL.y/lh;
-  float h0 = topAt(p) + 0.8, vis = 1.0, tMin = 1000.0, t = 3.0;
+  /* (and how high a ray from here would have to start to get past everything: for what lies off the grid, beyond here;
+     only at the grid's edges is that wanted: elsewhere, once there is no light left, no need to look further) */
+  float h0 = top + 0.8, vis = 1.0, tMin = 1000.0, t = 3.0, req = 0.0;
+  bool edge = vUv.x < uEd.x || vUv.y < uEd.y || vUv.x > 1.0 - uEd.x || vUv.y > 1.0 - uEd.y;
   for (int i = 0; i < 60; i++){
     float hr = h0 + t*tg; vec2 q = p + Lh*t, uq = (q - uIsG.xy)*uIsG.zw;
     if (hr > 300.0 || uq.x < 0.0 || uq.y < 0.0 || uq.x > 1.0 || uq.y > 1.0) break;   /* (over everything the island has, or off its grid) */
-    float pen = (topAt(q) - hr)/(1.4 + t*0.0093);   /* (into what is in the way, over the width of the sun's disc there) */
+    float tq = topAt(q), pen = (tq - hr)/(1.4 + t*0.0093);   /* (into what is in the way, over the width of the sun's disc there) */
     float v = clamp(0.5 - pen, 0.0, 1.0);
     if (v < vis){ vis = v; tMin = t; }
-    if (vis <= 0.0) break;
+    req = max(req, tq - t*tg);
+    if (vis <= 0.0 && !edge) break;
     t = t*1.12 + 1.0;
   }
-  gl_FragColor = vec4(vis, clamp(tMin/1000.0, 0.0, 1.0), 0.0, 1.0);
+  gl_FragColor = vec4(vis, clamp(tMin/1000.0, 0.0, 1.0), clamp(top/400.0, 0.0, 1.0), clamp(req/400.0, 0.0, 1.0));
 }`, depthTest: false, depthWrite: false, toneMapped: false });
       const sc = new T.Scene(), cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), q = new T.Mesh(new T.PlaneGeometry(2, 2), mat); q.frustumCulled = false; sc.add(q);
       cu.uIsSh.value = rt.texture; cu.uIsShG.value.copy(cu.uIsG.value);

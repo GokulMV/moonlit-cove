@@ -35,8 +35,8 @@ vec3 fogIt(vec3 c, vec3 wp){
   return mix(c, uFog.rgb*0.9, (1.0 - exp(-d/180.0))*0.12*uFog.w);
 }
 vec3 shade(vec3 alb, vec3 n, vec3 wp, float thin, float gloss){
-  /* (round the island, none of the key light in the shade of its hill and forest; up in the air, the shade there) */
-  float ndl = dot(n, uKeyDirT); vec3 kc = uKeyColT*isleShUp(wp, wp.y - 1.2);
+  /* (none of the key light in the shade of the land and the forest toward it; up in the air, the shade up there) */
+  float ndl = dot(n, uKeyDirT); vec3 kc = uKeyColT*isleShAt(wp);
   vec3 L = uAmbF*(0.55 + 0.45*max(n.y, 0.0)) + kc*(max(ndl, 0.0) + thin*max(-ndl, 0.0) + 0.05);
   if (length(wp.xz - vec2(${Layout.camp.x.toFixed(2)}, ${Layout.camp.z.toFixed(2)})) < 19.0 || length(wp.xz - uVanPos.xz) < 12.0 || (uHead.w > 0.001 && length(wp.xz - uHead.xz) < 34.0) || torchNear(wp)) L += artLight(wp, n);
   vec3 c = alb*L;
@@ -354,7 +354,7 @@ void main(){
   vec4 mv = modelViewMatrix*vec4(p, 1.0);
   float d = max(-mv.z, 0.1), px = 0.03*uScale/d;
   float back = pow(max(dot(normalize(p - cameraPosition), uKeyDirT), 0.0), 6.0);
-  vC = uAmbF*0.3 + uKeyColT*isleShUp(p, p.y - 1.2)*(0.03 + 1.4*back);
+  vC = uAmbF*0.3 + uKeyColT*isleShAt(p)*(0.03 + 1.4*back);
   vA = uI*min(1.0, px)*smoothstep(45.0, 25.0, d)*(0.55 + 0.45*back);
   gl_PointSize = max(px, 1.0);
   gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
@@ -374,7 +374,7 @@ void main(){
   vA = tt > 0.0 && tt < life && p.y > -0.05 ? 1.0 - tt/life : 0.0;
   vec4 mv = modelViewMatrix*vec4(p, 1.0);
   float px = 0.07*uScale/max(-mv.z, 0.1);
-  vA *= min(1.0, px); vC = uAmbF*1.8 + uKeyColT*isleShUp(p, p.y)*0.65;
+  vA *= min(1.0, px); vC = uAmbF*1.8 + uKeyColT*isleShAt(p)*0.65;
   gl_PointSize = max(px, 1.0);
   gl_Position = vA < 0.01 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix*mv;
 }`;
