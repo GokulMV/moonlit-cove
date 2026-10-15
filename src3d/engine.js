@@ -952,7 +952,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     }
   }
   Object.defineProperty(api, 'isleMs', { get: () => isleMs });
-  let lastCW = 0, lastCH = 0, fabT = null, shExT = null, shExK = 9, hutExT = null, hutExK = 0;
+  let lastCW = 0, lastCH = 0, fabT = null, shExT = null, shExK = 9, hutExT = null, hutExK = 0, canExT = null, canExK = 0;
   function render(o) {
     /* keep the renderer's own size (and so its screen viewport) in step with the canvas,
        or a resized window shows the frame in only part of it */
@@ -967,6 +967,13 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
       const dt = shExT === null ? 1 : Math.max(0, Math.min(1, (o.t - shExT) / 1.2)); shExT = o.t; shExK += (k - shExK) * (shExK > 1.5 ? 1 : dt);
       const lu = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], la = lu(S.amb), ld = lu(S.keyCol) * Math.max(0, S.keyDir[1]);
       S.exposure = Math.min(16, S.exposure * (la + ld + 0.0045) / (la + ld * (0.4 + 0.6 * Math.min(1, shExK)) + 0.0045));
+      /* (and down under the forest's canopy, where only a fifth of the sky's light gets in, the eye opens up further for
+         the green half-light, over a couple of seconds; the gaps to the sky go bright) */
+      if (world.shade.top) {
+        const top = world.shade.top(cp[0], cp[2]), q = Math.max(0, Math.min(1, (top - cp[1] - 5) / 11)), kc = q * q * (3 - 2 * q);
+        const dtc = canExT === null ? 1 : Math.max(0, Math.min(1, (o.t - canExT) / 2.0)); canExT = o.t; canExK += (kc - canExK) * dtc;
+        S.exposure = Math.min(16, S.exposure * (1 + 1.4 * canExK * (0.3 + 0.7 * S.day)));
+      }
     }
     /* (and in a hut's room, the eye opening up for its dimmer light over a second or so; the doorway and the windows go
        bright) */
