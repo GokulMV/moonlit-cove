@@ -831,10 +831,15 @@
   function orbPanBy(dx, dy, t) { const d = panDelta(dx, dy); orbNudge(0, 0, 0, d[0], d[1], t); }
   /* the wheel zooms (a pinch on a trackpad comes as a wheel with Ctrl held: gently); a sideways swipe on a trackpad
      moves along the beach. A burst of scrolling counts as one swipe, and brings its own momentum */
+  /* (a trackpad's two-finger scroll, not a mouse wheel's notches: in pixels, sideways too, or in small or fractional
+     steps. Round the island it moves the map under the fingers, as a map's does; a pinch still zooms) */
+  const looksPad = e => e.deltaMode === 0 && (Math.abs(e.deltaX) > 0.01 || Math.abs(e.deltaY) % 1 > 0.01 || Math.abs(e.deltaY) < 30);
   function orbWheel(e) {
-    const now = performance.now(), k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? view.h : 1;
-    if (now - ex.wheelT > 180) gestureStart(e.timeStamp);
+    const now = performance.now(), k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? view.h : 1, fresh = now - ex.wheelT > 180;
+    if (fresh) gestureStart(e.timeStamp);
+    if (ISLE && !e.ctrlKey) { if (fresh) ex.pad = looksPad(e); else if (looksPad(e)) ex.pad = true; }
     ex.wheelT = now; orb.lastEnd = now / 1000;
+    if (ISLE && !e.ctrlKey && ex.pad) { const d = panDelta(-clamp(e.deltaX * k, -150, 150), -clamp(e.deltaY * k, -150, 150)); orbNudge(0, 0, 0, d[0], d[1], e.timeStamp); return; }
     let dx = clamp(e.deltaX * k, -150, 150), dy = clamp(e.deltaY * k, -150, 150);
     if (e.shiftKey && !dx) { dx = dy; dy = 0; }
     const d = panDelta(-dx, 0);
@@ -1460,6 +1465,8 @@
     const ox = wk.x, oz = wk.z; wk.ox = ox; wk.oz = oz;
     wk.x -= Math.sin(wk.h) * wk.v * dt; wk.z -= Math.cos(wk.h) * wk.v * dt;
     walkCollide();
+    /* round the island, pushing on into the forest where there is no path: once, where the nearest way in is */
+    if (Layout.isle && !wk.auto && (wk.blocked || 0) > 30 && !st.forestTold) { st.forestTold = true; forestWay(); }
     const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
     wk.odo += dist;
     /* a step every stride's half, left and right in turn */
@@ -1520,6 +1527,16 @@
       Engine.marks.foot(x, z, wk.h - wk.foot * 0.09, wk.foot < 0, sandWet(x, z), st.t);
       wk.prints++;
     } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
+  }
+  /* (the forest is too thick to walk into off its trails: say so, and which way the nearest trail's end is, by the
+     compass, as the map has it) */
+  function forestWay() {
+    const W = Engine.world, T = W && W.trails ? W.trails.trails.filter(t => t.n > 4) : [];
+    let best = null, bd = Infinity;
+    for (const t of T) for (const i of [0, t.n - 1]) { const d = Math.hypot(t.X[i] - wk.x, t.Z[i] - wk.z); if (d < bd) { bd = d; best = [t.X[i], t.Z[i], t.name]; } }
+    if (!best) { toast('The forest is too thick to walk into here.', false, 3800); return; }
+    const dx = best[0] - wk.x, dz = best[1] - wk.z, k = (Math.atan2(dz, -dx) / TAU * 8 + 8.5 | 0) % 8, dirs = ['north', 'north-west', 'west', 'south-west', 'south', 'south-east', 'east', 'north-east'];
+    toast(`Too thick to walk into here: the forest is walked by its trails. ${best[2] ? 'The ' + best[2] + ' starts' : 'The nearest trail starts'} ${bd < 30 ? 'just' : Math.round(bd / 10) * 10 + ' m'} ${dirs[k]} of you (it’s on the map).`, false, 6500);
   }
   function startWalk() {
     if (wk.on || !ready) return;
@@ -1588,6 +1605,7 @@
     $('iName').textContent = info.name; $('iLatin').textContent = info.latin; $('iNote').textContent = info.note;
     $('iThrow').textContent = info.big ? 'Let it go' : throwWords(info.home); $('iKeep').hidden = !info.flower; $('iKeep').textContent = 'Add it to the bouquet'; $('iPut').hidden = !!info.big;
     $('iPut').firstChild.textContent = info.fruit ? 'Drop it ' : 'Put it down ';
+    $('iHint').textContent = info.big ? 'Drag to turn it round · scroll to look closer · flick it away to let it go' : 'Drag to turn it over · scroll to look closer · flick it up and away to throw it';
     if (info.fruit) fruitCard(info);
     $('insp').hidden = false; document.body.classList.add('inspecting');
     if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }

@@ -92,7 +92,7 @@
       let c = mix(SILVER, WARM, 0.35 * sm(0.6, -0.2, up) + 0.25 * M.vn(u * 9, a * 1.3, 4.2));
       c = mix(c, DAMP, sm(-0.35, -0.85, up));
       c = mix(c, DARK, 0.25 * scarK(u, a));
-      c = mix(c, END, sm(0.94, 0.995, u) * 0.7 + sm(0.03, 0.004, u) * 0.4);
+      c = mix(c, END, sm(0.94, 0.995, u) * 0.7 + sm(0.03, 0.004, u) * 0.75);
       return c.map(v => v * (0.94 + 0.1 * M.vn(x * 40, y * 40, z * 40)));
     }, { shape: (x, y, z, u, a) => {
       /* the grain's soft ridges, the checks cut into them, the root flare's broken roots as lobes round it, the scar */

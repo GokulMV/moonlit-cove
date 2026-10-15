@@ -414,17 +414,17 @@ void main(){
       if (Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 24 && z < Layout.camp.z + 18) { out.ok = true; out.kind = 'camp'; }
       if (park && Math.hypot(x - park.plan.hut.x, z - park.plan.hut.z) < 12) { out.ok = true; out.kind = 'grass'; }
       if (out.ok) return out;
-      /* (a beach: from a little way out in the water up to the forest's edge) */
-      /* (out into the water no further than a wade: over the knees, a few metres out, far enough to reach a stone standing
-         in the shallows) */
-      const s = I.sdf(x, z); if (s > 2.4) return out;
-      const q = I.shore(I.uAt(x, z), WQ);
-      if (q.sand > 0.5 && -s < q.W + 1.5) { out.ok = true; out.kind = 'sand'; out.wade = Math.max(0, Math.min(1, (s + 0.2) / 1.8)); out.y = s > 0 ? 0 : out.y; }
+      /* (a beach: from out in the water as far as a wade goes, up to the forest's edge. Out in the water the feet are on
+         the bottom, the water up to the knees and then the waist, as deep as a metre; past that no one walks) */
+      const s = I.sdf(x, z); if (s > 45) return out;
+      const fl = s > 0 ? I.height(x, z) : 0; if (s > 0 && fl < -1.0) return out;
+      const q = I.shore(I.uAt(x, z), WQ), wd = s > 0 ? Math.max(0, Math.min(1, -fl / 0.9)) : 0;
+      if (q.sand > 0.5 && -s < q.W + 1.5) { out.ok = true; out.kind = 'sand'; out.wade = Math.max(wd, Math.max(0, Math.min(1, (s + 0.2) / 1.8)) * 0.6); out.y = s > 0 ? Math.max(fl, -1.0) : out.y; }
       /* (a rocky shore, below its cliffs: the rock itself, where it lies no steeper than a scramble, out to the water and up to
          the forest's edge; the boulders on it are stepped up onto, or round) */
       else if (q.cliff < 0.5 && q.sand + q.rock > 0.5 && -s < q.W + 1.0) {
         const e = 0.6, gx = land(x + e, z) - land(x - e, z), gz = land(x, z + e) - land(x, z - e);
-        if (Math.hypot(gx, gz) / (2 * e) < 0.7) { out.ok = true; out.kind = 'rockshore'; out.wade = Math.max(0, Math.min(1, (s + 0.2) / 1.8)); if (s > 0) out.y = Math.max(out.y, 0); }
+        if (Math.hypot(gx, gz) / (2 * e) < 0.7) { out.ok = true; out.kind = 'rockshore'; out.wade = Math.max(wd, Math.max(0, Math.min(1, (s + 0.2) / 1.8)) * 0.6); if (s > 0) out.y = Math.max(fl, -1.0); }
       }
       return out;
     }

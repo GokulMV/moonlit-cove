@@ -535,9 +535,10 @@ const Island = (() => {
   const SHT = {};
   let RBc = -1;
   function seaFloor(x, z, s, sh) {
-    /* (sand off a beach: shelving from the waterline to a few metres down a hundred metres out; the reef flat off the rocks,
-       level and shallow, out to its edge, then the drop to the deep) */
-    const sandF = -(0.06 * s + 0.0011 * s * s), R = RBc >= 0 ? RBc : I.grid.RB ? bil(I.grid.RB, x, z) : sh.reef, flat = -(0.5 + 0.9 * vn2(x / 30, z / 30, 91)) * sm(0, 6, s), edge = sm(R, R + 26, s);
+    /* (sand off a beach: shelving gently from the waterline, a metre and a half down thirty metres out, eight a hundred
+       out, so a bay is pale and clear well out from its beach; the reef flat off the rocks, level and shallow, out to its
+       edge, then the drop to the deep) */
+    const sandF = -(0.035 * s + 0.00045 * s * s), R = RBc >= 0 ? RBc : I.grid.RB ? bil(I.grid.RB, x, z) : sh.reef, flat = -(0.5 + 0.9 * vn2(x / 30, z / 30, 91)) * sm(0, 6, s), edge = sm(R, R + 26, s);
     const reefF = mix(flat, -(4 + 0.12 * (s - R)), edge), deep = -Math.min(42, 6 + 0.09 * s + 0.00006 * s * s);
     const k = sh.rock + sh.cliff * 0.6;
     let h = mix(sandF, reefF, clamp(k));

@@ -138,7 +138,8 @@ const Sky = (() => {
     const shDir = dirOf(keyPhi, Math.max(useSun ? sun.alt : moon.alt, 0.4 * D));
 
     const amb = mix(zen, hor, 0.45).map(v => v * 1.45);
-    const groundAmb = amb.map((v, i) => v * 0.35 + keyCol[i] * 0.04);
+    /* (the light thrown back up off the sand: some of the sky's, and of the sun's as high as it is) */
+    const groundAmb = amb.map((v, i) => v * 0.35 + keyCol[i] * (0.04 + 0.22 * Math.max(0, Math.sin(keyAlt))));
     const direct = lum(keyCol) * Math.sin(Math.min(keyAlt, 62 * D));
     const shadowK = Math.min(1, direct / (direct + lum(amb) * 1.4 + 1e-6));
     const E = lum(amb) + direct;

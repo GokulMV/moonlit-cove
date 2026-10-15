@@ -107,14 +107,18 @@ void main() {
       });
       return out;
     }
-    /* the tile's levels as they are needed (the tile record is isle.js's) */
-    function tileFor(t) { if (!t.st) t.st = { list: byTile.get(Math.floor(t.x / TS) + ',' + Math.floor(t.z / TS)) || [], m: [null, null, null], lev: -1 }; return t.st; }
+    /* the tiles' levels as they are needed: the stones' own tiles, one wherever any lie (not the island's land tiles,
+       which leave out those that are all beach and sea: their stones would never be drawn) */
+    let own = null;
+    const ownTiles = () => own || (own = [...byTile.entries()].map(([k, list]) => { const [a, b] = k.split(',').map(Number); return { x: a * TS, z: b * TS, st: { list, m: [null, null, null], lev: -1 } }; }));
+    const tileFor = t => t.st;
     const distTo = (t, cx, cz) => Math.hypot(Math.max(0, t.x - cx, cx - t.x - TS), Math.max(0, t.z - cz, cz - t.z - TS));
 
     /* ── near the eye: the nearest stones whole, as many of each shape as there is room for ── */
     const CAP = 160, nearIm = protos.map(P => { const im = new T.InstancedMesh(P[0], matN, CAP); im.count = 0; im.frustumCulled = false; im.castShadow = im.receiveShadow = true; im.matrixAutoUpdate = false; group.add(im); return im; });
     let lastX = 1e9, lastZ = 1e9, frame = 0;
-    function update(cx, cy, cz, tiles, budget) {
+    function update(cx, cy, cz, _landTiles, budget) {
+      const tiles = ownTiles();
       /* (each tile: the level it wants, built when first wanted, the others hidden) */
       let built = 0;
       for (const t of tiles) {

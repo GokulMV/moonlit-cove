@@ -16,6 +16,8 @@ const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = (
 const D = Math.PI / 180, t0 = Date.now();
 const dir = (h, p) => [-Math.cos(h * D) * Math.cos(p * D), Math.sin(p * D), -Math.sin(h * D) * Math.cos(p * D)];   /* (heading 0 north (−x), 90 east (−z)) */
 try {
+  /* (how long the island took to build, when there is one) */
+  if (isle) console.log('island built in', await page.evaluate(() => { const I = Layout.island(); return I && I.data ? I.data.ms : null; }), 'ms');
   for (const s of stops) {
     const ts = Date.now();
     await page.addStyleTag({ content: s.hud ? '#hint { display: none !important; }' : '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap { display: none !important; }' });

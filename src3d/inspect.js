@@ -90,7 +90,7 @@ const Inspect = (() => {
     proboscis: { model: 'wild/proboscis', name: 'Proboscis monkey', latin: 'Nasalis larvatus', home: 'land', big: true, reach: 90, view: [-2.0, 0.3],
       note: 'Found only on Borneo, in the mangroves and along its rivers. The male’s great nose swells his honking calls; their feet are partly webbed, and they swim well.' },
     kingfisher: { model: 'wild/kingfisher', name: 'Stork-billed kingfisher', latin: 'Pelargopsis capensis', home: 'air', big: true, reach: 70, view: [-2.0, 0.3],
-      note: 'One of the biggest kingfishers, a third of it bill. It sits still over the water and plunges head first for fish.' },
+      note: 'One of the biggest kingfishers, with a huge red bill. It sits still on a perch over the water and plunges head first for fish.' },
     flyingfox: { model: 'wild/flyingfox', name: 'Large flying fox', latin: 'Pteropus vampyrus', home: 'air', big: true, reach: 200, view: [-2.0, 0.3],
       note: 'One of the biggest bats in the world, nearly a metre and a half across the wings. It finds the fruit it eats by sight and smell, not by echo, and flies far each night to it.' }
   });
@@ -119,7 +119,12 @@ void main(){ vec2 p = (vUv - 0.5)*vec2(uAsp, 1.0); float r = length(p); gl_FragC
 
     /* a model, centred on its pivot, with what it needs to know about its size */
     function specimen(kind, o) {
-      const K = KINDS[kind], model = Models.make(K.model, o || {}), pivot = new T.Group();
+      const K = KINDS[kind], pivot = new T.Group();
+      /* (an animal of the island's, its fur and all, built finer than the copies out in the world but not at the studio's
+         own millions of triangles: it is up close, but it has to come up into the hand at once) */
+      const RQ = typeof Rig !== 'undefined' && K.model.startsWith('wild/') ? { cell: Rig.Q.cell, shells: Rig.Q.shells } : null;
+      if (RQ) Object.assign(Rig.Q, { cell: 1.8, shells: 0.6 });
+      let model; try { model = Models.make(K.model, o || {}); } finally { if (RQ) Object.assign(Rig.Q, RQ); }
       const box = new T.Box3().setFromObject(model), sph = box.getBoundingSphere(new T.Sphere());
       model.position.copy(sph.center).negate(); pivot.add(model);
       const mats = new Set(); model.traverse(m => { if (m.isMesh) { m.frustumCulled = false; (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => mats.add(x)); } });

@@ -427,6 +427,8 @@ vec4 cloudLayer(vec3 d, vec3 Ld, vec3 haze, float jit){
 ${COMMON}
 ${SKY_FN}
 uniform float uStars, uTime, uPhaseC, uPhaseSign, uCloud, uMoonR, uSunR, uEnv; uniform vec3 uCloudLit;
+/* (for the lighting's map of the sky: what lights things from below, the light the sand throws back up) */
+uniform vec3 uGround;
 uniform mat3 uEqT;          /* the world's directions → the sky's own (equatorial), for the Milky Way (stars.js turns the stars) */
 uniform sampler2D uMW; uniform float uMWK;
 uniform vec3 uSunM;         /* the sun as seen from the moon, in the frame its disc is drawn in (sky.js) */
@@ -564,7 +566,7 @@ void main(){
       c += uSunDisc*(1.0 - smoothstep(1.0 - aa, 1.0 + aa, r))*0.9*limb*(1.0 - cover)*(1.0 - max(uStratus, uStorm))*(1.0 - hzCov);   /* (never through rain or a storm) */
     }
   }
-  if (d.y <= -0.004${Layout.isle ? ' && hzCov < 0.5' : ''}) c = uEnv > 0.5 ? mix(uHor*0.5, uHor*0.08 + uZen*0.15, smoothstep(0.0, 0.3, -d.y)) : uHor;
+  if (d.y <= -0.004${Layout.isle ? ' && hzCov < 0.5' : ''}) c = uEnv > 0.5 ? mix(uHor*0.5, max(uHor*0.08 + uZen*0.15, uGround), smoothstep(0.0, 0.3, -d.y)) : uHor;
   gl_FragColor = vec4(c, 1.0);
 }`;
 
