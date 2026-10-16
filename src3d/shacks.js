@@ -417,30 +417,8 @@ const Shacks = (() => {
       }
     }, 'near');
 
-    /* ── sand castles: now and then one on the damp sand above the tide, each built its own way; the nearer the water
-       it stands, the more the waves have taken of it. Never by the camp (it has its own), never on a headland's sand
-       or by a shack ── */
-    const castlePlans = new Map(); let castlesVer = -1;
-    function castlePlan(ch) {
-      if (castlesVer !== Layout.coastVer) { castlePlans.clear(); castlesVer = Layout.coastVer; }
-      if (castlePlans.has(ch.c)) return castlePlans.get(ch.c);
-      const C = Layout.Coast, h = k => C.hash(ch.cw ?? ch.c, 600 + k), out = [], n = (h(0) < 0.45 ? 1 : 0) + (h(1) < 0.12 ? 1 : 0);
-      const sites = plan(ch);
-      for (let i = 0; i < n; i++) for (let tries = 0; tries < 6; tries++) {
-        const x = ch.x0 + 8 + h(2 + i * 9 + tries) * (world.CW - 16);
-        if (Math.abs(Layout.wrapD(x - Layout.camp.x)) < 45 || (Layout.hutSites || []).some(([hx]) => Math.abs(Layout.wrapD(x - hx)) < 14) || Layout.head(x) > 0.5 || sites.some(p => Math.abs(p.x - x) < 20) || out.some(p => Math.abs(p.x - x) < 12)) continue;
-        const sz = Layout.shoreMeanZ(x), vz = Layout.vegZ(x); if (vz - sz < 8.5) continue;
-        const up = 1.5 + h(30 + i * 3 + tries) * 2.7, z = sz + up;
-        if (world.massif(x, z) > 0 || world.massif(x, z - 1.5) > 0) continue;
-        out.push({ x, z, rot: h(40 + i) * TAU, seed: 1 + Math.floor(h(50 + i) * 1e6), wear: up < 2.3 ? 0.62 + 0.38 * (2.3 - up) / 0.8 : 0.5 * h(60 + i), toys: h(70 + i) < 0.22 });
-        break;
-      }
-      castlePlans.set(ch.c, out);
-      if (castlePlans.size > 400) castlePlans.delete(castlePlans.keys().next().value);
-      return out;
-    }
-    /* (a castle the sea has washed flat is gone: nothing left for anyone to walk round) */
-    world.place(ch => { const claims = []; for (const p of castlePlan(ch)) { claims.push([p.x, p.z, 1.6]); if (!p.gone) ch.obstacle(p.x, p.z, 0.65, 'castle'); } return claims; });
+    /* ── sand castles: none along the coast of their own any more; the camp's, and the ones you build yourself (raise,
+       below), each built its own way ── */
     let castles = 0;
 
     /* ── the sea and the castles. Each one standing near the camera (and the camp's own, given by adopt) is
@@ -465,19 +443,70 @@ const Shacks = (() => {
       g.updateMatrixWorld(true);
       if (L.ch) (first ? g : body).traverse(q => { if (q.isMesh) L.ch.keep(q.geometry); });
     }
-    world.decorate(ch => {
-      for (const p of castlePlan(ch)) {
-        const g = new T.Group(); g.position.set(p.x, 0, p.z); g.rotation.y = p.rot;
-        const L = { p, g, ch }; buildCastle(L, true);
-        ch.near.add(g); castles++;
-        liveC.add(L); g.addEventListener('removed', () => liveC.delete(L));
-      }
-    }, 'near');
-    /* a castle washed flat: gone from what the van and a walker must go round */
+    /* a castle washed flat: gone from what a walker must go round */
     function lose(L) {
       if (L.onGone) return L.onGone(true);
       if (L.ch) for (const b of L.ch.obs) for (const ob of b) if (ob[3] === 'castle' && Math.abs(ob[0] - L.p.x) < 0.05 && Math.abs(ob[1] - L.p.z) < 0.05) ob[2] = 0;
     }
+
+    /* ── the castles you build yourself: knelt over in front of you and patted up out of the damp sand, a heap first,
+       then the walls drawn up out of it and the towers turned out of the bucket one by one, in a few seconds. Up to a
+       dozen stand at once (the oldest goes when you build the thirteenth); the sea takes them as it takes the camp's,
+       and the van, driven into one, flattens it. Where they stand is the page's own frame, carried round the beach's
+       loop with the eye (shift) ── */
+    const mine = [], MINE = 12;
+    /* (how it rises: the wear it is built at at each moment, from a heap to its towers) */
+    const GROW = [[0, 1.42], [0.7, 1.12], [1.4, 0.82], [2.1, 0.5], [2.8, 0.22], [3.4, 0.04]];
+    function raise(x, z, rot, o = {}) {
+      const g = new T.Group(); g.position.set(x, 0, z); g.rotation.y = rot;
+      /* (wet through while it goes up, as the sand patted into it is; when it stands finished, fresh and damp) */
+      const p = { x, z, rot, seed: o.seed || 1 + Math.floor(Math.random() * 1e6), wear: GROW[0][1], soaked: true, toys: o.toys !== false, toyAng: o.toyAng ?? (rot + 2.2 + Math.random()), flag: o.flag || (Math.random() < 0.5 ? 'leaf' : 'feather') };
+      const L = { p, g, mine: true, grow: { t: 0, i: 0 } };
+      buildCastle(L, true); root.add(g); liveC.add(L); mine.push(L); castles++;
+      while (mine.length > MINE) drop(mine[0]);
+      return L;
+    }
+    function drop(L) {
+      const i = mine.indexOf(L); if (i >= 0) mine.splice(i, 1);
+      liveC.delete(L); if (L.g.parent) L.g.parent.remove(L.g);
+      L.g.traverse(m => { if (m.isMesh) m.geometry.dispose(); }); if (L.wetM) L.wetM.dispose();
+    }
+    /* (rising, step by step; squashed under a wheel, slumping flat and spreading in a moment) */
+    function animate(dt) {
+      for (const L of mine) {
+        const G = L.grow; if (!G) continue;
+        G.t += dt;
+        while (G.i < GROW.length - 1 && G.t >= GROW[G.i + 1][0]) { G.i++; L.p.wear = GROW[G.i][1]; L.p.soaked = G.i < GROW.length - 1; buildCastle(L, false); }
+        /* (between the steps the heap swells a little toward the next, so it grows rather than jumps) */
+        if (G.i < GROW.length - 1) { const [t0, w0] = GROW[G.i], [t1, w1] = GROW[G.i + 1], k = sm(0, 1, (G.t - t0) / (t1 - t0)); L.body.scale.y = flatK(w0) + (flatK(w1) - flatK(w0)) * k * 0.6; }
+        else { L.grow = null; L.p.wear0 = L.p.wear; }
+      }
+      for (const L of liveC) {
+        const Q = L.squash; if (!Q) continue;
+        Q.t += dt; const k = sm(0, 1, Q.t / 0.28);
+        L.body.scale.set(1 + 0.32 * k, Q.y0 * (1 - k) + 0.05 * k, 1 + 0.32 * k);
+        if (Q.t > 0.32) { L.squash = null; L.p.wear = 1.6; L.p.gone = true; L.body.visible = false; L.body.scale.set(1, 1, 1); lose(L); }
+      }
+    }
+    /* the van over a castle at (x, z) (within r of it): flattened, not driven round */
+    function squash(x, z, r = 0.5) {
+      let hit = false;
+      for (const L of liveC) {
+        const p = L.p; if (p.gone || L.squash) continue;
+        if (Math.hypot(p.x - x, p.z - z) > r + (L.r || 0.5) * 0.8) continue;
+        L.grow = null; L.wash = null; L.squash = { t: 0, y0: L.body.scale.y }; hit = true;
+      }
+      return hit;
+    }
+    /* what a walker goes round: the castles you built, still standing */
+    function obstacles(x, z, out = []) {
+      for (const L of mine) { const p = L.p; if (!p.gone && Math.abs(p.x - x) < 6 && Math.abs(p.z - z) < 6) out.push([p.x, p.z, (L.r || 0.55) * 0.8, 'castle']); }
+      return out;
+    }
+    /* (the beach's loop: those near the eye carried round with it) */
+    function shift(d, near) { for (const L of mine) if (near(L.p.x)) { L.p.x += d; L.g.position.x += d; } }
+    /* (the camp moved: what you built by the old one is left behind with it) */
+    function clearMine() { while (mine.length) drop(mine[0]); }
     /* the sea over a castle. As a wave runs up round it the castle slumps, the water undercutting it, and goes dark as it
        soaks; the further the water runs on past it, the more of it the wave takes. When the water has drained off it, it
        is built again as the wave has left it: towers to stumps, then a wet mound, then each wave pressing that flatter
@@ -489,14 +518,15 @@ const Shacks = (() => {
       const dt = lastWt === null ? 0 : Math.max(0, Math.min(0.5, wt - lastWt)); lastWt = wt;
       if (dt <= 0) return;
       for (const L of liveC) {
-        const p = L.p; if (p.gone) continue;
+        const p = L.p; if (p.gone || L.squash || L.grow) continue;
         /* how far past its seaward foot the water has run just now (m; below 0, short of it), along its middle and either
            side of it (the swash comes up in tongues: one may reach a side of it and not the middle) */
         const gz = Layout.shoreDZ(p.x), nz = Math.sqrt(1 + gz * gz);
         let over = -1e9;
         for (const f of [-0.7, 0, 0.7]) {
           const x = p.x + f * L.r, up = (p.z - Layout.shoreZ(x)) / nz;
-          over = Math.max(over, swash(x - (world.loop || 0), wt) - (up - 0.8 * L.r * Math.sqrt(1 - f * f)));   /* (the chunks' own frame, as the page's: world.js setLoop) */
+          /* (a chunk's castle stands in the chunks' own frame, the camp's and yours in the page's: world.js setLoop) */
+          over = Math.max(over, swash(L.ch ? x - (world.loop || 0) : x, wt) - (up - 0.8 * L.r * Math.sqrt(1 - f * f)));
         }
         let W = L.wash;
         if (over > 0) {
@@ -540,7 +570,10 @@ const Shacks = (() => {
     }
 
     /* every frame: the lights come on after dusk and breathe a little; the glows are sized for the distance */
+    let lastT = null;
     function update(S, t, wt, swash) {
+      const dt = lastT === null ? 0 : Math.max(0, Math.min(0.25, t - lastT)); lastT = t;
+      if (dt > 0) animate(dt);
       washCastles(wt, swash);
       const night = S ? S.night : 1, k = sm(0.25, 0.75, night), fl = 0.92 + 0.05 * Math.sin(t * 2.1) + 0.03 * Math.sin(t * 5.3 + 1.7), A = S ? S.amb : [0, 0, 0];
       M.bulb.color.setRGB(1.0 * 1.5 * k * fl + A[0] * 0.5, 0.62 * 1.5 * k * fl + A[1] * 0.5, 0.3 * 1.5 * k * fl + A[2] * 0.5);
@@ -550,8 +583,8 @@ const Shacks = (() => {
     }
     /* (for the test bench: the sites laid out so far, along the coast) */
     const sites = () => [...plans.values()].flat().map(p => ({ kind: p.kind, x: p.x, z: Layout.vegZ(p.x) }));
-    const castleSites = () => [...castlePlans.values()].flat().map(p => ({ x: p.x, z: p.z, wear: p.wear }));
-    return { update, sites, castleSites, adopt, restore, get castles() { return castles; }, get count() { return count; }, M, debug: { liveC } };
+    const castleSites = () => mine.map(L => ({ x: L.p.x, z: L.p.z, wear: L.p.wear, gone: !!L.p.gone }));
+    return { update, sites, castleSites, adopt, restore, raise, squash, obstacles, shift, clearMine, get castles() { return castles; }, get count() { return count; }, M, debug: { liveC, mine } };
   }
   return { build };
 })();

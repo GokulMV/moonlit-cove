@@ -158,7 +158,8 @@ void main(){
     }
     /* a stretch of rut from (x0, z0) to (x1, z1) by wheel w, width wd; k how deep it pressed */
     function tyre(w, x0, z0, x1, z1, wd, k, wet, t) {
-      const len = Math.hypot(x1 - x0, z1 - z0); if (len < 1e-3) return;
+      /* (a stretch longer than a wheel rolls between two frames is a jump, not a track: the van put somewhere else) */
+      const len = Math.hypot(x1 - x0, z1 - z0); if (len < 1e-3 || len > 3) return;
       const q = w * NS + ring[w]; ring[w] = (ring[w] + 1) % NS;
       const dx = (x1 - x0) / len, dz = (z1 - z0) / len, hx = -dz * wd * 0.75, hz = dx * wd * 0.75, v0 = odo[w] / 0.34, v1 = (odo[w] + len) / 0.34; odo[w] += len;
       const p = q * 12; P.set([x0 - hx, 0.007, z0 - hz, x0 + hx, 0.007, z0 + hz, x1 - hx, 0.007, z1 - hz, x1 + hx, 0.007, z1 + hz], p);
@@ -181,12 +182,18 @@ void main(){
         const shore = new Map(), front = new Map();
         const upOf = x => { const b = Math.round(x * 2); let v = shore.get(b); if (v === undefined) { const g = Layout.shoreDZ(x); v = [Layout.shoreZ(x), Math.sqrt(1 + g * g)]; shore.set(b, v); } return v; };
         const reach = x => { const b = Math.round(x * 2); let v = front.get(b); if (v === undefined) { v = swashFront(x, wt); front.set(b, v); } return v; };
+        /* (round the island the shore is the island's own, whichever way it runs: how far up from it, and where along it) */
+        const SQ = {};
         const check = (pos, n, onTaken) => {
           for (let i = 0; i < n; i++) {
             if (!pos[i * 3 + 2]) continue;
-            const x = pos[i * 3], [sz, k] = upOf(x), up = (pos[i * 3 + 1] - sz) / k;
+            let up, a;
+            if (Layout.isle) { const q = Layout.Shore.at(pos[i * 3], pos[i * 3 + 1], SQ); up = -q.s; a = q.a; }
+            else { const x = pos[i * 3], [sz, k] = upOf(x); up = (pos[i * 3 + 1] - sz) / k; a = x; }
             if (up > 9) continue;
-            if (up < reach(x)) { pos[i * 3 + 2] = 0; onTaken(i); }
+            /* (under the water, or where a wave's run-up has just gone over it: the sea has smoothed it away) */
+            const r = up < 0 ? 0 : (reach(a) || 0);
+            if (up < r) { pos[i * 3 + 2] = 0; onTaken(i); }
           }
         };
         check(fPos, NF, i => { fAttr.setY(i, t); fAttr.needsUpdate = true; });

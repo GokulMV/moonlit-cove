@@ -533,7 +533,7 @@ const Engine = (() => {
   function moveCamp(ox, oz, camX) {
     Layout.setOrigin(ox, oz);
     rebuildCamp(); registerDyn(surge.dyn); surge.ripples.length = 0;
-    if (marks) marks.clear(); if (inspect) inspect.clear();
+    if (marks) marks.clear(); if (inspect) inspect.clear(); if (shacks && shacks.clearMine) shacks.clearMine();
     coastFollow(camX ?? Layout.camp.x);
     /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
     if (world) world.update(camX ?? Layout.camp.x, 250);
@@ -562,6 +562,7 @@ const Engine = (() => {
     if (fauna && fauna.shift) fauna.shift(d, 0);
     if (snowmen && snowmen.shift) snowmen.shift(d, near);
     if (marks && marks.shift) marks.shift(d, near);
+    if (shacks && shacks.shift) shacks.shift(d, near);
     camera.position.x += d; camera.updateMatrixWorld();
   }
   Object.assign(api, { loopShift });

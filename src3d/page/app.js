@@ -1029,6 +1029,8 @@
     if (W) for (const o of W.obstaclesNear(x, z)) out.push([x - o[0], z - o[1], o[2], o]);
     /* (along the beach the huts are the engine's own, not the world's: the van drives round them) */
     if (!ISLE && Engine.huts) for (const o of Engine.huts.obstacles(x, z, [])) out.push([x - o[0], z - o[1], o[2], o]);
+    /* (and the sand castles you built: the van flattens those, a walker goes round them) */
+    if (Engine.shacks && Engine.shacks.obstacles) for (const o of Engine.shacks.obstacles(x, z, [])) out.push([x - o[0], z - o[1], o[2], o]);
     return out;
   }
   const DRIVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift'];
@@ -1164,6 +1166,8 @@
         const d = Math.hypot(dx, dz), min = 0.95 + rad;
         /* small stones: the van rolls over them with a jolt instead of stopping dead */
         if (o[3] === 'rock' && (o[5] !== undefined ? o[5] : rad) < 0.55) { if (it === 0 && d < 0.75 + rad * 0.4 && car.bumpO !== o) { car.bumpO = o; car.bumpAt = [car.x, car.z]; jolt(cx - dx, cz - dz, rad); } continue; }
+        /* a sand castle: the van rolls over it and it is flattened, with a little bump, never a wall to stop at */
+        if (o[3] === 'castle') { if (it === 0 && rad > 0 && d < 0.9 + rad * 0.6 && Math.abs(car.v) > 0.15 && Engine.shacks && Engine.shacks.squash(o[0], o[1], 0.35)) { car.shake = Math.max(car.shake || 0, 0.05); if (sound.amb) sound.amb.thud(0.22); unlock('castle_flat'); } continue; }
         if (d < min) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, push = min - d + 0.002; car.x += nx * push; car.z += nz * push; moved = true;
           const into = -(fx * nx + fz * nz) * car.v; if (into > impact) { impact = into; hit = o; } }
       }
@@ -1280,6 +1284,7 @@
       for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef' && L[i][3] !== 'hut' && !(L[i][4] !== undefined && L[i][4] <= foot)) goAdd(L[i][0], L[i][1], L[i][2]); }
     for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
     if (Engine.snowmen) { const L = Engine.snowmen.obstacles(x, z, []); for (const o of L) goAdd(o[0], o[1], o[2]); }
+    if (Engine.shacks && Engine.shacks.obstacles) { const L = Engine.shacks.obstacles(x, z, []); for (const o of L) goAdd(o[0], o[1], o[2]); }
     if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
   }
   /* bumping into things: pushed out round them (so a walk slides along a rock instead of sticking), kept out of the
@@ -1499,6 +1504,8 @@
       wk.hp.v = clamp(wk.hp.v + wk.mp, -1.0, 0.9); wk.pitchT = wk.hp.v; wk.mp = 0; wk.turn = 0;
     }
   }
+  /* (how long a castle takes to build, kneeling over it: castleHere) */
+  const KNEEL = 3.9;
   function stepWalk(dt) {
     const k = keys, t = st.t;
     const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
@@ -1519,6 +1526,8 @@
     /* (and deeper in, the water's weight against the legs: slower still) */
     want *= (1 - 0.45 * wade) * (Layout.isle ? 1 : 1 - 0.35 * sstep(sz - 2, sz - WADE_OUT, wk.z));
     if (Engine.snowmen && Engine.snowmen.rolling) want *= 1 - 0.5 * Math.min(1, Engine.snowmen.rolling.r / 0.55);
+    /* (kneeling over a castle you are building: you stay where you are till it is up) */
+    if (wk.build) { if (t - wk.build.t0 > KNEEL || t < wk.build.t0) wk.build = null; else { want = 0; wk.turn = 0; wk.hT = wk.h; } }
     wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
     wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
     const ox = wk.x, oz = wk.z; wk.ox = ox; wk.oz = oz;
@@ -1527,6 +1536,7 @@
     /* (a snowball being rolled: on ahead of you, growing; the button for it there while the snow lies deep enough) */
     if (Engine.snowmen && Engine.snowmen.rolling) { Engine.snowmen.roll(wk.x, wk.z, wk.h, st.snowD || 0); }
     { const sb = !!(Engine.snowmen && ((st.snowD || 0) > 0.05 || Engine.snowmen.rolling)); if (sb !== wk.sbShown) { wk.sbShown = sb; $('bSnowball').hidden = !sb; } }
+    { const cb = !!(Engine.shacks && Engine.shacks.raise) && !((st.snowD || 0) > 0.05) && onSand(wk.x, wk.z); if (cb !== wk.cbShown) { wk.cbShown = cb; $('bCastle').hidden = !cb; } }
     const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
     wk.odo += dist;
     /* a step every stride's half, left and right in turn */
@@ -1561,14 +1571,16 @@
   }
   function walkCamera() {
     const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
-    const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
+    /* (kneeling to build a castle: down on the sand and looking at it, then up again) */
+    const kt = wk.build ? st.t - wk.build.t0 : -1, kn = kt < 0 ? 0 : sstep(0, 0.5, kt) * (1 - sstep(KNEEL - 0.5, KNEEL, kt));
+    const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch0 = clamp(wk.hp.v + wk.mp, -1.05, 0.95), pitch = pitch0 + (-0.72 - pitch0) * 0.9 * kn, cp = Math.cos(pitch);
     const sway = 0.6 * bob * Math.sin(ph), g0 = Layout.isle ? Math.max(0, W ? (W.walk ? W.walk(wk.x, wk.z).y : W.land(wk.x, wk.z)) : 0) : groundAt(wk.x, wk.z), p = wk.cam.pos, l = wk.cam.look;
     wk.foot = g0;
     /* (the ground underfoot, eased: stepping from one block of a groyne up or down onto the next lifts the eye or lowers it
        over a moment, as a step does, rather than all at once) */
     const now = performance.now(), gdt = Math.min(0.1, (now - (wk.gT || now)) / 1000); wk.gT = now;
     const g = wk.gs = wk.gs == null || Math.abs(g0 - wk.gs) > 1.2 ? g0 : wk.gs + (g0 - wk.gs) * Math.min(1, gdt * 10);
-    p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)); p[2] = wk.z - Math.sin(wk.h) * sway;
+    p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)) - 0.78 * kn; p[2] = wk.z - Math.sin(wk.h) * sway;
     /* (wading: the eyes kept up out of the swell that is passing, lifted by it as it goes by) */
     if (!Layout.isle && g < 0 && Engine.waveAt) { const wv = Engine.waveAt(wk.x, wk.z), lift = Math.max(0, wv + 0.55 - p[1]); wk.lift = (wk.lift || 0) + (lift - (wk.lift || 0)) * Math.min(1, gdt * 6); p[1] += wk.lift; } else wk.lift = 0;
     l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
@@ -1604,7 +1616,29 @@
     if (S.start(wk.x, wk.z, wk.h, st.snowD)) { $('bSnowball').setAttribute('aria-pressed', 'true'); toast('A snowball at your feet. Walk to roll it bigger; B lets it go.', false, 3400); }
   }
   $('bSnowball').addEventListener('click', snowball);
+  /* ── a sand castle of your own: you kneel, and pat one up out of the damp sand in front of you, a heap first and then its
+     walls and towers, in a few seconds. Close to the water the waves will soon have it; the van flattens it ── */
+  function onSand(x, z) {
+    if (Layout.isle) { const W = Engine.world, q = W && W.walk ? W.walk(x, z) : null; return !!q && q.ok && q.kind === 'sand' && !(q.wade > 0.1); }
+    const g = Layout.shoreDZ(x), up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g);
+    return up > -0.25 && z < Layout.vegZ(x) - 0.7 && !(Engine.world && Engine.world.massif(x, z) > 0.05);
+  }
+  function castleHere() {
+    const S = Engine.shacks; if (!S || !S.raise || !wk.on || wk.build) return;
+    if ((st.snowD || 0) > 0.05) { toast('The sand is under snow: roll a snowball instead.', false, 2600); return; }
+    const x = wk.x - Math.sin(wk.h) * 1.05, z = wk.z - Math.cos(wk.h) * 1.05;
+    if (!onSand(x, z)) { toast(onSand(wk.x, wk.z) ? 'Not there: turn toward the open sand.' : 'Out on the sand: a castle needs sand to build it from.', false, 2600); return; }
+    if (obstaclesNear(x, z).some(([dx, dz, rad]) => rad > 0 && Math.hypot(dx, dz) < rad + 0.7)) { toast('Not enough room there.', false, 2200); return; }
+    const g = Layout.isle ? 0 : Layout.shoreDZ(x), up = Layout.isle ? 9 : (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g);
+    wk.build = { t0: st.t, x, z };
+    S.raise(x, z, wk.h);
+    toast(up < 1.6 ? 'You kneel and pack the wet sand into a castle, right where the waves run up. It won’t last long.' : 'You kneel, scoop the damp sand together and pat it into walls and towers…', false, 3400);
+    setTimeout(() => { if (wk.on) toast('A sand castle of your own. The tide will have it, sooner or later.', false, 3200); }, 3500);
+    unlock('castle');
+  }
+  $('bCastle').addEventListener('click', castleHere);
   addEventListener('keydown', e => { if ((e.key === 'b' || e.key === 'B') && wk.on && !(e.target && e.target.closest && e.target.closest('input, textarea'))) snowball(); });
+  addEventListener('keydown', e => { if ((e.key === 'c' || e.key === 'C') && wk.on && !e.ctrlKey && !e.metaKey && !(e.target && e.target.closest && e.target.closest('input, textarea'))) castleHere(); });
   function startWalk() {
     if (wk.on || !ready) return;
     const fromVan = car.on;
@@ -1751,7 +1785,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['star', 'Wish upon a star', 'made a wish on a shooting star'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['star', 'Wish upon a star', 'made a wish on a shooting star'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach'], ['castle', 'King of the castle', 'built a sand castle'], ['castle_flat', 'Steamroller', 'drove the van over a sand castle']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1853,6 +1887,9 @@
     if (Math.abs(off) <= Layout.P / 2) return;
     const d = -Layout.P * Math.sign(off);
     car.x += d; if (car.camP) car.camP[0] += d; if (car.camL) car.camL[0] += d; if (car.bumpAt) car.bumpAt[0] += d;
+    /* (and where its wheels were a moment ago, which its next stretch of tyre track runs from: left behind, that stretch
+       would have run the whole loop's length, a ruler-straight track across the sand and the sea) */
+    if (car.wheels) for (const w of car.wheels) w[0] += d;
     wk.x += d; if (wk.ox !== undefined) wk.ox += d; ai.progX += d;
     orb.v[X] += d; orb.T[X] += d; orb.px += d; if (orb.fly) { orb.fly.from[X] += d; orb.fly.to[X] += d; }
     /* (the cameras that move with them, once each; the fixed views of the camp stay where the camp is) */

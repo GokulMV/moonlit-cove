@@ -1342,16 +1342,15 @@ void main(){
   vec3 seaC = vec3(0.0);
   if (uWet > 0.01 && s > -1.0 && dist < 60.0){ vec2 rr = rainRings(p, uTime*1.4)*0.35*uWet*smoothstep(60.0, 20.0, dist); Nw = normalize(Nw + vec3(rr.x, 0.0, rr.y)); }
   if (s > -2.0){
-    /* clear tropical water: pale turquoise over the shallows, blue-green a little further out, deep blue at sea${Layout.isle ? `
-       (round the island, as deep as the sea floor under it really is: turquoise over the sand and the reef flats far out,
-       the blue coming in where the reef's edge drops away)` : ''} */
-    ${Layout.isle ? `float dep = max(-sq.h, 0.0) + 0.02*max(s, 0.0);
-    vec3 body = mix(mix(vec3(0.05, 0.30, 0.30), vec3(0.012, 0.13, 0.15), smoothstep(0.25, 5.0, dep)), vec3(0.006, 0.042, 0.078), smoothstep(3.5, 20.0, dep));
+    /* clear tropical water: pale turquoise over the shallows, blue-green a little further out, deep blue at sea, as deep
+       as the sea floor under it really is: turquoise over the sand far out${Layout.isle ? ` and over the reef flats, the blue
+       coming in where the reef's edge drops away` : `, off a beach that shelves gently away`} */
+    float dep = max(-sq.h, 0.0) + 0.02*max(s, 0.0);
+    vec3 body = mix(mix(vec3(0.05, 0.30, 0.30), vec3(0.012, 0.13, 0.15), smoothstep(0.25, 5.0, dep)), vec3(0.006, 0.042, 0.078), smoothstep(3.5, 20.0, dep));${Layout.isle ? `
     /* (in the mangroves' creek and off its mouth the water is murky, olive and brown: silt off the mud, tannin from the
        leaves; its bottom, mud, hardly shows through it) */
     float mgW = sq.k2.z*(1.0 - smoothstep(14.0, 70.0, s));
-    body = mix(body, vec3(0.052, 0.05, 0.026)*(0.9 + 0.2*tN(p*0.7, 23.0).g), mgW*0.9);`
-    : `vec3 body = mix(mix(vec3(0.05, 0.30, 0.30), vec3(0.012, 0.13, 0.15), smoothstep(0.0, 8.0, s)), vec3(0.006, 0.042, 0.078), smoothstep(6.0, 34.0, s));`}
+    body = mix(body, vec3(0.052, 0.05, 0.026)*(0.9 + 0.2*tN(p*0.7, 23.0).g), mgW*0.9);` : ''}
     /* slopes too small to see still tilt the water toward the eye: far out it reflects less, and sky from higher up,
        so the open sea stays a shade darker than the sky over it and the horizon remains a line */
     float tilt = sqrt(sig2)*1.3;
@@ -1366,11 +1365,12 @@ void main(){
     vec2 rh = normalize(R.xz + vec2(1e-5)); float across = abs(dot(rh, sn)), dBank = (max(s, 0.0) + 7.0)/max(across, 0.06);
     float bankO = sq.k2.z*(1.0 - smoothstep(30.0, 140.0, s))*(1.0 - smoothstep(0.8, 1.25, R.y/max(length(R.xz), 1e-3)*dBank/19.0));
     vec3 bankC = vec3(0.018, 0.03, 0.014)*(0.55 + 0.9*tN(p + rh*dBank + Nw.xz*4.0, 8.0).r)*(uAmb*1.2 + keyC*0.35);` : ''}
-    /* in the shallows the sandy bottom shows through, bent a little by the ripples, tinted by the water over it and
-       laced with caustics by day; it fades out as the water deepens */
-    ${Layout.isle ? 'float clar = exp(-dep*(0.24 + 2.2*mgW))*(1.0 - 0.5*uRough);' : 'float clar = exp(-max(s, 0.0)*0.3)*(1.0 - 0.5*uRough);'}
+    /* in the shallows the sandy bottom shows through, bent a little by the ripples, tinted by the water over it (the red
+       taken out first, so that sand under a metre or two of water is turquoise) and laced with caustics by day; it fades
+       out as the water deepens */
+    ${Layout.isle ? 'float clar = exp(-dep*(0.24 + 2.2*mgW))*(1.0 - 0.5*uRough);' : 'float clar = exp(-dep*0.24)*(1.0 - 0.5*uRough);'}
     if (clar > 0.01){
-      vec2 bp = p + (Nw.xz/max(Nw.y, 0.3))*0.25*${Layout.isle ? 'clamp(dep*3.0, 0.0, 6.0)' : 'clamp(s, 0.0, 4.0)'};
+      vec2 bp = p + (Nw.xz/max(Nw.y, 0.3))*0.25*clamp(dep*3.0, 0.0, 6.0);
       vec3 sandB = vec3(0.56, 0.48, 0.34)*(0.84 + 0.28*tN(bp, 18.6).r);${Layout.isle ? `
       sandB = mix(sandB, vec3(0.15, 0.135, 0.11)*(0.82 + 0.3*tN(bp, 18.6).r), mgW);
       /* (over the reef flat off the rocks, zoned out from the shore as a fringing reef is: sand and rubble by the shore, then
@@ -1396,9 +1396,12 @@ void main(){
           bed = mix(bed, front*(0.8 + 0.3*n1.b), smoothstep(1.05, 1.3, q));
           sandB = mix(sandB, bed, onR);
         } }` : ''}
+      /* (the caustics' net only where it can be seen: further off, where a cell of it is a few pixels, its average, so the
+         water never speckles; and less of it the deeper the water over it) */
       float caus = 0.0;
-      if (uDay > 0.01){ float c1 = tW(bp + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(bp - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a; caus = pow(c1*c2, 1.4)*uDay; }
-      vec3 bottom = sandB*(uAmb*0.9 + keyC*(0.6*max(Lk.y, 0.0) + 0.7*caus) + art*0.6)*${Layout.isle ? 'exp(-dep*vec3(0.42, 0.075, 0.06))' : 'mix(vec3(1.0), vec3(0.55, 0.86, 0.84), smoothstep(0.0, 2.5, s))'};
+      if (uDay > 0.01){ float c1 = tW(bp + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(bp - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a;
+        caus = mix(0.13, pow(c1*c2, 1.4), (1.0 - smoothstep(0.025, 0.09, fpL))*exp(-dep*0.35))*uDay; }
+      vec3 bottom = sandB*(uAmb*0.9 + keyC*(0.6*max(Lk.y, 0.0) + 0.7*caus) + art*0.6)*exp(-dep*vec3(0.42, 0.075, 0.06));
       lit = mix(lit, bottom, clar);
     }
     ${Layout.isle ? 'lit = lit*(1.0 - F) + mix(skyRefl(R), bankC, bankO)*F;' : 'lit = lit*(1.0 - F) + skyRefl(R)*F;'}

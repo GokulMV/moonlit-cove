@@ -9,6 +9,7 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 ## In the cove
 
 - Walk the beach, wade out into the sea or wander up among the palms, or let it walk itself
+- Kneel and build a sand castle (C, while walking on the sand); the waves wash it away, and the van flattens it
 - Stay in the beach huts either side of the camp: open the doors and shutters, light the lamps, lie in the hammock, read the boards in the work hut
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands
 - Pick fruit round the camp (mango, rambutan, papaya, banana, coconuts): every tree flowers, sets fruit, ripens and drops it to rot on the ground, round after round, about every 15 minutes (faster with the time flow up); a fruit keeps ripening in your hand, and you can eat it when it's ripe
