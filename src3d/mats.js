@@ -388,14 +388,29 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     }
     /* (under the trees and on the hills the ground is thick with shrubs and saplings, crown against crown, shade in
        between: from above it is no lawn) */
-    ${key === 'land' ? 'cnAt(vWPos + vec3(uLoopX, 0.0, 0.0), 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}${key === 'land' && Layout.isle ? `
+    ${key === 'land' && Layout.isle ? 'cnAt(vWPos + vec3(uLoopX, 0.0, 0.0), 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}${key === 'land' && Layout.isle ? `
     /* (but not on the mangroves' mud: bare, nothing growing on it but the trees. And the crowns are a thing seen from
        above: seen along the ground, at a glance, or from under the trees, or up a hill from below, the shrubs' domes
        would read as a cobbled street, so they fade away as the ground is seen more edge-on, or from no higher than it) */
     { float mudF = smoothstep(0.02, 0.2, vMud); cnTint = mix(cnTint, vec3(0.66), mudF); cnGrad *= 1.0 - mudF;
       vec3 nG = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz), vG = normalize(cameraPosition - vWPos);
       float face = smoothstep(0.12, 0.45, dot(nG, vG))*smoothstep(8.0, 40.0, cameraPosition.y - vWPos.y); cnGrad *= face; cnTint = mix(vec3(0.66), cnTint, 0.3 + 0.7*face); }` : ''}
-    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;${key === 'land' && Layout.isle ? `
+    vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;${key === 'land' && !Layout.isle ? `
+    /* (along the beach, under the trees: the forest's floor, its fallen leaves brown and grey, moss and a seedling's green
+       here and there, the light coming down through the canopy in flecks; out at the forest's edge, grass and herbs. Up
+       close, the leaves themselves; further off, where a leaf is a pixel or two, their average, smooth: no pattern) */
+    { float cov = smoothstep(1.0, 8.0, shoreVeg(vWPos.xz))*(1.0 - vRock);
+      if (cov > 0.0){
+        /* (where along the beach it is, as it goes on round the loop: so nothing jumps when the frame does) */
+        vec3 wq = vWPos + vec3(uLoopX, 0.0, 0.0);
+        float l1 = vnz(wq*0.45 + 3.0), l2 = vnz(wq*2.3), l3 = vnz(wq*9.0 + 1.0), l4 = vnz(wq*31.0), fw = length(fwidth(vWPos.xz));
+        float dK = 1.0 - smoothstep(0.05, 0.5, fw);
+        vec3 litter = mix(vec3(0.15, 0.105, 0.062), vec3(0.115, 0.095, 0.074), l2)*(0.72 + mix(0.0, 0.32*l3 + 0.18*l4, dK) + 0.1*l1);
+        litter = mix(litter, vec3(0.045, 0.068, 0.026)*(0.8 + 0.4*l4*dK), smoothstep(0.55, 0.8, l1*0.6 + l3*0.4)*0.5);
+        { float lk = (1.0 - smoothstep(0.01, 0.045, fw)); if (lk > 0.0) litter = mix(litter, litterAt(wq.xz)*(0.64 + 0.22*l3), lk); }
+        float fleck = smoothstep(0.7, 0.78, vnz(wq*0.8 + 11.0)*0.65 + l3*0.35);
+        vegC = mix(vegC, litter*mix(0.62, 0.42 + 0.75*fleck, dK), cov);
+      } }` : ''}${key === 'land' && Layout.isle ? `
     /* (round the island, near the eye, the ground as it is underfoot: under the trees the forest's floor, its fallen
        leaves brown and grey, a seedling's green here and there, the light through the canopy in flecks; out in the open,
        at the forest's edge and in a clearing, grass and herbs) */
@@ -480,7 +495,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
       /* (and the sky's light, as much of it as comes in under the forest's canopy) */
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n  { vec3 skyK = isleSky3(vWPos)*mix(1.0, 0.22, hutsIn(vWPos)); iblIrradiance *= skyK; irradiance *= skyK; radiance *= mix(vec3(1.0), skyK, 0.85); }');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + (key === 'gran' || key === 'granw' ? 'varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;\n' + GRAN_XTL : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' || key === 'trail') && Layout.isle ? LITTER : ''))
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform vec3 uKeyDirT, uKeyColT, uAmbF;\nuniform float uTime;\nuniform mat4 uVanInv;\n' + (key === 'land' || key === 'reef' ? 'varying float vRock;\n' : '') + (key === 'land' && Layout.isle ? 'varying float vCov, vMud, vPath;\n' : '') + (key === 'gran' || key === 'granw' ? 'varying vec3 vKDir; varying vec4 vKr, vKs; varying float vKsz;\n' + GRAN_XTL : '') + PREFIX + (key === 'rockw' || key === 'land' || key === 'reef' ? ROCK : '') + (key === 'canopy' || key === 'land' || key === 'reef' ? CANOPY : '') + ((key === 'land' && !Layout.isle) || ((key === 'land' || key === 'trail') && Layout.isle) ? LITTER : ''))
         .replace('#include <opaque_fragment>', `
   vec3 nW = normalize((vec4(normal, 0.0)*viewMatrix).xyz);
   outgoingLight += diffuseColor.rgb*artLight(vWPos, nW)*${key === 'log' ? '0.35' : '1.0'};

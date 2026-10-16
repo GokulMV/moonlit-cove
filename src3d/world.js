@@ -901,8 +901,10 @@ void main(){
           fClaims.set(cw, L); }
         return L;
       };
-      const kept = (x, z) => {
-        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x);
+      /* (a hut's or a shack's clearing is kept clear of the trees; the undergrowth comes in nearer, up round its walls) */
+      const SMALLG = [7, 8, 9, 11];
+      const kept = (x, z, G) => {
+        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x), rk = G && SMALLG.includes(G.id) ? 0.55 : 1;
         if (Math.abs(dx) < 60) {
           const xx = Layout.camp.x + dx, C = Layout.camp;
           if ((xx - C.x - 1) ** 2 + (zw - C.z + 0.8) ** 2 < 15 * 15) return true;
@@ -912,10 +914,11 @@ void main(){
           for (const q of Layout.fruit || []) if ((xx - q.x) ** 2 + (zw - q.z) ** 2 < 5 * 5) return true;
         }
         const c = Math.floor((x - X0) / CW);
-        for (let k = c - 1; k <= c + 1; k++) { const cw = cwOf(k), sh = (k - cw) * CW, L = claimsOf(cw); for (let i = 0; i < L.length; i++) { const q = L[i]; if ((x - sh - q[0]) ** 2 + (z - q[1]) ** 2 < q[2] * q[2]) return true; } }
-        return massif(x, z) > 0.25 || slope(x, z) > 0.85;
+        for (let k = c - 1; k <= c + 1; k++) { const cw = cwOf(k), sh = (k - cw) * CW, L = claimsOf(cw); for (let i = 0; i < L.length; i++) { const q = L[i], r = q[2] * rk; if ((x - sh - q[0]) ** 2 + (z - q[1]) ** 2 < r * r) return true; } }
+        /* (bare rock where a headland's is; the steep faces of the hills wooded as the rest) */
+        return massif(x, z) > 0.25;
       };
-      IF = IsleForest.build(fRoot, CI, { R: FR, land: (x, z) => land(x, z), period: P, kept, shift: 9, near: 72, nearSmall: 40 });
+      IF = IsleForest.build(fRoot, CI, { R: FR, land: (x, z) => land(x, z), period: P, kept, shift: 9, sandEdge: 0.8, near: 72, nearSmall: 40 });
     }
     /* a stretch of the loop's forest (cw, its chunk's place round the loop): its trees in bands going in from the beach,
        and their cards ([the trees', the small plants']), worked out a little at a time */

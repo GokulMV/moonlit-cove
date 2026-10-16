@@ -81,7 +81,7 @@ const IsleForest = (() => {
   /* o: { R (the renderer, to photograph the cards with), land(x, z), keep (places kept clear), near, nearSmall,
      period (the grids drawn a whole number of cells round a loop that long, so the forest comes round again with it:
      the beach's loop), kept(x, z) (whether a place is kept clear, in place of the camp's and keep's), shift (the forest
-     proper that much nearer the beach's top, m) } */
+     proper that much nearer the beach's top, m), sandEdge (nothing on the sand short of that far in from its top, m) } */
   function build(root, I, o) {
     const R = o.R, land = o.land, SQ = {}, group = new T.Group(); group.name = 'forest'; group.matrixAutoUpdate = false; root.add(group);
     /* (round a loop each grid a whole number of cells, its cells' numbers taken round it: the same trees each time round) */
@@ -116,6 +116,9 @@ const IsleForest = (() => {
     function odds(G, x, z, out) {
       const s = I.sdf(x, z); if (s > 9) return 0;
       const q = I.shore(I.uAt(x, z), SQ), d = -s, W = q.W, dF = d + SH;
+      /* (o.sandEdge: nothing grows out on the beach's sand, short of that far in from its top; only the palms lean out over
+         it from just above) */
+      if (o.sandEdge !== undefined && d < W + o.sandEdge - (G.id === 1 ? 1.4 : 0)) return 0;
       /* (the forest proper: from a little way behind the beach's top, closed within twenty metres of it; nearer, shifted) */
       const rockK = (q.rock + q.cliff) * (1 - sm(W + 4, W + 18, d)), forest = Math.max(sm(W + 6, W + 22, dF) * q.sand, sm(W + 6, W + 20, d) * (q.rock + q.cliff), sm(16, 44, d) * q.mangrove) * (1 - rockK);
       const notMang = 1 - sm(0.25, 0.55, q.mangrove);
@@ -147,7 +150,7 @@ const IsleForest = (() => {
     /* (the tree of grid G's cell (gx, gz), if one grows there: inside the box given, if one is) */
     function treeAt(G, gx, gz, box) {
       const c = cand(G, gx, gz, C0); if (!c) return null;
-      const x = c[0], z = c[1], pr = c[2]; if ((box && (x < box[0] || x >= box[0] + box[2] || z < box[1] || z >= box[1] + box[2])) || kept(x, z)) return null;
+      const x = c[0], z = c[1], pr = c[2]; if ((box && (x < box[0] || x >= box[0] + box[2] || z < box[1] || z >= box[1] + box[2])) || kept(x, z, G)) return null;
       const hx = hxOf(G, gx);
       const w = W4.w && W4.w.slice();
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { if (!i && !j) continue; const n = cand(G, gx + i, gz + j, C1); if (n && n[2] > pr && (n[0] - x) ** 2 + (n[1] - z) ** 2 < G.g * G.g * 0.72) return null; }
@@ -205,7 +208,7 @@ const IsleForest = (() => {
         const key = gx * 100003 + gz; let tr = floorMemo.get(key);
         if (tr === undefined) {
           tr = null; const c = cand(G, gx, gz, C0), hx = hxOf(G, gx);
-          if (c && !kept(c[0], c[1])) { const w = W4.w.slice(); let r = hash3(hx, gz, 151) * w.reduce((a, b) => a + b, 0), kind = G.kinds[0]; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } }
+          if (c && !kept(c[0], c[1], G)) { const w = W4.w.slice(); let r = hash3(hx, gz, 151) * w.reduce((a, b) => a + b, 0), kind = G.kinds[0]; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } }
             const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(hx, gz, 152) * P.length) % P.length];
             tr = { x: c[0], y: land(c[0], c[1]) - 0.04, z: c[1], s: K.s[0] + (K.s[1] - K.s[0]) * hash3(hx, gz, 153), yaw: hash3(hx, gz, 154) * TAU, p: p.i }; }
           if (floorMemo.size > 9000) floorMemo.clear();
