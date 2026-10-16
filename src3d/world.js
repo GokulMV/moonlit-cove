@@ -1,11 +1,11 @@
 /* ─────────────────────────────────────────────────────────────
-   world.js — the coast beyond the camp, without end and never the
-   same twice. It is built in chunks along the beach as the camera
-   comes near: rocky headlands (Layout.Coast) with a strip of sand at
-   their foot to drive round the point, sea stacks and surf rocks off
-   them, forest on the hills behind. Each chunk grows from its own
-   seeds, so it comes out the same whenever, and in whatever order, it
-   is built. The work is cut into small steps, a few milliseconds of
+   world.js — the coast beyond the camp, without end: a beach two
+   kilometres long (Layout.P) joined end to end, so that walking or
+   driving on you come round onto its start again, everything along it
+   as it was. It is built in chunks along the beach as the camera
+   comes near, the forest on the hills behind. Each chunk grows from
+   its own seeds (its place in the loop), so it comes out the same
+   whenever, and in whatever order, it is built. The work is cut into small steps, a few milliseconds of
    them a frame; near chunks get every detail, far ones lighter
    versions, and chunks left far behind are thrown away. By the camp
    the forest keeps its clearing.
@@ -15,6 +15,8 @@
 const World = (() => {
   const T = THREE, TAU = Math.PI * 2, Co = Layout.Coast;
   const CW = 128, X0 = -64;                                   /* chunk c covers [X0 + c·CW, X0 + (c+1)·CW) along the coast; chunk 0 holds the camp */
+  /* (the loop: P metres, NC chunks, and a chunk's place in it, c wrapped) */
+  const P = Layout.P, NC = P / CW, cwOf = c => ((c % NC) + NC) % NC, wrapI = (i, n) => ((i % n) + n) % n;
   const LOD = { tiny: 45, near: 155, fine: 300, mid: 430, rocks: 1050, view: 3400, keep: 3800 };   /* (beyond the rocks' reach a chunk is only its land, its canopy and the crowns over it: the coast and its mountains run on into the haze) */
   const rng = s => Textures.rng(s);
   const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -36,11 +38,11 @@ const World = (() => {
              L(L(h3(ix, iy, iz + 1), h3(ix + 1, iy, iz + 1), u), L(h3(ix, iy + 1, iz + 1), h3(ix + 1, iy + 1, iz + 1), u), v), w);
   }
   const fbm = (x, y, z, o = 4) => { let a = 0, s = 0.5, f = 1; for (let i = 0; i < o; i++) { a += s * vn(x * f, y * f, z * f); s *= 0.5; f *= 2.03; } return a; };
-  /* noise along the coast. The old repeating stretch wrapped x round a circle so its noise closed on itself; this is
-     the same noise laid along that circle's tangent at the camp, so the camp's surroundings keep their shapes */
-  const RW = 1024 / TAU;
-  const fbmX = (x, z, f, seed, o = 4) => fbm(f * RW + seed * 1.37, x * f - seed * 0.71, z * f, o);
-  const vnX = (x, z, f, seed) => vn(f * RW + seed * 1.37, x * f - seed * 0.71, z * f);
+  /* noise along the coast, closing on itself every P metres: x is taken round a circle of that circumference, laid so that
+     at the camp it runs along the same line the noise always did there (the camp's surroundings keep their shapes) */
+  const RW = 1024 / TAU, RP = P / TAU;
+  const fbmX = (x, z, f, seed, o = 4) => { const a = x / RP, R = f * RP; return fbm(f * RW + R * (Math.cos(a) - 1) + seed * 1.37, R * Math.sin(a) - seed * 0.71, z * f, o); };
+  const vnX = (x, z, f, seed) => { const a = x / RP, R = f * RP; return vn(f * RW + R * (Math.cos(a) - 1) + seed * 1.37, R * Math.sin(a) - seed * 0.71, z * f); };
   /* 2-D cells of a given size: distance to the nearest jittered point (in cell units); that cell's id is left in cellId */
   let cellId = 0;
   function cell2(x, z, size, seed) {
@@ -579,7 +581,7 @@ void main(){
     for (let k = 0; k < NV; k++) {
       const x = Pa[k * 3] + o.x, z = Pa[k * 3 + 2] + o.z, ny = N[k * 3 + 1], m = MS[k];
       const onM = m > 0.08 && m >= HL[k] - 0.3 ? 1 : 0;
-      let rock = Math.min(1, onM * (0.5 + 3.0 * (1 - ny)) + sm(0.74, 0.5, ny));
+      let rock = Co.ROCKS ? Math.min(1, onM * (0.5 + 3.0 * (1 - ny)) + sm(0.74, 0.5, ny)) : 0;   /* (no bare rock anywhere now: the steep faces wooded too) */
       if (onM && m > 2.4 && ny > 0.9) rock *= 0.3;
       const n = fbmX(x, z, 0.08, 0.5, 3), n2 = fbmX(x, z, 0.25, 3.0, 2), a = 0.7 + 0.6 * n, b = 0.7 + 0.6 * n2;
       C[k * 3] = L(0.024 * a, 0.14 * b, rock); C[k * 3 + 1] = L(0.042 * a, 0.128 * b, rock); C[k * 3 + 2] = L(0.017 * (0.75 + 0.5 * n), 0.112 * b, rock);
@@ -624,28 +626,28 @@ void main(){
      green, now and then one in flower or in new bronze leaf. They stand in the canopy, a third of each above it, so the
      hills' skyline is crowns. Far off, every other one, a little bigger. The grid is drawn from hashes of its cells, so
      the crowns are the same whichever chunk builds first */
-  const CROWN_G = [[5.6, 3, 420, 500], [12, 420, DEEP, 520]];     /* [cell, from and to how deep, hash salt]: near the shore, and over the mountains */
+  const CROWN_G = [[5.6, 3, 420, 500], [12, 420, DEEP, 520]].map(([g, a, b, H]) => { const n = Math.round(P / g); return [P / n, a, b, H, n]; });     /* [cell, from and to how deep, hash salt, cells round the loop]: near the shore, and over the mountains (each cell a whole number of them to the loop) */
   const GREENS = [[0.036, 0.074, 0.025], [0.045, 0.086, 0.028], [0.058, 0.094, 0.032], [0.032, 0.066, 0.036], [0.054, 0.074, 0.03], [0.042, 0.08, 0.031], [0.03, 0.058, 0.026]];
   function* crowns(c, coarse, o, mat, quad) {
     const X0c = X0 + c * CW, campX = Layout.camp.x + o.x, out = [];
-    for (const [g, dA, dB, H] of CROWN_G) for (let gx = Math.floor(X0c / g) - 1, gx1 = Math.floor((X0c + CW) / g); gx <= gx1; gx++) for (let gd = Math.floor(dA / g); gd * g < dB; gd++) {
+    for (const [g, dA, dB, H, NG] of CROWN_G) for (let gx = Math.floor(X0c / g) - 1, gx1 = Math.floor((X0c + CW) / g); gx <= gx1; gx++) for (let gd = Math.floor(dA / g); gd * g < dB; gd++) {
       if (late()) yield;
-      if (coarse && hash3(gx, gd, H + 1) > 0.5) continue;
-      const x = (gx + 0.12 + 0.76 * hash3(gx, gd, H + 2)) * g; if (x < X0c || x >= X0c + CW) continue;
-      const d = (gd + 0.12 + 0.76 * hash3(gx, gd, H + 3)) * g; if (d < dA || d >= dB) continue;
+      if (coarse && hash3(wrapI(gx, NG), gd, H + 1) > 0.5) continue;
+      const x = (gx + 0.12 + 0.76 * hash3(wrapI(gx, NG), gd, H + 2)) * g; if (x < X0c || x >= X0c + CW) continue;
+      const d = (gd + 0.12 + 0.76 * hash3(wrapI(gx, NG), gd, H + 3)) * g; if (d < dA || d >= dB) continue;
       const ramp = sm(0, 10, d) * sm(DEEP, DEEP - 40, d); if (ramp < 0.3) continue;
       const z = Co.vegZ(x) + D0(x, campX) + d, m = massif(x, z), hl = Math.max(hill(x, z), range(x, z));
       if (m > hl + 0.5 && slope(x, z) > 0.75) continue;      /* (bare rock) */
-      const pic = Math.floor(hash3(gx, gd, H + 5) * 8), w = g * (0.85 + 0.6 * hash3(gx, gd, H + 4) + (hash3(gx, gd, H + 11) < 0.06 ? 0.7 : 0)) * (coarse ? 1.3 : 1), h = w * (pic >= 4 && pic < 6 ? 1.15 : pic === 6 ? 0.7 : 0.9);
+      const pic = Math.floor(hash3(wrapI(gx, NG), gd, H + 5) * 8), w = g * (0.85 + 0.6 * hash3(wrapI(gx, NG), gd, H + 4) + (hash3(wrapI(gx, NG), gd, H + 11) < 0.06 ? 0.7 : 0)) * (coarse ? 1.3 : 1), h = w * (pic >= 4 && pic < 6 ? 1.15 : pic === 6 ? 0.7 : 0.9);
       const y = Math.max(hl, m) + 0.15 + (6 + 5 * fbmX(x, z, 0.017, 3.3, 3)) * ramp + 0.35 + h * 0.06;
-      const k = hash3(gx, gd, H + 6);
-      let col = GREENS[Math.floor(hash3(gx, gd, H + 9) * GREENS.length)];
+      const k = hash3(wrapI(gx, NG), gd, H + 6);
+      let col = GREENS[Math.floor(hash3(wrapI(gx, NG), gd, H + 9) * GREENS.length)];
       if (k < 0.004) col = [0.2, 0.06, 0.026];             /* a flame of the forest in flower */
       else if (k < 0.0065) col = [0.16, 0.13, 0.032];       /* a golden shower */
       else if (k < 0.022) col = [0.07, 0.06, 0.03];         /* in new, bronze leaf */
       else if (k < 0.045) col = [0.06, 0.08, 0.058];        /* a silvery one */
-      const lk = 0.85 + 0.35 * hash3(gx, gd, H + 10);
-      out.push(x - o.x, y, z - o.z, w, h, pic, hash3(gx, gd, H + 7), 0.04 + 0.06 * hash3(gx, gd, H + 8), col[0] * lk, col[1] * lk, col[2] * lk);
+      const lk = 0.85 + 0.35 * hash3(wrapI(gx, NG), gd, H + 10);
+      out.push(x - o.x, y, z - o.z, w, h, pic, hash3(wrapI(gx, NG), gd, H + 7), 0.04 + 0.06 * hash3(wrapI(gx, NG), gd, H + 8), col[0] * lk, col[1] * lk, col[2] * lk);
     }
     const n = out.length / 11; if (!n) return null;
     const geo = new T.InstancedBufferGeometry(), aP = new Float32Array(n * 4), aQ = new Float32Array(n * 4), aC = new Float32Array(n * 3);
@@ -726,11 +728,11 @@ void main(){
     return q;
   };
   /* each kind's grid: its cell size, how many rows deep, and the odds of a candidate in each row */
-  const GRID = SPEC.map(sp => { const g = sp[4] * sp[5], nd = Math.ceil((sp[3] - sp[2]) / g); return { g, nd, d0: sp[2], q: Array.from({ length: nd }, (_, gd) => presence(sp, (gd + 0.5) / nd)) }; });
+  const GRID = SPEC.map(sp => { const n = Math.round(P / (sp[4] * sp[5])), g = P / n, nd = Math.ceil((sp[3] - sp[2]) / g); return { g, n, nd, d0: sp[2], q: Array.from({ length: nd }, (_, gd) => presence(sp, (gd + 0.5) / nd)) }; });   /* (each grid a whole number of cells round the loop) */
   /* the coast's stretches, each a few hundred metres long and never the same twice (slow noise along the coast):
      palm groves and stretches with hardly a palm, belts of casuarina, open sand with the forest standing back, scrub.
      How much more (or less) of kind ki grows at x; the camp's own bay is left as it always was */
-  const zoneAt = x => { const k = sm(160, 330, Math.abs(x - Layout.camp.x - Layout.O.x));
+  const zoneAt = x => { const k = sm(160, 330, Math.abs(Layout.wrapD(x - Layout.camp.x - Layout.O.x)));
     return { k, palm: 0.2 + 1.6 * sm(0.3, 0.7, vnX(x, 0, 1 / 230, 21)), cas: sm(0.5, 0.74, vnX(x, 0, 1 / 380, 37)), open: sm(0.6, 0.78, vnX(x, 0, 1 / 170, 53)), al: vnX(x, 0, 1 / 290, 44) }; };
   function zoneK(ki, x) {
     const Z = zoneAt(x); if (Z.k <= 0) return 1;
@@ -749,8 +751,9 @@ void main(){
   const cand = [0, 0, 0];
   function candidate(ki, gx, gd) {
     const G = GRID[ki];
-    if (gd < 0 || gd >= G.nd || hash3(gx, gd, ki * 8) >= Math.min(0.9, G.q[gd] * zoneK(ki, (gx + 0.5) * G.g))) return null;
-    cand[0] = (gx + hash3(gx, gd, ki * 8 + 1)) * G.g; cand[1] = G.d0 + (gd + hash3(gx, gd, ki * 8 + 2)) * G.g; cand[2] = hash3(gx, gd, ki * 8 + 3);
+    const hx = wrapI(gx, G.n);
+    if (gd < 0 || gd >= G.nd || hash3(hx, gd, ki * 8) >= Math.min(0.9, G.q[gd] * zoneK(ki, (gx + 0.5) * G.g))) return null;
+    cand[0] = (gx + hash3(hx, gd, ki * 8 + 1)) * G.g; cand[1] = G.d0 + (gd + hash3(hx, gd, ki * 8 + 2)) * G.g; cand[2] = hash3(hx, gd, ki * 8 + 3);
     return cand;
   }
   function* forestPlan(X0c, ok, out) {
@@ -770,9 +773,9 @@ void main(){
         if (late()) yield;
         const z = Co.vegZ(x) + dep;
         if (!ok(x, z)) continue;
-        const k = ki * 8 + 4;
-        const v = kind === 'tree' ? treeShape(x, hash3(gx, gd, k + 3), hash3(gx, gd, k + 2)) : Math.floor(hash3(gx, gd, k + 2) * 12);
-        L.push({ x, z, y: land(x, z), ry: hash3(gx, gd, k) * TAU, s: 0.8 + 0.45 * hash3(gx, gd, k + 1), v, tint: hash3(gx, gd, k + 5) });
+        const k = ki * 8 + 4, hx = wrapI(gx, GRID[ki].n);
+        const v = kind === 'tree' ? treeShape(x, hash3(hx, gd, k + 3), hash3(hx, gd, k + 2)) : Math.floor(hash3(hx, gd, k + 2) * 12);
+        L.push({ x, z, y: land(x, z), ry: hash3(hx, gd, k) * TAU, s: 0.8 + 0.45 * hash3(hx, gd, k + 1), v, tint: hash3(hx, gd, k + 5) });
       }
       yield;
     }
@@ -849,6 +852,10 @@ void main(){
     const stat = { worst: 0, worstAt: '', steps: 0, long: 0, built: 0, dropped: 0 };
     const campC = () => Math.floor((Layout.camp.x + o.x - X0) / CW);
 
+    /* how far in behind the forest's edge the open ground goes before the canopy closes over it, at a world x: the grass
+       grows that far (grass.js, and the ground's colour under it, through the coast's numbers, Mats.coastReach) */
+    const reach = xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
+    Mats.coastReach(reach);
     /* the forest's clearing round the camp, in the world's coordinates */
     const clear = (x, z) => (Math.abs(x) < 17 && z < 30) || (Math.abs(x - Layout.camp.x) < 10 && z < Layout.vegZ(x) + 6);
     const claimed = (ch, x, z) => { for (const [cx, cz, r] of ch.claims) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return false; };
@@ -991,7 +998,7 @@ void main(){
 
     /* a chunk: its groups for each level of detail, what it holds, what the van must drive round, the rocks in the water */
     function chunk(c) {
-      const x0 = X0 + c * CW - o.x, ch = { c, X0: X0 + c * CW, x0, x1: x0 + CW, camp: Layout.camp.x >= x0 && Layout.camp.x < x0 + CW, seed: 1 + Math.floor(Co.hash(c, 31) * 1e9),
+      const x0 = X0 + c * CW - o.x, cw = cwOf(c), ch = { c, cw, X0: X0 + c * CW, x0, x1: x0 + CW, camp: Layout.camp.x >= x0 && Layout.camp.x < x0 + CW, seed: 1 + Math.floor(Co.hash(cw, 31) * 1e9),
         root: new T.Group(), g: {}, has: {}, jobs: {}, own: { base: [], baseFar: [], all: [] }, claims: [], rocks: [], trees: null, obs: Array.from({ length: CW / 8 }, () => []), wet: [], d: 0 };
       ch.rng = k => rng(ch.seed + 101 * (k || 0));
       /* something the van must drive round, [x, z, radius, kind] in world coordinates (kept in 8 m buckets along the chunk) */
@@ -1247,7 +1254,7 @@ void main(){
       return n;
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
-    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade,
+    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },

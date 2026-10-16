@@ -207,7 +207,7 @@ const Pages = (() => {
         items.forEach(([t, l], i) => d.box(220 + i * (w + gap), y, w, h, t, l ? [l] : [], { center: true, ts: 19, ls: 14.5 })); };
       row(178, 'PAGE', [['app.js', 'camera · input · chapters'], ['pages.js', 'typesetting'], ['content.js', 'the words']]);
       row(300, 'RUN', [['engine.js', 'render loop · post · shadows'], ['audio.js', 'Web Audio · field recordings']]);
-      row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the endless coast'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
+      row(422, 'THINGS', [['camp.js', 'the camp, in code'], ['world.js', 'the beach, in a loop'], ['nature.js', 'trees near camp'], ['life.js', 'lanterns · fish'], ['fauna.js', 'birds · bugs · crabs']], 78);
       row(512, '', [['fx.js', 'fire · smoke · moths'], ['book.js', 'bound books'], ['paper.js', 'sheets you hold'], ['cloth.js', 'Verlet cloth'], ['shacks.js', 'shacks · huts · boats']], 78);
       row(626, 'LOOK', [['sky.js', 'sky colours'], ['glsl.js', 'every shader'], ['mats.js', 'materials'], ['paint.js', 'painted textures'], ['textures.js', 'noise · water · sand']], 78);
       row(738, 'FACTS', [['astro.js', 'sun & moon, after SunCalc'], ['layout.js', 'the cove in metres · the coast’s dice']], 84);
@@ -230,11 +230,11 @@ const Pages = (() => {
       d.box(86, 652, 580, 150, 'REFLECTIONS', ['the sky, prefiltered into a cube map,', 'rebuilt only when the sky changes'], { dash: true });
       d.box(714, 652, 600, 150, 'ADAPTIVE SIZE', ['the render scale drops when frames run', 'slow, and climbs back when they’re quick'], { dash: true });
     }, ['everything renders in half float, then tone-maps', 'the fire is ray-marched, not a sprite', 'occlusion fades out far away (no shimmer)', 'phones get fewer pixels, not fewer effects']],
-    ['The coast, from above', 'The real coast, 3.6 km of it round the camp: headlands, points, bays and reefs, each its own roll of the dice.', d => {
-      /* drawn from the coast itself (Layout.Coast): a third of a pixel a metre along it, its bends drawn 4.4 times deeper so
-         they show, the beach 12 times wider */
-      const a = d.a, C = Layout.Coast, X0 = 86, X1 = 1314, SPAN = 3600, Y0 = 404, K = 1.5, KB = 4.2, base = Layout.SH.base, PXM = (X1 - X0) / SPAN;
-      const px = x => X0 + (x + SPAN / 2) / SPAN * (X1 - X0), xOf = p => (p - X0) / (X1 - X0) * SPAN - SPAN / 2;
+    ['The beach, from above', 'Two kilometres of beach, its two ends joined: drive on along it and you come round to the camp again.', d => {
+      /* drawn from the coast itself (Layout.Coast): the whole loop, the camp in the middle, its bends drawn deeper so
+         they show, the beach many times wider */
+      const a = d.a, C = Layout.Coast, X0 = 86, X1 = 1314, SPAN = Layout.P, Y0 = 404, K = 2.2, KB = 4.2, base = Layout.SH.base, PXM = (X1 - X0) / SPAN, cx0 = Layout.camp.x + Layout.O.x;
+      const px = x => X0 + (x - cx0 + SPAN / 2) / SPAN * (X1 - X0), xOf = p => cx0 + (p - X0) / (X1 - X0) * SPAN - SPAN / 2;
       const sy = x => Y0 + (C.shoreZ(x) - base) * K, vy = x => sy(x) + (C.vegZ(x) - C.shoreZ(x)) * KB;
       a.save(); a.beginPath(); a.rect(X0, 176, X1 - X0, 650); a.clip();
       const sh = [], fe = []; for (let p = X0; p <= X1; p += 2) { const x = xOf(p); sh.push([p, sy(x)]); fe.push([p, vy(x)]); }
@@ -243,43 +243,24 @@ const Pages = (() => {
       d.line(sh, { color: d.LINE, w: 2.4 }); d.line(fe, { color: d.SOFT, w: 1.6, dash: [6, 6] });
       /* the forest beyond its edge */
       const r = rnd(5); for (let i = 0; i < 620; i++) { const p = X0 + r() * (X1 - X0), y = vy(xOf(p)) + 6 + r() * 340; if (y < 826) d.circle(p, y, 2.5 + r() * 4.5, { color: 'rgba(170,205,255,0.3)', w: 1 }); }
-      /* headlands: rock hatched over the sand at their foot and the land behind, their stacks out in the sea */
-      const H = C.heads(-SPAN / 2, SPAN / 2);
-      for (const h of H) {
-        const c = px(h.hx), wpx = Math.max(6, h.w * PXM * 2.2);
-        for (let i = 0; i < (h.minor ? 18 : 46); i++) { const p = c + (r() - 0.5) * wpx * 1.6, y0 = sy(xOf(p)), y = y0 + 3 + r() * (h.minor ? 18 : 40); d.line([[p, y], [p + 6, y - 4]], { color: 'rgba(225,238,255,0.55)', w: 1.2 }); }
-        for (let k = 0; k < h.stacks; k++) d.circle(c + (k ? 1 : -0.4) * wpx * 0.5, sy(h.hx) - 14 - 8 * k, 3.5 + (k ? 0 : 1.5), { color: d.LINE, w: 1.4 });
-      }
-      /* reefs: rock running out from the beach into the sea */
-      const RF = C.reefs(-SPAN / 2, SPAN / 2);
-      for (const f of RF) {
-        const g = C.shoreDZ(f.x), n = Math.hypot(g, 1), dx = g / n, dz = -1 / n, ca = Math.cos(f.ang), sa = Math.sin(f.ang), ox = dx * ca - dz * sa, oz = dx * sa + dz * ca;
-        const pts = []; for (let t = 0; t <= 1.001; t += 0.1) { const x = f.x + ox * f.len * t, z = C.shoreZ(f.x) + 1.5 + oz * f.len * t; pts.push([px(x) + f.bend * PXM * Math.sin(Math.PI * t), Y0 + (z - base) * K]); }
-        d.line(pts, { color: d.LINE, w: 4.2 }); d.line(pts, { color: '#1d4a85', w: 1.6, dash: [3, 4] });
-      }
-      /* the chunks round the camp */
-      for (let k = -3; k <= 3; k++) { const p = px(-64 + k * 128); d.line([[p, 176], [p, 826]], { color: 'rgba(200,225,255,0.22)', w: 1.1, dash: [4, 8] }); }
+      /* the chunks it is built in, sixteen to the loop */
+      const CW = 128, c0 = Math.ceil((xOf(X0) + 64) / CW);
+      for (let c = c0; -64 + c * CW <= xOf(X1); c++) { const p = px(-64 + c * CW); d.line([[p, 176], [p, 826]], { color: 'rgba(200,225,255,0.18)', w: 1.1, dash: [4, 8] }); }
       a.restore();
-      for (let k = -2; k <= 2; k++) d.text(`${k > 0 ? '+' : ''}${k}`, px(k * 128), 200, { align: 'center', size: 13, color: d.ACC });
-      d.text('chunks', px(0) + 160, 200, { size: 13, color: d.ACC });
+      for (let c = c0; -64 + (c + 1) * CW <= xOf(X1); c++) { const n = ((c % 16) + 16) % 16; d.text(String(n), px(-64 + (c + 0.5) * CW), 200, { align: 'center', size: 12, color: d.ACC }); }
+      /* the ends: each runs on into the other */
+      d.text('on round to the far end', X0 + 10, 252, { size: 14, color: d.TXT }); d.arrow([[X0 + 60, 262], [X0 + 4, 262]], { soft: true });
+      d.text('on round to the far end', X1 - 10, 252, { align: 'right', size: 14, color: d.TXT }); d.arrow([[X1 - 60, 262], [X1 - 4, 262]], { soft: true });
       /* you, at the camp, and how far each kind of thing is built round you (to scale along the coast) */
-      const cx = px(Layout.camp.x), cy = sy(Layout.camp.x) + 18;
+      const cx = px(cx0), cy = sy(cx0) + 18;
       for (const [rad, t] of [[45, '45 m'], [155, '155 m'], [430, '430 m']]) { const R = rad * PXM; d.circle(cx, cy, R, { color: 'rgba(225,238,255,0.5)', w: 1.3, dash: [3, 6] }); d.text(t, cx + R * 0.74 + 6, cy + R * 0.67 + 16, { size: 13, color: d.TXT }); }
       a.fillStyle = d.TXT; a.beginPath(); a.moveTo(cx, cy - 9); a.lineTo(cx + 7, cy + 6); a.lineTo(cx - 7, cy + 6); a.closePath(); a.fill();
       d.text('camp', cx + 12, cy + 6, { size: 15, color: d.TXT });
       d.text('SEA', 104, 236, { font: FN.mono(600, 18), color: d.ACC }); d.text('SAND', 104, sy(xOf(104)) + 30, { font: FN.mono(600, 16), color: d.ACC }); d.text('FOREST', 104, 780, { font: FN.mono(600, 16), color: d.ACC });
-      /* name a few of them */
-      const lab = (x, y, t, tx, ty) => d.arrow([[tx, ty], [x, y]], { soft: true, label: t, at: [tx, ty - 8] });
-      const big = H.filter(h => !h.minor && Math.abs(h.hx) > 300).sort((p, q) => q.d - p.d)[0], pt = H.filter(h => h.minor && Math.abs(h.hx) > 250)[0];
-      if (big) lab(px(big.hx), sy(big.hx) - 6, 'headland', px(big.hx) + (big.hx > 0 ? -60 : 60), 262);
-      if (pt) lab(px(pt.hx), sy(pt.hx) - 4, 'rocky point', px(pt.hx) + (pt.hx > 0 ? -70 : 70), 300);
-      const near = RF.sort((p, q) => Math.abs(p.x) - Math.abs(q.x))[0];
-      if (near) lab(px(near.x) - 4, sy(near.x) - 30, 'a reef to walk out on', px(near.x) - 150, 250);
-      { let bx = 0, bb = 0; for (let x = -1600; x <= 1600; x += 20) { if (Math.abs(x) < 480) continue; const b = C.shoreZ(x) + C.head(x) - base; if (b > bb) { bb = b; bx = x; } }
-        if (bb > 6) d.text('bay', px(bx), sy(bx) + 24, { align: 'center', size: 14, color: d.ACC }); }
+      d.text('chunks', px(cx0) + 200, 200, { size: 13, color: d.ACC });
       /* a scale */
-      d.line([[1130, 806], [1130 + 500 * PXM, 806]], { color: d.TXT, w: 2 }); d.text('500 m', 1130 + 250 * PXM, 798, { align: 'center', size: 13, color: d.TXT });
-    }, ['drawn from the coast itself, as you will find it', 'no stretch is ever the same as another', 'built round you, a few milliseconds a frame', 'park anywhere: the camp can be pitched there']],
+      d.line([[1130, 806], [1130 + 250 * PXM, 806]], { color: d.TXT, w: 2 }); d.text('250 m', 1130 + 125 * PXM, 798, { align: 'center', size: 13, color: d.TXT });
+    }, ['drawn from the coast itself, as you will find it', 'two kilometres round, its ends joined with no seam', 'built round you, a few milliseconds a frame', 'park anywhere: the camp can be pitched there']],
     ['Sound', 'Recordings, mixed live and timed to what you see.', d => {
       const src = [['SEA', 'a long seamless loop'], ['WAVES', 'a second take swells in'], ['PAGES', 'real paper turning'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder'], ['VAN', 'engine, pitched by speed']];
       src.forEach(([t, l], i) => d.box(86, 178 + i * 80, 380, 68, t, [l], { ts: 17, ls: 14, lh: 20 }));

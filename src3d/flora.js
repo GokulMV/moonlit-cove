@@ -138,7 +138,7 @@ void main(){
       const r = ch.rng(41), c = ch.c, grass = [[], [], []], items = [];
       /* the grass: a band along the forest edge, a little out onto the sand, thinning into the trees (round the island the
          grass is grass.js's, blade by blade) */
-      for (let i = 0; i < (Layout.isle ? 0 : 5200); i++) {
+      for (let i = 0; i < (Layout.isle || typeof IsleGrass !== 'undefined' ? 0 : 5200); i++) {   /* (the blade grass, grass.js, grows here now) */
         const x = ch.x0 + r() * (ch.x1 - ch.x0), vz = Layout.vegZ(x), u = r(), z = vz - 1.6 + Math.pow(u, 1.7) * 14;
         if (world.massif(x, z) > 0.25 || !awayFromCamp(x, z)) continue;
         if (z < vz && r() < 0.6) continue;    /* (sparser out on the sand) */

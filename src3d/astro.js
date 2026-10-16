@@ -166,5 +166,8 @@ const Astro = (() => {
   }
   /* local sidereal time (radians) at ms, at longitude lng (degrees east) */
   const lst = (ms, lng) => sidereal(toDays(ms), rad * -lng);
-  return { sun, moon, illumination, phaseName, sunRise, sunSet, moonRise, moonSet, nextFullMoon, locate, planets, lst, rad };
+  /* the sun among the stars at ms (RA, Dec, radians) and its ecliptic longitude; a point on the ecliptic's RA and Dec */
+  const sunEq = ms => { const d = toDays(ms), M = rad * (357.5291 + 0.98560028 * d), C = rad * (1.9148 * sin(M) + 0.02 * sin(2 * M) + 0.0003 * sin(3 * M)), L = M + C + rad * 102.9372 + PI; return { ra: rightAsc(L, 0), dec: decl(L, 0), L }; };
+  const eclEq = (l, b) => ({ ra: rightAsc(l, b), dec: decl(l, b) });
+  return { sun, moon, illumination, phaseName, sunRise, sunSet, moonRise, moonSet, nextFullMoon, locate, planets, lst, sunEq, eclEq, rad, E };
 })();

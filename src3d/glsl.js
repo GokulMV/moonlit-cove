@@ -154,16 +154,21 @@ float shoreFloor(vec2 p, float s){ return isF(p).w; }
   const COAST = `
 #ifndef COAST_FN
 #define COAST_FN
-uniform highp sampler2D uCoastT;   /* (x step: 0.5 m in row 0, 4 m in row 1) z of the shore · its slope · z of the forest edge */
+uniform highp sampler2D uCoastT;   /* (x step: 0.5 m in row 0, 4 m in row 1) z of the shore · its slope · z of the forest edge · how far in behind that the open ground goes */
 uniform vec4 uCoastW;              /* the x the fine row holds (from, to), and the coarse */
 uniform float uTideZ;
-vec3 coastAt(float x){
+vec4 coastAt4(float x){
   float row = 0.0, st = 0.5;
   if (x < uCoastW.x || x > uCoastW.y){ row = 1.0; st = 4.0; x = clamp(x, uCoastW.z, uCoastW.w); }
   float u = x/st, i0 = floor(u), f = u - i0;
   ivec2 a = ivec2(int(mod(i0, 4096.0)), int(row)), b = ivec2(int(mod(i0 + 1.0, 4096.0)), int(row));
-  return mix(texelFetch(uCoastT, a, 0).xyz, texelFetch(uCoastT, b, 0).xyz, f);
+  return mix(texelFetch(uCoastT, a, 0), texelFetch(uCoastT, b, 0), f);
 }
+vec3 coastAt(float x){ return coastAt4(x).xyz; }
+/* how thick the grass grows on the open ground at the top of the beach, 0..1, before its clumps: from the forest's edge
+   (a little out onto the sand) in to where the canopy closes over it. d: how far up the beach from the water (m), W: the
+   beach's width there, R: how far the open ground goes behind its edge (grass.js and the ground's own colour under it) */
+float vergeBand(float d, float W, float R){ R = max(R, 10.0); return smoothstep(W - 1.2, W + 1.4, d)*(1.0 - smoothstep(W + R - 3.0, W + R + 5.0, d)); }
 float coastZ(float x){ return coastAt(x).x + uTideZ; }
 float coastDZ(float x){ return coastAt(x).y; }
 float coastVeg(float x){ return coastAt(x).z; }
@@ -475,7 +480,9 @@ ${CLOUD_FN}
 ${CATMULL}
 void main(){
   vec3 d = normalize(vDir);
-  vec3 c = skyColor(d), sky0 = c;
+  /* (on a dark night the sky between the stars is darker than the light it gives the beach would have it, as eyes that
+     have got used to the dark see it: blue-black, the stars thick in it) */
+  vec3 c = skyColor(d)*(1.0 - 0.5*uStars*(1.0 - uEnv)), sky0 = c;
   float hzCov = 0.0; vec3 hzC = vec3(0.0);
   /* (all of it worked out for every pixel, below the horizon too, so the textures' own filtering, which looks at the
      pixels next door, always finds them doing the same: a branch at the horizon left it guessing along that line) */
@@ -485,6 +492,9 @@ void main(){
     if (uStars > 0.001 && uMWK > 0.0 && d.y > -0.01){
       vec3 e = uEqT*d; float ra = atan(e.y, e.x), dc = asin(clamp(e.z, -1.0, 1.0));
       float mw = textureLod(uMW, vec2(fract(ra/6.2831853 + 1.0), 0.5 + dc/3.1415927), 0.0).r;
+      /* (not a smooth band but clouds of stars, the dust lying dark between them: mottled, among the stars where it is) */
+      float mo = textureLod(uNoise, vec2(e.x + 0.45*e.z, e.y - 0.3*e.z)*1.7 + 0.37, 0.0).r*0.6 + textureLod(uNoise, vec2(e.y + 0.2*e.z, e.x - 0.5*e.z)*4.1 + 0.11, 0.0).g*0.4;
+      mw *= 0.45 + 1.1*smoothstep(0.25, 0.75, mo);
       float am = 1.0/(max(d.y, 0.0) + 0.05);
       c += vec3(0.78, 0.82, 1.0)*mw*mw*uMWK*uStars*exp(-0.28*(am - 1.0))*smoothstep(-0.01, 0.06, d.y);
     }
@@ -884,6 +894,11 @@ vec4 tW(vec2 p, float T){ return texture2DGradEXT(uWater, p/T, gDx/T, gDy/T); }
 vec4 tNq(vec2 q, float T){ return texture2DGradEXT(uNoise, q/T, gQx/T, gQy/T); }
 vec4 tWq(vec2 q, float T){ return texture2DGradEXT(uWater, q/T, gQx/T, gQy/T); }
 vec4 tS(vec2 p, float T){ return texture2DGradEXT(uSand, p/T, gDx/T, gDy/T); }
+/* (grass.js's own value noise, for the gusts that run over the grass: the ground under it far off shows the same ones) */
+uniform vec2 uWindK;
+float gfH(vec2 p){ vec3 q = fract(vec3(p.xyx)*vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
+float gfN(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0 - 2.0*f);
+  return mix(mix(gfH(i), gfH(i + vec2(1.0, 0.0)), u.x), mix(gfH(i + vec2(0.0, 1.0)), gfH(i + vec2(1.0, 1.0)), u.x), u.y); }
 
 ${shoreGL('f', { head: 'headf', headD: 'headDf', z: 'shoreZ', dz: 'shoreDZ', veg: 'vegZ' })}
 /* cheap sky for reflections: gradient, horizon glow, broad moon/sun halo */
@@ -1186,7 +1201,7 @@ void main(){
       vec2 e = vec2(0.02/uDecalRect.z, 0.02/uDecalRect.w);
       rg += vec2(texture2D(uRelief, duv + vec2(e.x, 0.0)).r - rel.r, texture2D(uRelief, duv + vec2(0.0, e.y)).r - rel.r)*4.5;
     }
-    float veg = smoothstep(-0.4, 1.4, shoreVeg(p) + (nm.r - 0.5)*1.6);${Layout.isle ? `
+    float veg = smoothstep(-0.4, 1.4, shoreVeg(p) + (nm.r - 0.5)*1.6 + (nb.g - 0.5)*2.4);${Layout.isle ? `
     /* (a hut's lawn: the grass's own ground under its blades, the sand coming back at its ragged edge) */
     for (int i = 0; i < 6; i++){ vec4 L = uLawn[i]; if (L.z > 0.0) veg = max(veg, L.w*smoothstep(L.z*0.98, L.z*0.6, length(p - L.xy) + (nm.g - 0.5)*2.4)); }` : ''}
     float trample = rel.g;
@@ -1238,7 +1253,26 @@ void main(){
         float mk = clamp(sq.k2.z/max(1.0 - sq.k1.z, 1e-3), 0.0, 1.0); mudK = mk*ns;
         alb = mix(alb, mix(shing, mud, mk), ns);
       } }` : ''}
-    alb = mix(alb, ${Layout.isle ? `mix(vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g), vec3(0.095, 0.083, 0.063)*(0.82 + 0.3*nb.r), mudK)` : `vec3(0.10, 0.11, 0.06)*(0.7 + 0.6*nb.g)`}, veg);   /* (round the island, in the mangroves, their mud, not a green verge) */
+    /* the verge's grass as the ground under it draws it: close by, the dark of the soil and the stems between the tufts;
+       further off, where its blades are no longer drawn one by one, the sward's own colour as they would show it, never a
+       flat cloth: greener and thicker in its damp stretches, thinner and yellower on the dry, darker in its clumps, drifts
+       of straw where it has dried, and the gusts running over it (grass.js's own), lighter where they bend the blades over */
+    vec3 swd;
+    { vec4 g1 = tN(p + vec2(2.3, 7.1), 23.0), g2 = tN(p + vec2(9.4, 3.3), 6.5), g3 = tN(p + vec2(5.5, 1.9), 57.0), g4 = tN(p + vec2(0.7, 4.4), 1.4);
+      float lush = smoothstep(0.25, 0.75, g3.r*0.55 + g1.g*0.45), clump = g2.b, straw = smoothstep(0.6, 0.82, g1.a*0.7 + g2.r*0.3)*(1.0 - 0.7*lush);
+      vec3 nearC = mix(vec3(0.07, 0.085, 0.035), vec3(0.1, 0.11, 0.05), g2.g)*(0.75 + 0.5*nb.g);
+      vec3 farC = mix(vec3(0.075, 0.095, 0.032), vec3(0.1, 0.14, 0.038), lush)*(0.6 + 0.75*clump);
+      farC = mix(farC, vec3(0.19, 0.165, 0.08), straw*0.55)*(0.8 + 0.4*g4.g);
+      vec2 WD = vec2(${f(Layout.wind[0])}, ${f(Layout.wind[1])});
+      float gst = (0.25 + gfN(p*0.09 - WD*uTime*1.1))*(0.55 + 0.45*gfN(p*0.031 - WD*uTime*0.35 + 5.0));
+      farC *= 0.9 + 0.18*gst*min(uWindK.x, 1.5);
+      swd = mix(nearC, farC, smoothstep(10.0, 32.0, dist));${Layout.isle ? '' : `
+      /* (along the beach the grass grows only on the open ground at its top (vergeBand, as grass.js's): further in, under
+         the canopy, the forest's floor, dead leaves on dark earth) */
+      vec4 c4 = coastAt4(p.x); float kq = inversesqrt(1.0 + c4.y*c4.y), vb = vergeBand((p.y - c4.x)*kq, (c4.z - c4.x)*kq, c4.w*kq);
+      vec3 litter = mix(vec3(0.07, 0.056, 0.038), vec3(0.11, 0.085, 0.052), g2.g)*(0.7 + 0.5*nb.g)*(0.85 + 0.3*g4.b);
+      swd = mix(litter, swd, vb);`} }
+    alb = mix(alb, ${Layout.isle ? `mix(swd, vec3(0.095, 0.083, 0.063)*(0.82 + 0.3*nb.r), mudK)` : `swd`}, veg);   /* (round the island, in the mangroves, their mud, not a green verge) */
     /* the high-water line: a faint pale seam of fine sand and burst bubbles, drier than the sand below it */
     float mark = w.mark*(1.0 - veg)*(1.0 - w.cover)*(1.0 - 0.7*uWet);
     float wet = max(max(max(max(w.wet, w.cover), uWet*0.85*(1.0 - 0.6*veg)), tideWet*0.42), mudK*0.8*smoothstep(-18.0, -0.5, s))*(1.0 - veg*0.4)*(1.0 - 0.5*mark);

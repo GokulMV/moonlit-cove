@@ -25,7 +25,7 @@ const Stars = (() => {
   }
   const VS = `
 uniform mat3 uEq;                 /* a direction among the stars (equatorial) → the world's (by the sidereal time and latitude) */
-uniform float uK, uPx, uTime, uMoonR;
+uniform float uK, uPx, uTime, uMoonR, uGam;
 uniform vec3 uMoonDir;
 ${Layout.isle ? 'uniform sampler2D uHzP; uniform float uHzOn;   /* the far ranges round the island (horizon.js) */' : ''}
 attribute float aMag, aSeed, aTw;
@@ -39,7 +39,9 @@ void main(){
   /* twinkling: stronger near the horizon, none for the planets */
   float sc = (0.12 + 0.45*smoothstep(0.45, 0.04, alt))*aTw;
   float tw = 1.0 + sc*(0.6*sin(uTime*(8.0 + 6.0*fract(aSeed*13.1)) + aSeed*40.0) + 0.4*sin(uTime*(19.0 + 9.0*fract(aSeed*7.7)) + aSeed*71.0));
-  float flux = pow(10.0, -0.4*(aMag - 1.0))*ext*max(tw, 0.2);
+  /* (as the eye sees them, not as a camera does: the faint ones not so far below the bright as their light is, uGam,
+     so that a dark sky shows its thousands, as it does to eyes that have got used to the dark) */
+  float flux = pow(pow(10.0, -0.4*(aMag - 1.0)), uGam)*ext*max(tw, 0.2);
   /* a faint star is a spot a pixel and a half across; a bright one spreads its light wider (in the eye, as in a lens) */
   float sz = uPx*(1.6 + 1.1*clamp(2.0 - aMag, 0.0, 4.0) + 0.6*sqrt(max(flux, 0.0)));
   vA = uK*flux*2.2/(sz*sz);
@@ -91,19 +93,33 @@ void main(){
     }
     /* soften it */
     const m = document.createElement('canvas'); m.width = W + 2 * P; m.height = H; const mx = m.getContext('2d');
-    mx.filter = 'blur(5px)'; mx.drawImage(c, 0, 0); mx.filter = 'none';
+    mx.filter = 'blur(11px)'; mx.drawImage(c, 0, 0); mx.filter = 'none';
     const b = document.createElement('canvas'); b.width = W; b.height = H; b.getContext('2d').drawImage(m, -P, 0);
     const t = new T.CanvasTexture(b); t.wrapS = T.RepeatWrapping; t.wrapT = T.ClampToEdgeWrapping; t.minFilter = T.LinearFilter; t.magFilter = T.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
     return t;
   }
 
   function build(scene, shared) {
-    const N = StarData.count, NP = 5, u8 = bytes(StarData.stars), dv = new DataView(u8.buffer);
+    /* the catalogue's stars, to magnitude 6; then the fainter ones a dark sky shows the eye that has got used to it, to
+       7.5 (the catalogue stops at 6, so these are scattered as they lie: more of them each magnitude fainter, thickest
+       along the Milky Way, as many again as the catalogue thrice over); and the planets */
+    const N0 = StarData.count, NF = 16000, N = N0 + NF, NP = 5, u8 = bytes(StarData.stars), dv = new DataView(u8.buffer);
     const pos = new Float32Array((N + NP) * 3), mag = new Float32Array(N + NP), col = new Float32Array((N + NP) * 3), seed = new Float32Array(N + NP), tw = new Float32Array(N + NP);
-    for (let i = 0; i < N; i++) {
+    for (let i = 0; i < N0; i++) {
       const ra = dv.getUint16(i * 6, true) / 65535 * Math.PI * 2, dec = (dv.getUint16(i * 6 + 2, true) / 65535 - 0.5) * Math.PI;
       pos.set([Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)], i * 3);
       mag[i] = dv.getUint8(i * 6 + 4) / 30 - 2; col.set(bvRGB(dv.getUint8(i * 6 + 5) / 100 - 0.5), i * 3); seed[i] = (i * 0.618034) % 1; tw[i] = 1;
+    }
+    const mw = milkyTex(), md = mw.image.getContext('2d').getImageData(0, 0, mw.image.width, mw.image.height).data, MW = mw.image.width, MH = mw.image.height;
+    let rs = 0x2f6e2b1; const rnd = () => { rs = (rs + 0x6D2B79F5) | 0; let t = Math.imul(rs ^ (rs >>> 15), 1 | rs); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    for (let i = N0; i < N;) {
+      const z = rnd() * 2 - 1, ra = rnd() * Math.PI * 2, dec = Math.asin(z);
+      const px = Math.min(MW - 1, Math.floor(ra / (Math.PI * 2) * MW)), py = Math.min(MH - 1, Math.floor((90 - dec * 180 / Math.PI) / 180 * MH)), m = md[(py * MW + px) * 4] / 255;
+      if (rnd() > 0.28 + 2.2 * m * m) continue;
+      pos.set([Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), z], i * 3);
+      /* (counts of stars rise about threefold a magnitude: so mostly the faintest) */
+      mag[i] = 6 + Math.log(1 + rnd() * (Math.pow(10, 0.48 * 1.5) - 1)) / (0.48 * Math.LN10);
+      let g = 0; for (let k = 0; k < 4; k++) g += rnd(); col.set(bvRGB(0.55 + (g - 2) * 0.55), i * 3); seed[i] = (i * 0.618034) % 1; tw[i] = 1; i++;
     }
     /* the planets: the last five points, placed every frame */
     for (let i = N; i < N + NP; i++) { mag[i] = 9; col.set([1, 1, 1], i * 3); seed[i] = 0; tw[i] = 0.15; pos.set([1, 0, 0], i * 3); }
@@ -111,12 +127,11 @@ void main(){
     g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('aMag', new T.BufferAttribute(mag, 1)); g.setAttribute('aCol', new T.BufferAttribute(col, 3));
     g.setAttribute('aSeed', new T.BufferAttribute(seed, 1)); g.setAttribute('aTw', new T.BufferAttribute(tw, 1));
     g.boundingSphere = new T.Sphere(new T.Vector3(), 1e9);
-    const U = { uEq: { value: new T.Matrix3() }, uK: { value: 0 }, uPx: { value: 1 }, uTime: { value: 0 }, uMoonR: { value: 0.0175 }, uMoonDir: { value: new T.Vector3(0, -1, 0) },
+    const U = { uEq: { value: new T.Matrix3() }, uK: { value: 0 }, uPx: { value: 1 }, uTime: { value: 0 }, uMoonR: { value: 0.0175 }, uGam: { value: 0.78 }, uMoonDir: { value: new T.Vector3(0, -1, 0) },
       uCB: shared.uCB, uCBOn: shared.uCBOn, uCov: { value: 0 }, uHzP: shared.uHzP || { value: null }, uHzOn: shared.uHzOn || { value: 0 } };
     const m = new T.ShaderMaterial({ uniforms: U, vertexShader: VS, fragmentShader: FS, transparent: false, depthWrite: false, depthTest: true,
       blending: T.CustomBlending, blendEquation: T.AddEquation, blendSrc: T.OneFactor, blendDst: T.OneFactor });
     const pts = new T.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 1001; scene.add(pts);
-    const mw = milkyTex();
     /* the turn of the sky: equatorial directions → the world's (−x north, −z east, y up) */
     const eq = new T.Matrix3(), eqT = new T.Matrix3();
     function frame(ms, loc) {

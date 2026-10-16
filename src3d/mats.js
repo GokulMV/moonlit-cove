@@ -66,10 +66,14 @@ const Mats = (() => {
     coastU.uIsN.value.set(D.P, D.u0, D.n, 1 / D.ds);
   }
   const ctFill = [[0, 0], [0, 0]]; let ctVer = -1;
+  /* (the fourth number at each sample: how far in behind the forest edge the open ground goes before the forest's
+     canopy closes over it, world.js's say: as far as the grass grows) */
+  let ctReach = null;
+  const coastReach = f => { ctReach = f; ctVer = -1; };
   function coastFill(camX, budget = 3000) {
     if (ctVer !== Layout.coastVer) { ctVer = Layout.coastVer; ctFill[0] = [0, 0]; ctFill[1] = [0, 0]; budget = Infinity; }
     let did = 0;
-    const put = (row, i) => { const x = i * CT.step[row], k = ((((i % CT.N) + CT.N) % CT.N) + row * CT.N) * 4; ctData[k] = Layout.shoreMeanZ(x); ctData[k + 1] = Layout.shoreDZ(x); ctData[k + 2] = Layout.vegZ(x); ctData[k + 3] = 0; did++; };
+    const put = (row, i) => { const x = i * CT.step[row], k = ((((i % CT.N) + CT.N) % CT.N) + row * CT.N) * 4; ctData[k] = Layout.shoreMeanZ(x); ctData[k + 1] = Layout.shoreDZ(x); ctData[k + 2] = Layout.vegZ(x); ctData[k + 3] = ctReach ? ctReach(x) : 0; did++; };
     for (let row = 0; row < 2; row++) {
       const st = CT.step[row], c = Math.round(camX / st), half = CT.N / 2 - 4, w0 = c - half, w1 = c + half;
       let [f0, f1] = ctFill[row];
@@ -585,5 +589,5 @@ void main(){
     });
     return m;
   }
-  return { U, coastU, shadeU, coastFill, isleUp, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
+  return { U, coastU, shadeU, coastFill, coastReach, isleUp, lit, litP, tex, dataTex, cutoutDepth, foliage, V3, V4 };
 })();

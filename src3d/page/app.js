@@ -497,11 +497,16 @@
   syncWxUI();
 
   /* ── toasts ── */
+  /* (btn: true for the camp's Rebuild button; or a button of its own, { label, act }) */
   function toast(text, btn, ms = 3800) {
-    const t = $('toast'); $('toastText').textContent = text; $('toastBtn').hidden = !btn; t.hidden = false;
-    clearTimeout(st.toastTimer); if (ms) st.toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+    const t = $('toast'), own = btn && typeof btn === 'object';
+    $('toastText').textContent = text; st.toastAct = own ? btn.act : null; $('toastBtn').textContent = own ? btn.label : 'Rebuild camp'; $('toastBtn').hidden = !btn; t.hidden = false;
+    clearTimeout(st.toastTimer); if (ms) st.toastTimer = setTimeout(() => { t.hidden = true; st.toastAct = null; }, ms);
   }
-  $('toastBtn').addEventListener('click', () => { Engine.rebuildCamp(); st.wrecked = false; sound.douse = null; toast('Camp rebuilt. The fire is going again.', false, 2600); });
+  $('toastBtn').addEventListener('click', () => {
+    if (st.toastAct) { const a = st.toastAct; st.toastAct = null; $('toast').hidden = true; a(); return; }
+    Engine.rebuildCamp(); st.wrecked = false; sound.douse = null; toast('Camp rebuilt. The fire is going again.', false, 2600);
+  });
 
   /* ── reading: tap the right half for the next page, the left half to go back. Or take hold of a page and drag
      it: it follows the pointer, and let go past halfway (or with a flick) it turns, otherwise it settles back ── */
@@ -1721,7 +1726,7 @@
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
     ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
     ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach']];
+    ['lantern', 'Make a wish', 'let a sky lantern go'], ['star', 'Wish upon a star', 'made a wish on a shooting star'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
     $('fCount').textContent = `${found.size} of ${FINDS.length}`;
@@ -1934,6 +1939,8 @@
     if (si.fireOut && !st.wrecked) { st.wrecked = true; setTimeout(() => toast('The tide took the camp.', true, 0), 2600); unlock('tide'); }
     /* a night owl: three minutes in the cove after dark */
     if (st.entered && S.night > 0.6) { st.nightT = (st.nightT || 0) + dtR; if (st.nightT > 180) unlock('night'); }
+    /* the night sky: a shooting star crossing the picture (wish on it), the comet the first time it is in sight */
+    if (Engine.skyfall) for (const ev of Engine.skyfall.take()) skyEvent(ev);
 
     /* soundscape */
     if (sound.on && sound.amb) {
@@ -2094,14 +2101,31 @@
     fetchWishes(st.chapter === 'wishes' ? 2000 : 60).then(ok => { if (!ok) return; paintBoard(); if (st.chapter === 'wishes') renderWishList(); });
   }
 
-  /* the dialog: what do you wish for? Then the lantern goes up with it */
-  let wishFrom = null;
+  /* a shooting star someone could have seen go over: tell them, and offer them the wish (one ask in twenty seconds at
+     most, and not over something they are in the middle of). The comet, the first time it is in the picture */
+  function skyEvent(ev) {
+    if (!ready || !st.entered) return;
+    const busy = !$('wish').hidden || rd.on || sketch.on || tbox.on || insp.on || !!st.chapter || !$('settings').hidden;
+    if (ev.kind === 'comet') { if (!busy) toast(`A comet tonight, ${ev.alt < 18 ? 'low ' : ''}over the sea: the soft glow with the faint tail streaming from it, away from the sun.`, false, 7500); return; }
+    const now = performance.now();
+    if (busy || now - (st.wishAskT ?? -1e9) < 20e3) return;
+    st.wishAskT = now;
+    const an = n => (/^[aeiou]/i.test(n) ? 'an ' : 'a ') + n;
+    const what = (ev.kind === 'fireball' ? 'A fireball' : 'A shooting star') + (ev.name ? `, ${an(ev.name)}` : '') + (ev.grazer ? ', skimming the top of the air' : '');
+    toast(`${what}. Make a wish.`, { label: 'Make a wish', act: () => openWish('star') }, 7000);
+  }
+
+  /* the dialog: what do you wish for? Then the lantern goes up with it (or, wished on a falling star, it goes with that) */
+  let wishFrom = null, wishKind = 'lantern';
   $('wName').value = store.get('wishName', '');
-  function openWish() {
+  const goLabel = () => wishKind === 'star' ? 'Wish on it' : 'Let it go';
+  function openWish(kind = 'lantern') {
     if (!ready || !$('wish').hidden) return;
     toggleSettings(false);
     wishFrom = document.activeElement;
-    $('wErr').hidden = true; $('wGo').disabled = false; $('wGo').textContent = 'Let it go'; syncCount();
+    wishKind = kind === 'star' ? 'star' : 'lantern';
+    $('wEyebrow').textContent = wishKind === 'star' ? 'A falling star' : 'A sky lantern';
+    $('wErr').hidden = true; $('wGo').disabled = false; $('wGo').textContent = goLabel(); syncCount();
     $('wishVeil').hidden = false; $('wish').hidden = false;
     setTimeout(() => $('wText').focus(), 30);
   }
@@ -2123,16 +2147,17 @@
     const f = [...$('wish').querySelectorAll('textarea, input, button')].filter(x => !x.disabled), i = f.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) { f[f.length - 1].focus(); e.preventDefault(); } else if (!e.shiftKey && i === f.length - 1) { f[0].focus(); e.preventDefault(); }
   });
-  const release = () => { Engine.lantern(); unlock('lantern'); };
+  const release = () => { if (wishKind === 'star') { unlock('star'); return; } Engine.lantern(); unlock('lantern'); };
   async function letGo() {
     if (wish.sending) return;
     const text = tidy($('wText').value, WISH_LEN), name = tidy($('wName').value, 32), err = $('wErr');
     store.set('wishName', name);
     /* no words: the lantern still goes, carrying a wish nobody else needs to read */
-    if (!text) { closeWish(); release(); toast('The lantern rises, carrying a wish only you know.', false, 3600); return; }
-    wish.sending = true; $('wGo').disabled = true; $('wGo').textContent = 'Letting go…'; err.hidden = true;
+    const star = wishKind === 'star';
+    if (!text) { closeWish(); release(); toast(star ? 'A wish only you know, gone with the falling star.' : 'The lantern rises, carrying a wish only you know.', false, 3600); return; }
+    wish.sending = true; $('wGo').disabled = true; $('wGo').textContent = star ? 'Wishing…' : 'Letting go…'; err.hidden = true;
     let res; try { res = await sendWish(text, name); } catch (e) { res = { error: 'Something went wrong. Try again in a moment.' }; }
-    wish.sending = false; $('wGo').disabled = false; $('wGo').textContent = 'Let it go';
+    wish.sending = false; $('wGo').disabled = false; $('wGo').textContent = goLabel();
     if (!res.wish) { err.textContent = res.error || 'Something went wrong. Try again in a moment.'; err.hidden = false; return; }
     const w = res.wish;
     wish.list = [w, ...wish.list.filter(x => x.id !== w.id)];
@@ -2140,7 +2165,7 @@
     wish.mine.add(w.id); store.set('wishMine', [...wish.mine].slice(-200));
     $('wText').value = ''; syncCount(); closeWish(); release(); paintBoard();
     if (st.chapter === 'wishes') renderWishList();
-    toast(res.local ? 'Your lantern rises, and your wish is pinned to the board by the fire (kept only on this device).' : 'Your lantern rises, and your wish is pinned to the board by the fire.', false, 4200);
+    toast((star ? 'Wished on a falling star' : 'Your lantern rises') + (res.local ? ', and your wish is pinned to the board by the fire (kept only on this device).' : ', and your wish is pinned to the board by the fire.'), false, 4200);
   }
 
   /* ── sitting: in either chair by the fire, on the driftwood log, or on a cushion at the picnic table. You sit down

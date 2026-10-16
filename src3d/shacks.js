@@ -376,7 +376,7 @@ const Shacks = (() => {
     function plan(ch) {
       if (plansVer !== Layout.coastVer) { plans.clear(); plansVer = Layout.coastVer; }
       if (plans.has(ch.c)) return plans.get(ch.c);
-      const C = Layout.Coast, h = k => C.hash(ch.c, 300 + k), out = [];
+      const C = Layout.Coast, h = k => C.hash(ch.cw ?? ch.c, 300 + k), out = [];   /* (drawn by the chunk's place in the loop) */
       if (h(0) < 0.62) {
         const kindR = h(1), kind = kindR < 0.45 ? 'shack' : kindR < 0.75 ? 'huts' : 'fishing';
         for (let tries = 0; tries < 6 && !out.length; tries++) {
@@ -424,7 +424,7 @@ const Shacks = (() => {
     function castlePlan(ch) {
       if (castlesVer !== Layout.coastVer) { castlePlans.clear(); castlesVer = Layout.coastVer; }
       if (castlePlans.has(ch.c)) return castlePlans.get(ch.c);
-      const C = Layout.Coast, h = k => C.hash(ch.c, 600 + k), out = [], n = (h(0) < 0.45 ? 1 : 0) + (h(1) < 0.12 ? 1 : 0);
+      const C = Layout.Coast, h = k => C.hash(ch.cw ?? ch.c, 600 + k), out = [], n = (h(0) < 0.45 ? 1 : 0) + (h(1) < 0.12 ? 1 : 0);
       const sites = plan(ch);
       for (let i = 0; i < n; i++) for (let tries = 0; tries < 6; tries++) {
         const x = ch.x0 + 8 + h(2 + i * 9 + tries) * (world.CW - 16);

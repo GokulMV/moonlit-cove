@@ -20,6 +20,9 @@ const Layout = (() => {
   const WIN = { x: 0.6, r0: 175, r1: 460 };   /* the camp's bay as it was within r0 of the camp; its own coast from r1 on */
   const Coast = (() => {
     const BLOCK = 1100, BAYB = 2500, REEFB = 640, WMAX = 38, REACH = 6, QUIET = 430;   /* (a headland's shape counts out to REACH half-widths) */
+    /* (how long the beach is before it comes round to its start again: world.js lays everything along it so, every LOOP
+       metres the same) */
+    const LOOP = 2048;
     /* (and no rock anywhere on it now: no headlands, no rocky points, no reefs running out into the sea — a coast of sand
        and its long, slow bays. The rest of what follows is how they were, kept should they ever come back) */
     const ROCKS = false;
@@ -94,10 +97,16 @@ const Layout = (() => {
     /* and the coast further off: the shore's slow meander and its bays; how wide the beach is */
     const zNew = x => S.base + 9 * sn(x / 330, 11) + 3.2 * sn(x / 96, 23) + 0.9 * sn(x / 29, 37) + bays(x);
     const wNew = x => { const w = 11.5 + 4.6 * sn(x / 430, 51) + 1.7 * sn(x / 83, 53) - 0.12 * bays(x); return 0.5 * (w + 8.4 + Math.sqrt((w - 8.4) * (w - 8.4) + 1)); };
-    const shoreZ = x => { const W = win(x), z0 = W < 1 ? zOld(x) : 0, z1 = W > 0 ? zNew(x) : 0; return z0 + (z1 - z0) * W - head(x); };
+    /* (the beach is a loop now, LOOP metres of it joined end to end, and its shore is the camp's bay as it always was, all
+       the way along: a gentle shore that comes round on itself every 1024 m, no bays bitten into it, no points. The coast
+       that never repeats is kept below, unused, should it ever be wanted back) */
+    void win; void zNew; void wNew;
+    const shoreZ = x => zOld(x) - head(x);
     const shoreDZ = x => (shoreZ(x + 0.02) - shoreZ(x - 0.02)) / 0.04;
-    const vegZ = x => { const W = win(x), a = W < 1 ? zOld(x) : 0, va = W < 1 ? vOld(x) - a : 0, b = W > 0 ? zNew(x) : 0, vb = W > 0 ? wNew(x) : 0;
+    const vegZ = x => vOld(x) - 0.55 * head(x);
+    const vegZnr = x => { const W = win(x), a = W < 1 ? zOld(x) : 0, va = W < 1 ? vOld(x) - a : 0, b = W > 0 ? zNew(x) : 0, vb = W > 0 ? wNew(x) : 0;
       return a + (b - a) * W + va + (vb - va) * W - 0.55 * head(x); };
+    void vegZnr;
     /* ── reefs: ledges of rock running out from the beach into the sea, a metre or two across on top and wide enough to
        walk out along, lower toward their far end, where the waves break over them. One by the camp, and now and then
        one along the coast, never by a headland. x where it leaves the sand, ang how it leans from straight out to sea,
@@ -120,7 +129,7 @@ const Layout = (() => {
     const rCache = new Map();
     function reefsNear(x) { const b0 = Math.floor((x - 70) / REEFB), b1 = Math.floor((x + 70) / REEFB), key = b0 * 100003 + b1; let L = rCache.get(key); if (L) return L;
       L = []; for (let b = b0; b <= b1; b++) L.push(...reefBlock(b)); if (rCache.size > 128) rCache.clear(); rCache.set(key, L); return L; }
-    return { BLOCK, WMAX, REACH, ROCKS, hash, vn1, rocky, cell, near, heads, head, bays, shoreZ, shoreDZ, vegZ, reefs, reefsNear, win };
+    return { LOOP, BLOCK, WMAX, REACH, ROCKS, hash, vn1, rocky, cell, near, heads, head, bays, shoreZ, shoreDZ, vegZ, reefs, reefsNear, win };
   })();
 
   /* where the world sits on the coast: world (x, z) is coast (x + O.x, z + O.z). It is (0, 0), the camp in its bay;
@@ -251,6 +260,8 @@ const Layout = (() => {
     van: [-7.6, 2.4, -3.5], lights: [0.6, 2.7, -5.0], table: [0.6, 0.7, -2.7], fire: [6.9, 1.0, -4.5], bottle: [-3.6, 0.3, -8.05]
   };
 
-  return { shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN, isle, Shore, island: () => isle ? ISL() : null,
+  /* (the shortest way from one x to another along the beach, that comes round on itself every Coast.LOOP metres) */
+  const P = Coast.LOOP, wrapD = d => d - P * Math.round(d / P);
+  return { P, wrapD, shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN, isle, Shore, island: () => isle ? ISL() : null,
            camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, castle, palms, trees, bushes, fruit, wind, cameras, hotspots, board };
 })();

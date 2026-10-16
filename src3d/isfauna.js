@@ -57,6 +57,8 @@ const IsleFauna = (() => {
   function build(root, I, o) {
     const land = o.land, group = new T.Group(); group.name = 'fauna'; root.add(group);
     const SQ = {};
+    /* (along the beach, which runs round a loop P metres long, a spot is wherever its copy nearest the eye is) */
+    const PER = o.period || 0, wrapX = d => PER ? d - PER * Math.round(d / PER) : d;
     /* ── where each kind is to be found: spots over the island drawn from its habitat, a grid of them, each one place ── */
     const L = I.data.line, spots = {};
     for (const k in KINDS) spots[k] = [];
@@ -70,6 +72,12 @@ const IsleFauna = (() => {
       if (mang > 0.6) { const [x, z] = at(-2 + 10 * hash(i, 9)); for (const k of ['egret', 'mudskipper', 'fiddler']) spots[k].push({ x, z, tx: tx / tl, tz: tz / tl, nx, nz }); const [x2, z2] = at(14 + 6 * hash(i, 10)); spots.monitor.push({ x: x2, z: z2, tx: tx / tl, tz: tz / tl, nx, nz }); }
       /* (the rocks at the water: egrets fish from them too) */
       if (rock > 0.7 && h < 0.2) { const [x, z] = at(-1); spots.egret.push({ x, z, tx: tx / tl, tz: tz / tl, nx, nz }); }
+      /* (along an open beach (o.beach): an egret now and then working the wet sand at the water's edge; a monitor lizard
+         nosing along the top of the beach under the trees) */
+      if (o.beach && sand > 0.8) {
+        if (hash(i, 15) < 0.16) { const [x, z] = at(0.5 + 2 * hash(i, 16)); if (Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 30) spots.egret.push({ x, z, tx: tx / tl, tz: tz / tl, nx, nz }); }
+        if (hash(i, 17) < 0.07) { const [x, z] = at(W + 1 + 4 * hash(i, 18)); if (Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 40) spots.monitor.push({ x, z, tx: tx / tl, tz: tz / tl, nx, nz }); }
+      }
       /* (the mud at the mangroves' back, for the monkeys come down out of the trees; a snag at the water's edge, for the
          kingfisher) */
       if (mang > 0.6 && hash(i, 11) < 0.34) { const [x, z] = at(6 + 8 * hash(i, 12)); spots.proboscis.push({ x, z, tx: tx / tl, tz: tz / tl, nx, nz }); spots.proboscisF.push(spots.proboscis[spots.proboscis.length - 1]); }
@@ -123,13 +131,13 @@ const IsleFauna = (() => {
       }
     }
     /* ── one animal: where it is, which way it faces, what it is doing and for how long ── */
-    function spawn(k, sp, j, t) {
+    function spawn(k, sp, j, t, cx = sp.x) {
       const K = KINDS[k], g = take(k); if (!g) return null;
-      const r = (q) => hash(Math.round(sp.x * 7 + sp.z * 13) + j * 101, q), s = K.s[0] + (K.s[1] - K.s[0]) * r(1);
+      const r = (q) => hash(Math.round(sp.x * 7 + sp.z * 13) + j * 101, q), s = K.s[0] + (K.s[1] - K.s[0]) * r(1), sx = cx + wrapX(sp.x - cx);
       const a = {
-        k, K, g, rig: g.userData.rig, sp, s, home: [sp.x, sp.z], x: sp.x + (r(2) - 0.5) * 6, z: sp.z + (r(3) - 0.5) * 6, y: 0, h: r(4) * TAU, state: 'idle', until: t + 2 + r(5) * 6, clip: null, dir: r(6) < 0.5 ? 1 : -1,
+        k, K, g, rig: g.userData.rig, sp, s, home: [sx, sp.z], x: sx + (r(2) - 0.5) * 6, z: sp.z + (r(3) - 0.5) * 6, y: 0, h: r(4) * TAU, state: 'idle', until: t + 2 + r(5) * 6, clip: null, dir: r(6) < 0.5 ? 1 : -1,
         /* (fliers: a line across the sky, or a circle) */
-        alt: K.alt ? K.alt[0] + (K.alt[1] - K.alt[0]) * r(7) : 0, cx: sp.x, cz: sp.z, R: 60 + 80 * r(8), ph: r(9) * TAU
+        alt: K.alt ? K.alt[0] + (K.alt[1] - K.alt[0]) * r(7) : 0, cx: sx, cz: sp.z, R: 60 + 80 * r(8), ph: r(9) * TAU
       };
       g.scale.setScalar(s); setClip(a, K.idle ? K.idle[0] : K.fly, 1); out.push(a);
       return a;
@@ -157,7 +165,7 @@ const IsleFauna = (() => {
         lastX = cx; lastZ = cz; lastT = performance.now();
         for (const k in KINDS) {
           const K = KINDS[k]; if (K.move === 'flier' || K.move === 'soarer' || K.move === 'commuter') continue;
-          const near = spots[k].map(sp => [Math.hypot(sp.x - cx, sp.z - cz), sp]).filter(q => q[0] < OUT && !(spooked.get(q[1]) > t)).sort((p, q) => p[0] - q[0]);
+          const near = spots[k].map(sp => [Math.hypot(wrapX(sp.x - cx), sp.z - cz), sp]).filter(q => q[0] < OUT && !(spooked.get(q[1]) > t)).sort((p, q) => p[0] - q[0]);
           const want = near.length ? near[0][1] : null, mine = out.filter(a => a.k === k);
           /* (a group keeps to one spot; those out at a spot gone out of reach go home) */
           for (const a of mine) if (!a.held && (!want || a.sp !== want)) { if (Math.hypot(a.x - cx, a.z - cz) > OUT * 0.8) { give(k, a.g); out.splice(out.indexOf(a), 1); } }
@@ -165,7 +173,7 @@ const IsleFauna = (() => {
             /* (no more of a kind out than it has: those at a spot left behind go first) */
             for (const a of out.filter(a => a.k === k && !a.held)) { give(k, a.g); out.splice(out.indexOf(a), 1); }
             const n = Math.min(K.n, K.group || 1);
-            for (let j = 0; j < n; j++) spawn(k, want, j, t);
+            for (let j = 0; j < n; j++) spawn(k, want, j, t, cx);
             /* (a kind built for the first time takes a while: the next waits a moment) */
             buildDue = performance.now() + 400;
             break;

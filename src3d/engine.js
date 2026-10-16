@@ -202,7 +202,7 @@ const Engine = (() => {
     const compile = m => { quad.material = m; R.compile(qs, qc); };
     /* (for the test bench: the sun's and the moon's share showing, read back) */
     const readVis = () => { const b = new Uint16Array(8); R.readRenderTargetPixels(visRT, 0, 0, 2, 1, b); return [T.DataUtils.fromHalfFloat(b[0]), T.DataUtils.fromHalfFloat(b[4])]; };
-    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis, height: () => H || 720 };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis, height: () => H || 720, width: () => W || 1280 };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -552,7 +552,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let grass = null, huts = null, hutT = null, snowFx = null, snowT = null, snowmen = null, fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
+  let grass = null, huts = null, hutT = null, snowFx = null, snowT = null, skyfall = null, sfT = null, snowmen = null, fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -730,6 +730,8 @@ const Engine = (() => {
     stars = Stars.build(scene, { uCB: skyMat.uniforms.uCB, uCBOn: skyMat.uniforms.uCBOn, uHzP: skyMat.uniforms.uHzP, uHzOn: skyMat.uniforms.uHzOn });
     Object.assign(skyMat.uniforms, { uEqT: { value: stars.eqT }, uMW: { value: stars.milky }, uMWK: { value: 0.011 }, uSunM: { value: new T.Vector3() } });
     Object.assign(api, { stars });
+    /* what else crosses the night sky (skyfall.js): shooting stars, a comet */
+    if (typeof Skyfall !== 'undefined' && opts.skyfall !== false) { skyfall = Skyfall.build(scene, { uCB: skyMat.uniforms.uCB, uCBOn: skyMat.uniforms.uCBOn }); Object.assign(api, { skyfall }); }
     /* environment: the same sky, rendered into a prefiltered cube map so every glossy surface reflects it */
     envSkyMat = new T.ShaderMaterial({ uniforms: Object.assign({}, skyMat.uniforms, { uEnv: { value: 1 }, uCQ: { value: 0.4 }, uPxA: { value: 0.03 }, uPix: { value: 0.02 }, uGround: { value: new T.Vector3() } }), vertexShader: GLSL.SKY_VS, fragmentShader: GLSL.SKY_FS, side: T.BackSide, depthWrite: false });
     envScene = new T.Scene(); { const m = new T.Mesh(new T.SphereGeometry(400, 64, 32), envSkyMat); m.frustumCulled = false; envScene.add(m); }
@@ -809,12 +811,25 @@ const Engine = (() => {
       skyMat.uniforms.uHzMist = gU.uMist; envSkyMat.uniforms.uHzMist = gU.uMist;
     }
     /* (and its animals, round the eye) */
+    /* (along the beach, the same animals from the beach's own line: Layout's shore every two metres round its loop, all of
+       it sand, and how far out to sea a point is) */
+    if (!Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) {
+      const n = Math.round(Layout.P / 2), X = new Float32Array(n), Z = new Float32Array(n), W = new Float32Array(n), TX = new Float32Array(n), TZ = new Float32Array(n), K = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) { const x = Layout.camp.x - Layout.P / 2 + i * 2; X[i] = x; Z[i] = Layout.shoreMeanZ(x); W[i] = Layout.vegZ(x) - Z[i]; TX[i] = 1; TZ[i] = Layout.shoreDZ(x); K[i * 4] = 1; }
+      const coastI = { data: { line: { n, X, Z, W, TX, TZ, K } }, sdf: (x, z) => { const g = Layout.shoreDZ(x); return (Layout.shoreMeanZ(x) - z) / Math.sqrt(1 + g * g); } };
+      isFauna = IsleFauna.build(natG, coastI, { land: (x, z) => Math.max(0, world.land(x, z)), keep: [], period: Layout.P, beach: true }); Object.assign(api, { isFauna });
+    }
     if (Layout.isle && typeof IsleFauna !== 'undefined' && opts.isfauna !== false) { isFauna = IsleFauna.build(natG, Layout.island(), { land: (x, z) => world.land(x, z), keep: world.park ? [[world.park.plan.hut.x, world.park.plan.hut.z, 12], [world.park.plan.jetty.x, world.park.plan.jetty.z, 10]] : [], creek: world.trails ? world.trails.trails.find(t => t.id === 'creek') : null, trees: world.forest ? (x, z, r, k) => world.forest.standing(x, z, r, k) : null }); Object.assign(api, { isFauna }); }
     life = Life.build(natG, gU, world);
     shallows = Shallows.build(natG, gU, world); Object.assign(api, { shallows });
     flora = Flora.build(natG, world);
     /* (round the island, its grass, blade by blade: grass.js) */
-    if (Layout.isle && typeof IsleGrass !== 'undefined' && opts.grass !== false) { grass = IsleGrass.build(natG); Object.assign(api, { grass }); if (huts) grass.setClear(huts.plan.map(p => p.lawn)); }
+    if (typeof IsleGrass !== 'undefined' && opts.grass !== false) {
+      /* (along the beach: on the ground there, the sand or the forest floor rising out of it; none in the camp, under the
+         van or by the fire) */
+      const go = Layout.isle ? {} : { reach: x => world.reach(x), ground: (x, z) => Math.max(0, world.land(x, z) - 0.22), no: [[Layout.camp.x, Layout.camp.z, 8.5], [Layout.van.x, Layout.van.z, 4.5], [Layout.fire.x, Layout.fire.z, 3.5], [10.5, -3.7, 2.5]] };
+      grass = IsleGrass.build(natG, go); Object.assign(api, { grass }); if (huts) grass.setClear(huts.plan.map(p => p.lawn));
+    }
     if (huts) huts.plan.slice(0, Mats.U.uLawn.value.length).forEach((p, i) => Mats.U.uLawn.value[i].set(p.lawn[0], p.lawn[1], p.lawn[2], p.lawn[3] ?? 1));
     /* the people of the coast: shacks, coco huts, fishing boats, every so often along it (laid out with each chunk) */
     shacks = Shacks.build(natG, world); Object.assign(api, { shacks });
@@ -1067,6 +1082,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     /* the stars: the sky turned to the time and the place, as bright as the night (and the moon) lets them be */
     if (stars) { const k = o.sky ? Math.min(1, 0.55 * o.sky.cumulus + o.sky.stratus + o.sky.storm + 0.6 * (o.sky.rain || 0)) : 0;
       stars.update({ ms: o.ms, loc: o.loc, t, k: S.stars * 0.42, px: Math.max(1, post.height() / 900), cover: k, moonDir: S.moonDirV });
+      if (skyfall) { const now = performance.now() / 1000, dtF = sfT === null ? 0 : now - sfT; sfT = now;
+        skyfall.update({ dt: dtF, ms: o.ms, loc: o.loc, eq: stars.eq, k: S.stars, cover: k, camera, px: Math.max(1, post.height() / 900), res: [post.width(), post.height()], pxr: post.height() / (2 * Math.tan(camera.fov * Math.PI / 360)) }); }
       skyMat.uniforms.uSunM.value.set(S.sunM[0], S.sunM[1], S.sunM[2]); }
     const su = skyMat.uniforms; su.uStars.value = S.stars; su.uTime.value = t; su.uCloudT.value = o.cloudT ?? t; cloudMotion(o.cloudT ?? t, o.wind ?? 1); su.uCO.value.copy(camera.position); su.uCQ.value = o.cloudQ ?? 1; su.uPhaseC.value = S.moonPhaseC; su.uPhaseSign.value = S.moonPhaseSign; V(su.uCloudLit, S.cloudLit); if (o.clouds !== undefined) su.uCloud.value = o.clouds;
     if (o.sky) { const k = o.sky; su.uCirrus.value = k.cirrus; su.uAlto.value = k.alto; su.uCumulus.value = k.cumulus; su.uStratus.value = k.stratus; su.uStorm.value = k.storm; su.uFlash.value = k.flash || 0; if (k.bolt) su.uBolt.value.set(k.bolt[0], k.bolt[1], k.bolt[2], k.bolt[3]); else su.uBolt.value.w = 0; }

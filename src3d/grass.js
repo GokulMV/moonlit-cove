@@ -48,8 +48,9 @@ const IsleGrass = (() => {
 
   const VS = `
 ${GLSL.COMMON}
-attribute vec3 aB; attribute vec3 aPatch;
+attribute vec3 aB; attribute vec3 aPatch; attribute vec4 aH;
 uniform float uTime, uPatch; uniform vec4 uGW, uPush, uSnowG; uniform vec4 uClr[8]; uniform vec3 uLod;
+uniform vec4 uNo[4];   /* where no grass grows (x, z, how far round): the camp, the van's place */
 varying vec3 vC; varying vec3 vN; varying vec3 vWPos; varying float vT; varying float vAO; varying float vSnow;
 float gH(vec2 p){ vec3 q = fract(vec3(p.xyx)*vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y)*q.z); }
 float gN(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0 - 2.0*f);
@@ -57,7 +58,7 @@ float gN(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.0 - 2.0*f);
 /* how thick the grass grows at p, 0..1: along the beach's top (from a few metres out on the sand, where it is tussocks,
    to a dozen metres in under the trees, where the shade thins it out), and in the clearings; in clumps */
 float gLawn = 0.0, gTus = 0.0;   /* (how much of a lawn the last place density() looked at is; whether it is a tussock on the sand) */
-float density(vec2 p){
+${Layout.isle ? `float density(vec2 p){
   vec4 f = isF(p); vec2 uv = isUV(p); vec4 k1 = isK(uv);
   float d = -f.x, W = k1.y*50.0, sand = k1.z;
   float band = smoothstep(W - 1.2, W + 1.4, d)*(1.0 - smoothstep(W + 6.0, W + 15.0, d));
@@ -69,7 +70,23 @@ float density(vec2 p){
   for (int i = 0; i < 8; i++){ vec4 c = uClr[i]; if (c.z > 0.0){ float l = c.w*(1.0 - smoothstep(c.z*0.6, c.z, length(p - c.xy))); gLawn = max(gLawn, l); g = max(g, l*(0.7 + 0.3*clump)); } }
   gTus *= 1.0 - step(0.3, gLawn);
   return f.x > -0.5 && band < 0.01 ? 0.0 : g;
-}
+}` : `/* (along the beach: from the coast's own line (glsl.js COAST), how far up the sand from the water's edge p is, and how wide
+   the beach is there; the grass from the top of the beach in under the trees, tussocks out on the upper sand, never in
+   the camp) */
+float density(vec2 p){
+  vec4 c = coastAt4(p.x); float kq = inversesqrt(1.0 + c.y*c.y), s = (c.x - p.y)*kq, d = -s, W = (c.z - c.x)*kq;
+  float band = vergeBand(d, W, c.w*kq);
+  float clump = smoothstep(0.32, 0.62, gN(p*0.33 + 3.1))*0.65 + 0.35*smoothstep(0.25, 0.75, gN(p*1.4 + 9.7));
+  float tus = smoothstep(max(W*0.55, W - 9.0), max(W*0.55, W - 9.0) + 2.5, d)*(1.0 - smoothstep(W - 2.5, W - 0.2, d))*smoothstep(0.7, 0.84, gN(p*0.55 + 1.3))*0.8;
+  /* (a sward: thinner in its hollows, never bare) */
+  float bandG = band*(0.6 + 0.4*clump), g = max(bandG, tus);
+  gTus = step(bandG, tus)*step(0.01, tus);
+  gLawn = 0.0;
+  for (int i = 0; i < 8; i++){ vec4 l4 = uClr[i]; if (l4.z > 0.0){ float l = l4.w*(1.0 - smoothstep(l4.z*0.6, l4.z, length(p - l4.xy))); gLawn = max(gLawn, l); g = max(g, l*(0.7 + 0.3*clump)); } }
+  gTus *= 1.0 - step(0.3, gLawn);
+  for (int i = 0; i < 4; i++){ vec4 n = uNo[i]; if (n.z > 0.0) g *= smoothstep(n.z*0.75, n.z, length(p - n.xy)); }
+  return s > -0.5 && band < 0.01 ? 0.0 : g;
+}`}
 void main(){
   float bi = aB.x, t = aB.y, side = aB.z, lod = aPatch.z;
   /* (the blades grow in tufts, sixteen to a tuft: the tuft's place in its patch from where the patch is and which tuft it
@@ -93,7 +110,7 @@ void main(){
   vec2 dir = vec2(cos(yaw), sin(yaw)), sd = vec2(-dir.y, dir.x);
   /* the ground under it, as the land is drawn there (isle.js: sunk a little where it is low; on the sand, the sand's own
      level) */
-  float H = isF(xz).w, gy = max(H - 0.22*(1.0 - smoothstep(1.0, 5.0, H)), 0.0);
+  ${Layout.isle ? 'float H = isF(xz).w, gy = max(H - 0.22*(1.0 - smoothstep(1.0, 5.0, H)), 0.0);' : 'vec2 lq = clamp((xz - aPatch.xy)/uPatch, 0.0, 1.0); float gy = mix(mix(aH.x, aH.y, lq.x), mix(aH.z, aH.w, lq.x), lq.y);'}
   /* its curve: up from the ground, out along its lean, its tip drooping (a quadratic Bézier); the wind on it — gusts you
      can see crossing the grass, and each blade's own flutter — and a walker pushing it aside, and the snow's weight */
   vec2 wd = uGW.xy; float ws = uGW.z;
@@ -164,36 +181,48 @@ void main(){
   function build(root, o = {}) {
     const group = new T.Group(); group.name = 'grass'; group.matrixAutoUpdate = false; root.add(group);
     const U = Object.assign({}, Mats.U, { uPatch: { value: PATCH }, uGW: { value: new T.Vector4(Layout.wind[0], Layout.wind[1], 1, 0) }, uPush: { value: new T.Vector4(0, 0, 0, 0) },
-      uSnowG: { value: new T.Vector4(0, 0, 0, 0) }, uClr: { value: Array.from({ length: 8 }, () => new T.Vector4()) }, uLod: { value: new T.Vector3(LODS[1].keep, LODS[2].keep, 0) } });
+      uSnowG: { value: new T.Vector4(0, 0, 0, 0) }, uClr: { value: Array.from({ length: 8 }, () => new T.Vector4()) }, uLod: { value: new T.Vector3(LODS[1].keep, LODS[2].keep, 0) },
+      uNo: { value: Array.from({ length: 4 }, (_, i) => { const c = (o.no || [])[i]; return c ? new T.Vector4(c[0], c[1], c[2], 0) : new T.Vector4(); }) } });
     const mat = new T.ShaderMaterial({ uniforms: U, vertexShader: VS.replace('REACHF', REACH.toFixed(1)), fragmentShader: FS, side: T.DoubleSide });
     /* (the clearings that are lawns: where a hut stands, the camp's back) */
-    const setClear = list => { U.uClr.value.forEach((v, i) => { const c = list[i]; if (c) v.set(c[0], c[1], c[2], c[3] ?? 1); else v.set(0, 0, 0, 0); }); clr = list.slice(); lastX = 1e9; };
+    const setClear = list => { U.uClr.value.forEach((v, i) => { const c = list[i]; if (c) v.set(c[0], c[1], c[2], c[3] ?? 1); else v.set(0, 0, 0, 0); }); clr = list.slice(); has.clear(); lastX = 1e9; };
     let clr = [];
     /* one instanced mesh for each level: the patches it draws, as many as fit round the eye */
     const CAP = [36, 70, 120];
     const levels = LODS.map((L, i) => {
       const g = patchGeo(L.seg, L.per), A = new Float32Array(CAP[i] * 3), at = new T.InstancedBufferAttribute(A, 3); at.setUsage(T.DynamicDrawUsage);
-      g.setAttribute('aPatch', at); g.instanceCount = 0;
+      /* (along the beach, the ground's height at each patch's four corners: the blades stand on it, between them) */
+      const AH = new Float32Array(CAP[i] * 4), ah = new T.InstancedBufferAttribute(AH, 4); ah.setUsage(T.DynamicDrawUsage);
+      g.setAttribute('aPatch', at); g.setAttribute('aH', ah); g.instanceCount = 0;
       const m = new T.Mesh(g, mat); m.frustumCulled = false; m.matrixAutoUpdate = false; m.renderOrder = 2; group.add(m);
-      return { g, A, at, m, cap: CAP[i] };
+      return { g, A, at, AH, ah, m, cap: CAP[i] };
     });
-    /* which patches have any grass, worked out once each on the CPU from the island's own numbers (the same as the
-       shader's, roughly: a patch it might give blades to) */
-    const I = Layout.island(), SQ = {}, has = new Map();
+    /* which patches have any grass, worked out once each on the CPU from the island's or the beach's own numbers (the
+       same as the shader's, roughly: a patch it might give blades to) */
+    const I = Layout.isle ? Layout.island() : null, SQ = {}, has = new Map(), keyOf = (px, pz) => Math.round(px / PATCH) * 65536 + Math.round(pz / PATCH);
+    const upSand = (x, z) => {
+      if (I) { const s = I.sdf(x, z), q = I.shore(I.uAt(x, z), SQ); return [-s, q.W]; }
+      const g = Layout.shoreDZ(x), k = 1 / Math.sqrt(1 + g * g), sz = Layout.shoreMeanZ(x); return [(z - sz) * k, (Layout.vegZ(x) - sz) * k, Math.max(10, o.reach ? o.reach(x) : 17) * k];
+    };
     function patchHas(px, pz) {
-      const key = Math.round(px / PATCH) * 65536 + Math.round(pz / PATCH); let v = has.get(key);
+      const key = keyOf(px, pz); let v = has.get(key);
       if (v !== undefined) return v;
       v = false;
       for (let j = 0; j <= 2 && !v; j++) for (let i = 0; i <= 2 && !v; i++) {
-        const x = px + i * PATCH / 2, z = pz + j * PATCH / 2, s = I.sdf(x, z), q = I.shore(I.uAt(x, z), SQ), d = -s;
-        if (d > q.W - 11 && d < q.W + 16) v = true;
+        const x = px + i * PATCH / 2, z = pz + j * PATCH / 2, [d, W, R] = upSand(x, z);
+        if (d > (I ? W - 11 : W * 0.5) && d < W + (I ? 18 : R + 6)) v = true;
         for (const c of clr) if (Math.hypot(x - c[0], z - c[1]) < c[2] + PATCH) v = true;
       }
       if (has.size > 20000) has.clear();
       has.set(key, v); return v;
     }
-    let lastX = 1e9, lastZ = 1e9, lastQ = 1;
+    /* (the ground's height at a patch corner, along the beach: kept, as the corners are shared) */
+    const hts = new Map();
+    const hAt = (x, z) => { const k = keyOf(x, z); let h = hts.get(k); if (h === undefined) { h = o.ground ? o.ground(x, z) : 0; if (hts.size > 40000) hts.clear(); hts.set(k, h); } return h; };
+    let lastX = 1e9, lastZ = 1e9, lastQ = 1, ver = Layout.coastVer;
     function update(cam, o2 = {}) {
+      /* (the coast moved under the camp: what was worked out of it is for another place now) */
+      if (Layout.coastVer !== ver) { ver = Layout.coastVer; has.clear(); hts.clear(); lastX = 1e9; }
       const cx = cam.x, cz = cam.z, high = cam.y - Math.max(0, o2.ground ?? 0);
       group.visible = high < 60;
       if (!group.visible) return;
@@ -210,9 +239,11 @@ void main(){
         if (d > RQ + PATCH * 0.7) continue;
         const L = D.findIndex(q => d < q), li = L < 0 ? 2 : L, lv = levels[li];
         if (n[li] >= lv.cap || !patchHas(px, pz)) continue;
-        lv.A.set([px, pz, li], n[li] * 3); n[li]++;
+        lv.A.set([px, pz, li], n[li] * 3);
+        if (!I) lv.AH.set([hAt(px, pz), hAt(px + PATCH, pz), hAt(px, pz + PATCH), hAt(px + PATCH, pz + PATCH)], n[li] * 4);
+        n[li]++;
       }
-      levels.forEach((lv, i) => { lv.g.instanceCount = n[i]; lv.at.needsUpdate = true; });
+      levels.forEach((lv, i) => { lv.g.instanceCount = n[i]; lv.at.needsUpdate = true; lv.ah.needsUpdate = true; });
     }
     const stats = () => ({ patches: levels.map(l => l.g.instanceCount), blades: levels.reduce((a, l, i) => a + l.g.instanceCount * BLADES * LODS[i].keep, 0) | 0 });
     return { update, setClear, stats, group, mat };
