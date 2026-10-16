@@ -1368,10 +1368,13 @@ void main(){
     /* in the shallows the sandy bottom shows through, bent a little by the ripples, tinted by the water over it (the red
        taken out first, so that sand under a metre or two of water is turquoise) and laced with caustics by day; it fades
        out as the water deepens */
-    ${Layout.isle ? 'float clar = exp(-dep*(0.24 + 2.2*mgW))*(1.0 - 0.5*uRough);' : 'float clar = exp(-dep*0.24)*(1.0 - 0.5*uRough);'}
+    ${Layout.isle ? 'float clar = exp(-dep*(0.24 + 2.2*mgW))*(1.0 - 0.5*uRough);' : `/* (seen from the side, the light comes the long way through the water, down to the sand and back up to the eye: its
+       red taken, the sand under even a little water reads turquoise and its pattern is lost; looking down into the water
+       from close by, the sand shows through it) */
+    float vy = max(V.y, 0.06), path = dep*(1.0 + 1.0/vy), clar = exp(-path*0.3)*(1.0 - 0.5*uRough);`}
     if (clar > 0.01){
       vec2 bp = p + (Nw.xz/max(Nw.y, 0.3))*0.25*clamp(dep*3.0, 0.0, 6.0);
-      vec3 sandB = vec3(0.56, 0.48, 0.34)*(0.84 + 0.28*tN(bp, 18.6).r);${Layout.isle ? `
+      vec3 sandB = ${Layout.isle ? 'vec3(0.56, 0.48, 0.34)' : 'vec3(0.6, 0.55, 0.44)'}*(0.84 + 0.28*tN(bp, 18.6).r);${Layout.isle ? `
       sandB = mix(sandB, vec3(0.15, 0.135, 0.11)*(0.82 + 0.3*tN(bp, 18.6).r), mgW);
       /* (over the reef flat off the rocks, zoned out from the shore as a fringing reef is: sand and rubble by the shore, then
          heads of coral in sand, thicker toward the reef's crest, which is a band of pale rubble the waves break over; past
@@ -1400,8 +1403,8 @@ void main(){
          water never speckles; and less of it the deeper the water over it) */
       float caus = 0.0;
       if (uDay > 0.01){ float c1 = tW(bp + vec2(t*0.08, t*0.03), 1.4).a, c2 = tW(bp - vec2(t*0.06, -t*0.044) + 0.38, 1.06).a;
-        caus = mix(0.13, pow(c1*c2, 1.4), (1.0 - smoothstep(0.025, 0.09, fpL))*exp(-dep*0.35))*uDay; }
-      vec3 bottom = sandB*(uAmb*0.9 + keyC*(0.6*max(Lk.y, 0.0) + 0.7*caus) + art*0.6)*exp(-dep*vec3(0.42, 0.075, 0.06));
+        caus = mix(0.13, pow(c1*c2, 1.4), ${Layout.isle ? '(1.0 - smoothstep(0.025, 0.09, fpL))*exp(-dep*0.35)' : '(1.0 - smoothstep(3.0, 9.0, dist))*exp(-path*0.5)*smoothstep(0.5, 0.9, vy)'})*uDay; }
+      vec3 bottom = sandB*(uAmb*0.9 + keyC*(0.6*max(Lk.y, 0.0) + ${Layout.isle ? '0.7' : '0.5'}*caus) + art*0.6)*exp(-${Layout.isle ? 'dep' : 'path*0.6'}*vec3(0.42, 0.075, 0.06));
       lit = mix(lit, bottom, clar);
     }
     ${Layout.isle ? 'lit = lit*(1.0 - F) + mix(skyRefl(R), bankC, bankO)*F;' : 'lit = lit*(1.0 - F) + skyRefl(R)*F;'}

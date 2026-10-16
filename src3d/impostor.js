@@ -172,7 +172,8 @@ attribute vec4 aQ;        /* how it is turned, its shape, its tint, a die */
 varying vec2 vUv; varying vec3 vK; varying float vTop, vNearK, vCell0, vYaw, vTint, vDie, vHide; varying vec3 vW;
 void main(){
   vec4 P = uPr[int(aQ.y + 0.5)]; float S = P.x*aP.w;
-  vec3 c = aP.xyz + vec3(0.0, P.y*aP.w, 0.0), toC = cameraPosition - c; float dist = length(toC); vec3 f = toC/max(dist, 1e-3);
+  /* (the foot where the cards' mesh puts it: the same cards may be drawn in several places, as round the beach's loop) */
+  vec3 c = (modelMatrix*vec4(aP.xyz, 1.0)).xyz + vec3(0.0, P.y*aP.w, 0.0), toC = cameraPosition - c; float dist = length(toC); vec3 f = toC/max(dist, 1e-3);
   vec3 r = abs(f.y) > 0.999 ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), f)), u = cross(f, r);
   /* (its top swaying a little on the wind) */
   vec2 wd = normalize(uWindV.xy + vec2(1e-4)); float sw = (sin(uTime*0.5 + aQ.w*31.0) + 0.4*sin(uTime*1.1 + aQ.w*17.0))*uWindV.z*0.012*S*(position.y + 0.5);

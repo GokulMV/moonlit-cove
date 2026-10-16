@@ -14,7 +14,7 @@ const Engine = (() => {
   /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
   /* (round the island it reaches further out: the swell breaks out on the reefs' edges, a hundred metres off the rocks) */
   const NEAR = { W: 192, D: Layout.isle ? 140 : 100, CELL: 0.4 };
-  let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null;
+  let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null, spray = null;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const hash = x => { const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -562,6 +562,7 @@ const Engine = (() => {
     if (fauna && fauna.shift) fauna.shift(d, 0);
     if (snowmen && snowmen.shift) snowmen.shift(d, near);
     if (marks && marks.shift) marks.shift(d, near);
+    if (spray) spray.shift(d);
     if (shacks && shacks.shift) shacks.shift(d, near);
     camera.position.x += d; camera.updateMatrixWorld();
   }
@@ -834,7 +835,7 @@ const Engine = (() => {
     const beachShore = { shore: u => { const x = Layout.camp.x + u, g = Layout.shoreDZ(x), k = 1 / Math.sqrt(1 + g * g), sz = Layout.shoreMeanZ(x); return { x, z: sz, nx: g * k, nz: -k, W: (Layout.vegZ(x) - sz) * k }; } };
     const hutPlan = typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.isle ? Layout.island() : beachShore) : null;
     Layout.hutSites = hutPlan ? hutPlan.map(p => [p.x, p.z]) : [];
-    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
+    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null, forestR: opts.forest !== false ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
     /* (along the beach, each hut's clearing kept clear of the forest's trees: wherever it comes round in the loop, in the
        chunks' own frame) */
     if (hutPlan && !Layout.isle) world.place(ch => { const out = []; for (const p of hutPlan) { const k = Math.round((ch.x0 + world.CW / 2 - p.clear[0]) / Layout.P), cx = p.clear[0] + k * Layout.P; if (cx > ch.x0 - p.clear[2] && cx < ch.x1 + p.clear[2]) out.push([cx, p.clear[1], p.clear[2]]); } return out; });
@@ -880,6 +881,8 @@ const Engine = (() => {
       sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c), (L, c) => { if (isFauna) isFauna.pickables(L, c); }],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
     marks = Marks.build(natG); Object.assign(api, { marks });
+    /* (water thrown up: off the van's tyres in the shallows, under a foot in the sea: spray.js) */
+    if (typeof Spray !== 'undefined') { spray = Spray.build(natG); Object.assign(api, { spray }); }
     /* snow falling, when the weather brings it (snow.js) */
     snowFx = Snow.build(scene); Object.assign(api, { snowFx });
     /* and the snowballs and snowmen rolled in it (snowman.js), each facing whoever made it */
@@ -1150,6 +1153,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     if (camp.rugMat && surge.rugWet != null) { const e = sm01(surge.rugWet, surge.rugWet + 1.5, wt); camp.rugMat.color.setRGB(1 - 0.5 * e, 1 - 0.5 * e, 1 - 0.46 * e); }
     Mats.U.uLights.value.set(L.string, L.lantern, L.van * vf * (1 - vanS.k), L.fairy);
     if (marks) marks.update(t, wt, S, swashFront);
+    if (spray) spray.update(t, { blur: 1 / 50 });
     Mats.U.uFire.value.set(F.i, ff, F.smoke, F.steam);
     if (o.lightK) Mats.U.uLightK.value.set(...o.lightK);
     uBulb.uProg.value = L.string; uFairy.uProg.value = L.fairy > 0 ? 1 : 0; uFairy.uI.value = 0.5 * L.fairy * vf;

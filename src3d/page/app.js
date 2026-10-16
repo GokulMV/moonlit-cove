@@ -1119,12 +1119,15 @@
   }
   function stepBody(dt, acc) {
     const sp = Math.abs(car.v), turn = car.v * car.v * Math.tan(car.steer) / WB;
-    const tp = Math.max(-0.06, Math.min(0.06, -acc * 0.007)), tr = Math.max(-0.08, Math.min(0.08, turn * 0.012));
+    /* (the ground under the wheels: the sea floor where the van is out in the water, lower the further out; the body sits
+       down on it and leans with it) */
+    const D = car.depth || [0, 0, 0, 0], gy = -(D[0] + D[1] + D[2] + D[3]) / 4, gp = ((D[2] + D[3]) - (D[0] + D[1])) / 2 / WB, gr = ((D[1] + D[3]) - (D[0] + D[2])) / 2 / 1.46;
+    const tp = Math.max(-0.06, Math.min(0.06, -acc * 0.007)) + gp, tr = Math.max(-0.08, Math.min(0.08, turn * 0.012)) - gr;
     /* sand is never quite flat: small heaves that grow with speed */
     const rip = sp > 0.5 ? (Math.sin(car.odo * 2.3) * 0.6 + Math.sin(car.odo * 5.1 + 1.3) * 0.4) * Math.min(1, sp / 8) : 0;
     const n = Math.max(1, Math.ceil(dt / 0.01)), h = dt / n;
     for (let i = 0; i < n; i++) {
-      body.vy += (-70 * (body.y - 0.006 * rip) - 9 * body.vy) * h; body.y += body.vy * h;
+      body.vy += (-70 * (body.y - gy - 0.006 * rip) - 9 * body.vy) * h; body.y += body.vy * h;
       body.vp += (-60 * (body.p - tp) - 8 * body.vp) * h; body.p += body.vp * h;
       body.vr += (-55 * (body.r - tr) - 7.5 * body.vr) * h; body.r += body.vr * h;
     }
@@ -1179,7 +1182,7 @@
         if (q.s > 2.6) { const d = q.s - 2.6; car.x -= q.nx * d; car.z -= q.nz * d; moved = true; }
         else if (q.s < top) { const d = top - q.s; car.x += q.nx * d; car.z += q.nz * d; moved = true; hit = hit || ['edge']; }
       } else {
-        const zMin = Layout.shoreZ(car.x) - 2.6, zMax = Layout.vegZ(car.x) + 1.4;
+        const zMin = Layout.shoreZ(car.x) - 3.4, zMax = Layout.vegZ(car.x) + 1.4;
         if (car.z < zMin) { car.z = zMin; moved = true; } if (car.z > zMax) { car.z = zMax; moved = true; hit = hit || ['edge']; }
       }
       /* the headlands: the van can't climb the rock; wherever it touches, it slides back down onto the sand */
@@ -1222,11 +1225,17 @@
       if (!inWater && Engine.marks) wNow.forEach((w, i) => { if (sandy(w[0], w[1])) Engine.marks.tyre(i, car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, 0.85 + 0.15 * Math.min(1, Math.abs(car.v) / 6), sandWet(w[0], w[1]), st.t); });
       car.wheels = wNow; car.trackOdo = 0;
     }
-    /* water splashes */
-    if (inWater && Math.abs(car.v) > 1.2 && performance.now() - car.splashT > 260) {
-      car.splashT = performance.now(); const ss = Engine.surgeState();
-      wNow.slice(0, 2).forEach(([x, z]) => { ss.ripples.push({ x, z, t0: st.t, A: Math.min(1.2, 0.3 + Math.abs(car.v) * 0.12) }); if (ss.ripples.length > 6) ss.ripples.shift(); });
-    }
+    /* water thrown up off each wheel that is in the sea (or in a wave's run-up over the sand): out to the side and up off
+       the tyre, back behind it, mist hanging after; the front wheels push a sheet on ahead. How deep it is at each wheel
+       sets how much, and how far down the van sits */
+    car.depth = car.depth || [0, 0, 0, 0];
+    wNow.forEach(([x, z], i) => {
+      let d = 0;
+      if (!Layout.isle) { const g = Layout.shoreDZ(x), out = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); d = out > 0 ? 0.06 * out : (Engine.swashFront && -out < Engine.swashFront(x, st.t) ? 0.025 : 0); }
+      else { const q = Layout.Shore.at(x, z, CQ); d = q.s > 0 ? Math.min(0.5, 0.06 * q.s) : 0; }
+      car.depth[i] = d;
+      if (d > 0 && Engine.spray && Math.abs(car.v) > 0.5) Engine.spray.wheel(i, x, z, fx, fz, car.v, WHEELS[i][1] > 0 ? 1 : -1, d, dt, Engine.waveAt ? Math.max(-0.05, Engine.waveAt(x, z)) : 0, i < 2);
+    });
     /* body: pitch with acceleration, roll in turns, a little sand bounce */
     const acc = (car.v - car.lastV) / Math.max(dt, 1e-3); car.lastV = car.v;
     stepBody(dt, acc);
@@ -1344,7 +1353,7 @@
       /* (out on a reef the sea is no wall: walk along its top as far as it goes; step off its edge and you are kept on it.
          Into the sea a walker wades out till it is near waist deep; up the beach, in among the palms and the trees as far
          as the open ground goes, till the canopy closes over: world.js reach) */
-      const zMin = Layout.shoreZ(wk.x) - WADE_OUT, zMax = Layout.vegZ(wk.x) + Math.max(6, (W && W.reach ? W.reach(wk.x) : 8) - 1), onReef = W && W.reefTop(wk.x, wk.z) > -9;
+      const zMin = Layout.shoreZ(wk.x) - WADE_OUT, zMax = Layout.vegZ(wk.x) + (W && W.walkIn ? W.walkIn : Math.max(6, (W && W.reach ? W.reach(wk.x) : 8) - 1)), onReef = W && W.reefTop(wk.x, wk.z) > -9;
       if (wk.z < zMin && !onReef) {
         if (wk.reef && W.reefTop(wk.ox, wk.oz) > -9) { wk.x = wk.ox; wk.z = wk.oz; wk.v *= 0.5; }
         else wk.z = zMin;
@@ -1601,7 +1610,9 @@
     if (wade < 0.35 && Engine.marks && !wk.reef) {
       Engine.marks.foot(x, z, wk.h - wk.foot * 0.09, wk.foot < 0, sandWet(x, z), st.t);
       wk.prints++;
-    } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.22 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
+    } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.16 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
+    /* (and in the water, the splash of the foot coming down: more the deeper, and the faster the walk) */
+    if (wade > 0.12 && Engine.spray) { const d = Math.max(0.02, -groundAt(x, z)) * (0.6 + 0.4 * Math.min(1, Math.abs(wk.v) / 1.6)); Engine.spray.foot(x, z, d, Engine.waveAt ? Math.max(-0.05, Engine.waveAt(x, z)) : 0); }
   }
   /* ── snowballs, when the snow lies deep enough: one started at your feet and rolled on ahead as you walk, let go where it
      is, or up against a bigger one, on top of it; three high, a snowman ── */

@@ -859,11 +859,111 @@ void main(){
 
     /* how far in behind the forest's edge the open ground goes before the canopy closes over it, at a world x: the grass
        grows that far (grass.js, and the ground's colour under it, through the coast's numbers, Mats.coastReach) */
-    const reach = xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
+    /* (the forest's own trees (FR, below) stand right behind the beach's top: the open grass is only a few metres deep) */
+    const FR = opts.forestR && typeof IsleForest !== 'undefined' && typeof Impostor !== 'undefined' ? opts.forestR : null;
+    const reach = FR ? xw => 4.5 + 3 * vnX(xw + Layout.O.x, 0, 0.045, 1.5) : xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
     Mats.coastReach(reach);
     /* the forest's clearing round the camp, in the world's coordinates */
     const clear = (x, z) => { const dx = Layout.wrapD(x - Layout.camp.x); x = Layout.camp.x + dx; return (Math.abs(x) < 17 && z < 30) || (Math.abs(dx) < 10 && z < Layout.vegZ(x) + 6); };   /* (each time round the loop) */
     const claimed = (ch, x, z) => { for (const [cx, cz, r] of ch.claims) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return false; };
+
+    /* ── the forest: the island's own trees (forest.js), every one where it grows, from the top of the beach in over the
+       hills: coconut palms leaning out over the sand, sea hibiscus, pandans and the beach forest, then the rainforest,
+       crown against crown, its storeys under it, closed within a few metres of the sand. Near the eye the trees
+       themselves, further off their cards (each the tree photographed). The grids it is drawn from go a whole number of
+       cells round the beach's loop, so it comes round again with it; each stretch of the loop (a chunk's width) has its
+       trees worked out once, in the coast's own coordinates, and drawn wherever that stretch comes round ── */
+    let IF = null; const FCOL = new Map(), FSHIFT = new Map();
+    const FTS = 128, FBANDS = 8;
+    const fRoot = new T.Group(); fRoot.name = 'forest'; fRoot.matrixAutoUpdate = false; worldG.add(fRoot);
+    const placeF = () => { fRoot.position.set(-o.x, 0, -o.z); fRoot.updateMatrix(); };
+    const fClaims = new Map();
+    if (FR) {
+      placeF();
+      /* (the coast's line looked up, every half metre round the loop, rather than worked out: the forest asks it about
+         every tree it might grow, and each of their neighbours) */
+      const CS = 0.5, CN = Math.round(P / CS), cSZ = new Float32Array(CN + 1), cVZ = new Float32Array(CN + 1), cDZ = new Float32Array(CN + 1);
+      for (let i = 0; i <= CN; i++) { const x = i * CS; cSZ[i] = Co.shoreZ(x); cVZ[i] = Co.vegZ(x); cDZ[i] = Co.shoreDZ(x); }
+      const look = (A, x) => { const f = x / CS, i = Math.floor(f), t = f - i, a = ((i % CN) + CN) % CN; return A[a] + (A[a + 1] - A[a]) * t; };
+      /* the coast as the forest asks about an island's shore: how far out to sea a point is, and the beach there (all sand) */
+      const CI = {
+        sdf: (x, z) => { const g = look(cDZ, x); return (look(cSZ, x) - z) / Math.sqrt(1 + g * g); },
+        uAt: x => x,
+        shore: (u, out) => { const g = look(cDZ, u), k = 1 / Math.sqrt(1 + g * g); out.W = (look(cVZ, u) - look(cSZ, u)) * k; out.sand = 1; out.rock = 0; out.cliff = 0; out.mangrove = 0; return out; }
+      };
+      /* what is kept clear of the trees (in the coast's coordinates): round the camp (its fire and chairs, the rug and the
+         lights, the van), the camp's own palms, trees, bushes and fruit trees, the huts' and the shacks' ground (what the
+         hooks claim, for the stretch it is in), bare rock and cliffs */
+      const claimsOf = cw => {
+        let L = fClaims.get(cw);
+        if (!L) { L = []; const fake = { c: cw, cw: cwOf(cw), X0: X0 + cw * CW, x0: X0 + cw * CW - o.x, x1: X0 + (cw + 1) * CW - o.x, obstacle() {}, rng: k => rng(1 + 101 * (k || 0)), claims: [], camp: false };
+          for (const fn of hooks.place) { const f = fn(fake); if (f) for (const q of f) L.push([q[0] + o.x, q[1] + o.z, q[2]]); }
+          fClaims.set(cw, L); }
+        return L;
+      };
+      const kept = (x, z) => {
+        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x);
+        if (Math.abs(dx) < 60) {
+          const xx = Layout.camp.x + dx, C = Layout.camp;
+          if ((xx - C.x - 1) ** 2 + (zw - C.z + 0.8) ** 2 < 15 * 15) return true;
+          for (const q of Layout.palms) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < 16) return true;
+          for (const q of Layout.trees) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (q[2] + 2.2) ** 2) return true;
+          for (const q of Layout.bushes || []) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (q[2] + 0.8) ** 2) return true;
+          for (const q of Layout.fruit || []) if ((xx - q.x) ** 2 + (zw - q.z) ** 2 < 5 * 5) return true;
+        }
+        const c = Math.floor((x - X0) / CW);
+        for (let k = c - 1; k <= c + 1; k++) { const cw = cwOf(k), sh = (k - cw) * CW, L = claimsOf(cw); for (let i = 0; i < L.length; i++) { const q = L[i]; if ((x - sh - q[0]) ** 2 + (z - q[1]) ** 2 < q[2] * q[2]) return true; } }
+        return massif(x, z) > 0.25 || slope(x, z) > 0.85;
+      };
+      IF = IsleForest.build(fRoot, CI, { R: FR, land: (x, z) => land(x, z), period: P, kept, shift: 9, near: 72, nearSmall: 40 });
+    }
+    /* a stretch of the loop's forest (cw, its chunk's place round the loop): its trees in bands going in from the beach,
+       and their cards ([the trees', the small plants']), worked out a little at a time */
+    function* fColumn(cw) {
+      let col = FCOL.get(cw); if (col && col.done) return col;
+      if (!col) FCOL.set(cw, col = { done: false });
+      const tx = X0 + cw * CW; let zA = 1e9;
+      for (let x = tx; x <= tx + CW; x += 4) zA = Math.min(zA, Co.vegZ(x));
+      zA = Math.floor(zA - 8);
+      const bands = [], all = [];
+      for (let b = 0; b < FBANDS; b++) {
+        /* (by the beach every storey; a little further in the canopy and the young trees under it; deep in, only the
+           canopy and the emergents over it, all that can be seen of the forest from outside it) */
+        const only = b === 0 ? null : b === 1 ? [1, 2, 3, 4, 5, 10] : [4, 5];
+        const trees = yield* IF.plan(tx, zA + b * FTS, FTS, late, only);
+        bands.push({ trees, z: zA + b * FTS }); for (const t of trees) all.push(t);
+        yield;
+      }
+      const [main, small] = IF.cardSets(all);
+      Object.assign(col, { done: true, bands, main, small, n: all.length });
+      return col;
+    }
+    /* (its trees where it comes round again, d metres on: copies, made once) */
+    function fShifted(col, cw, d) {
+      if (!d) return col.bands;
+      const k = cw * 4096 + d / CW; let L = FSHIFT.get(k);
+      if (!L) { L = col.bands.map(B => ({ z: B.z, trees: B.trees.map(t => Object.assign({}, t, { x: t.x + d })) })); FSHIFT.set(k, L); if (FSHIFT.size > 24) FSHIFT.delete(FSHIFT.keys().next().value); }
+      return L;
+    }
+    function* forestPart(ch) {
+      const col = yield* fColumn(ch.cw), d = (ch.c - ch.cw) * CW;
+      for (const [m, grp] of [[col.main, ch.g.forest], [col.small, ch.g.forestS]]) {
+        if (!m) continue;
+        const o2 = new T.Mesh(m.geometry, m.material); o2.position.set(d - o.x, 0, -o.z); o2.updateMatrix(); o2.matrixAutoUpdate = false; grp.add(o2);
+      }
+    }
+    /* near the eye, the trees themselves: those of the stretches round it, where they are */
+    const fTiles = [];
+    function forestNear(camX, camY, camZ) {
+      if (!IF) return;
+      const cx = camX + lx + o.x, cz = camZ + o.z, c0 = Math.floor((cx - X0) / CW);
+      fTiles.length = 0;
+      for (let c = c0 - 1; c <= c0 + 1; c++) {
+        const cw = cwOf(c), col = FCOL.get(cw); if (!col || !col.done) continue;
+        for (const B of fShifted(col, cw, (c - cw) * CW)) fTiles.push({ trees: B.trees, x: X0 + c * CW, z: B.z, TS: FTS });
+      }
+      IF.nearUpdate(cx, camY, cz, fTiles);
+    }
 
     /* ── what the coast's hills, headlands, mountains and forest shade from the key light, the sun by day and the moon by
        night: over the coast round the camera, how much of the light reaches each point of the ground, the sea or the
@@ -1009,7 +1109,7 @@ void main(){
       /* something the van must drive round, [x, z, radius, kind] in world coordinates (kept in 8 m buckets along the chunk) */
       ch.obstacle = (x, z, r, kind) => { ch.obs[Math.max(0, Math.min(CW / 8 - 1, Math.floor((x - ch.x0) / 8)))].push([x, z, r, kind]); };
       ch.keep = g => { ch.own.all.push(g); return g; };   /* a geometry of its own, to go when the chunk does */
-      for (const k of ['base', 'baseFar', 'rk', 'rkFar', 'fx', 'near', 'far', 'tiny']) { const g = new T.Group(); g.matrixAutoUpdate = false; ch.g[k] = g; ch.root.add(g); }
+      for (const k of ['base', 'baseFar', 'rk', 'rkFar', 'fx', 'near', 'far', 'tiny', 'forest', 'forestS']) { const g = new T.Group(); g.matrixAutoUpdate = false; ch.g[k] = g; ch.root.add(g); }
       ch.tiny = ch.g.tiny; ch.near = ch.g.near; ch.far = ch.g.far;   /* where decorations go */
       ch.root.matrixAutoUpdate = false; worldG.add(ch.root);
       chunks.set(c, ch); live.push(ch); return ch;
@@ -1103,7 +1203,7 @@ void main(){
        drive round; then drawn, near (everything) and far (palms and lighter trees), instanced per shape */
     function* treesPart(ch) {
       const X0c = ch.X0, X1c = X0c + CW, T_ = { palm: [], tall: [], tree: [], bush: [], fern: [] }, g = ch.g;
-      yield* forestPlan(X0c, (x, z) => !clear(x - o.x, z - o.z) && !claimed(ch, x, z) && massif(x, z) <= 0.25 && slope(x, z) <= 0.55, T_);
+      if (!IF) yield* forestPlan(X0c, (x, z) => !clear(x - o.x, z - o.z) && !claimed(ch, x, z) && massif(x, z) <= 0.25 && slope(x, z) <= 0.55, T_);
       for (const h of Co.heads(X0c - 2 * Co.WMAX, X1c + 2 * Co.WMAX)) {
         const s = yield* scrubPlan(h);
         for (const k of KINDS) for (const p of s[k]) if (p.x >= X0c && p.x < X1c && !claimed(ch, p.x, p.z)) T_[k].push(p);
@@ -1133,12 +1233,13 @@ void main(){
     }
     /* the ground and the canopy over it, fine or coarse */
     function* base(ch, coarse) {
-      const k = coarse ? 'baseFar' : 'base', t = yield* terrain(ch.c, coarse, o, landMat), cn = yield* canopy(ch.c, coarse, o, canMat), cr = yield* crowns(ch.c, coarse, o, crownMat, quad);
-      ch.own[k].push(t.geometry, cn.geometry); ch.g[k].add(t, cn);
+      const k = coarse ? 'baseFar' : 'base', t = yield* terrain(ch.c, coarse, o, landMat), cn = IF ? null : yield* canopy(ch.c, coarse, o, canMat), cr = IF ? null : yield* crowns(ch.c, coarse, o, crownMat, quad);
+      ch.own[k].push(t.geometry); ch.g[k].add(t);
+      if (cn) { ch.own[k].push(cn.geometry); ch.g[k].add(cn); }
       if (cr) { ch.own[k].push(cr.geometry); ch.g[k].add(cr); }
     }
     function* tiny(ch) { for (const fn of hooks.tiny) { fn(ch); yield; } }
-    const MAKE = { rocks: rocksPart, trees: treesPart, base: ch => base(ch, false), baseFar: ch => base(ch, true), tiny };
+    const MAKE = { rocks: rocksPart, trees: treesPart, base: ch => base(ch, false), baseFar: ch => base(ch, true), tiny, forest: forestPart };
 
     /* throwing things away: the chunk's own geometry, and the instance buffers of what it drew with shared shapes */
     const free = grp => { grp.traverse(m => { if (m.isInstancedMesh) m.dispose(); }); for (const c of grp.children.slice()) grp.remove(c); };
@@ -1164,6 +1265,7 @@ void main(){
       if (d < LOD.mid + 60 && !h.trees) return 'trees';
       if (d < LOD.tiny + 40 && !h.tiny) return 'tiny';
       if (d > LOD.fine - 40 && d < LOD.view && !h.baseFar) return 'baseFar';
+      if (IF && d < LOD.view && !h.forest && (h.base || h.baseFar)) return 'forest';
       return null;
     }
     /* how much of each chunk to draw: each level shows in its band, or stands in for one not built yet */
@@ -1172,7 +1274,7 @@ void main(){
       g.base.visible = fine; g.baseFar.visible = !fine && !!h.baseFar;
       g.rk.visible = g.fx.visible = g.near.visible = d < LOD.near;
       g.rkFar.visible = d >= LOD.near && d < LOD.rocks; g.far.visible = d >= LOD.near && d < LOD.mid;
-      g.tiny.visible = d < LOD.tiny; ch.root.visible = d < LOD.view;
+      g.tiny.visible = d < LOD.tiny; ch.root.visible = d < LOD.view; g.forestS.visible = d < LOD.mid;
     }
     function step(ch, k, slice = 1.5) {
       const gen = ch.jobs[k] || (ch.jobs[k] = MAKE[k](ch));
@@ -1186,7 +1288,8 @@ void main(){
 
     /* every frame: lay out the chunks around the camera, draw each at its level of detail, and spend about `budget`
        milliseconds building what is missing, nearest first (more when the chunk under the camera is not there yet) */
-    function update(camX, budget = 4) {
+    function update(camX, budget = 4, camZ, camY) {
+      if (IF && camZ !== undefined) forestNear(camX, camY ?? 2, camZ);
       camX += lx;
       lastCam = camX;
       if (Layout.coastVer !== ver) reset();
@@ -1217,6 +1320,9 @@ void main(){
     function reset() {
       const moved = o.x !== Layout.O.x || o.z !== Layout.O.z;
       while (live.length) recycle(live[live.length - 1]); o.x = Layout.O.x; o.z = Layout.O.z; ver = Layout.coastVer;
+      /* (and the forest's stretches, kept clear of what the hooks now claim, where the coast now is) */
+      for (const col of FCOL.values()) for (const m of [col.main, col.small]) if (m) m.geometry.dispose();
+      FCOL.clear(); FSHIFT.clear(); fClaims.clear(); if (IF) placeF();
       if (shade && moved) shade.invalidate();
       prime();
     }
@@ -1236,6 +1342,8 @@ void main(){
         const ch = chunks.get(k < 0 ? c - 1 : k >= nb ? c + 1 : c); if (!ch) continue;
         for (const ob of ch.obs[(k + nb) % nb]) nearOut.push(inPage(ob, obPage));
       }
+      /* (and the forest's trunks, their buttresses and stilt roots) */
+      if (IF) { const zc = z + o.z; for (const t of IF.trunks(cx, zc)) if (Math.abs(t[0] - cx) < 6 + t[2] && Math.abs(t[1] - zc) < 6 + t[2]) nearOut.push([t[0] - o.x - lx, t[1] - o.z, t[2], 'tree']); }
       return nearOut;
     }
     /* rocks standing in the sea within r of a world point: { x, z, top, rad, id } (the list is reused by the next call) */
@@ -1267,7 +1375,7 @@ void main(){
       return n;
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
-    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, get loop() { return lx; },
+    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, get loop() { return lx; }, forest: IF, walkIn: IF ? 60 : 0,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },

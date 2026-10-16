@@ -78,8 +78,15 @@ const IsleForest = (() => {
     { id: 9, g: 1.6, kinds: ['groundfern', 'aroid', 'seedling', 'ginger', 'log', 'birdsnest'], ground: true }
   ];
 
+  /* o: { R (the renderer, to photograph the cards with), land(x, z), keep (places kept clear), near, nearSmall,
+     period (the grids drawn a whole number of cells round a loop that long, so the forest comes round again with it:
+     the beach's loop), kept(x, z) (whether a place is kept clear, in place of the camp's and keep's), shift (the forest
+     proper that much nearer the beach's top, m) } */
   function build(root, I, o) {
     const R = o.R, land = o.land, SQ = {}, group = new T.Group(); group.name = 'forest'; group.matrixAutoUpdate = false; root.add(group);
+    /* (round a loop each grid a whole number of cells, its cells' numbers taken round it: the same trees each time round) */
+    const GR = o.period ? GRIDS.map(G => { const n = Math.round(o.period / G.g); return Object.assign({}, G, { g: o.period / n, n }); }) : GRIDS;
+    const hxOf = (G, gx) => G.n ? ((gx % G.n) + G.n) % G.n : gx, SH = o.shift || 0;
     /* ── the shapes: each kind's models grown, their parts to be drawn many times, and their pictures for the cards ── */
     const protos = [], byKind = {};
     for (const k in KINDS) {
@@ -105,12 +112,12 @@ const IsleForest = (() => {
     /* (the places kept clear, in a grid of 16 m buckets: there may be thousands of them along the trails) */
     const KG = 16, kgrid = new Map();
     for (const c of keepOut) { const [cx, cz, r] = c; for (let gz = Math.floor((cz - r) / KG); gz <= Math.floor((cz + r) / KG); gz++) for (let gx = Math.floor((cx - r) / KG); gx <= Math.floor((cx + r) / KG); gx++) { const k = gx * 65536 + gz; let L = kgrid.get(k); if (!L) kgrid.set(k, (L = [])); L.push(c); } }
-    const kept = (x, z) => { const L = kgrid.get(Math.floor(x / KG) * 65536 + Math.floor(z / KG)); if (L) for (const [cx, cz, r] of L) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; };
+    const kept = o.kept || ((x, z) => { const L = kgrid.get(Math.floor(x / KG) * 65536 + Math.floor(z / KG)); if (L) for (const [cx, cz, r] of L) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; });
     function odds(G, x, z, out) {
       const s = I.sdf(x, z); if (s > 9) return 0;
-      const q = I.shore(I.uAt(x, z), SQ), d = -s, W = q.W;
-      /* (the forest proper: from a little way behind the beach's top, closed within twenty metres of it) */
-      const rockK = (q.rock + q.cliff) * (1 - sm(W + 4, W + 18, d)), forest = Math.max(sm(W + 6, W + 22, d) * q.sand, sm(W + 6, W + 20, d) * (q.rock + q.cliff), sm(16, 44, d) * q.mangrove) * (1 - rockK);
+      const q = I.shore(I.uAt(x, z), SQ), d = -s, W = q.W, dF = d + SH;
+      /* (the forest proper: from a little way behind the beach's top, closed within twenty metres of it; nearer, shifted) */
+      const rockK = (q.rock + q.cliff) * (1 - sm(W + 4, W + 18, d)), forest = Math.max(sm(W + 6, W + 22, dF) * q.sand, sm(W + 6, W + 20, d) * (q.rock + q.cliff), sm(16, 44, d) * q.mangrove) * (1 - rockK);
       const notMang = 1 - sm(0.25, 0.55, q.mangrove);
       if (G.id === 1) return q.sand * notMang * (0.85 * bump(d, W - 5, W - 1.5, W + 7, W + 16) + 0.12 * bump(d, W, W + 6, W + 38, W + 60));
       if (G.id === 2) {
@@ -120,20 +127,20 @@ const IsleForest = (() => {
       }
       if (G.id === 3) { const patch = sm(0.6, 0.74, vn2(x / 170, z / 170, 7)); return q.sand * notMang * patch * bump(d, W - 3, W + 1, W + 30, W + 46) * 0.8; }
       if (G.id === 4) return forest * 0.95;
-      if (G.id === 5) { const deep = sm(W + 40, W + 90, d) * forest; out.w = [0.62, 0.22, 0.16]; return deep * 0.5; }
-      if (G.id === 10) return sm(W + 12, W + 30, d) * forest * 0.85;
-      if (G.id === 7) { const edge = 1 - sm(W + 30, W + 80, d); out.w = [0.5, 0.2, 0.12 + 0.12 * (1 - edge), 0.18]; return Math.max(forest, sm(W + 4, W + 14, d) * q.sand * edge) * (0.72 + 0.26 * edge); }
-      if (G.id === 11) return sm(W + 10, W + 26, d) * forest * 0.62;
+      if (G.id === 5) { const deep = sm(W + 40, W + 90, dF) * forest; out.w = [0.62, 0.22, 0.16]; return deep * 0.5; }
+      if (G.id === 10) return sm(W + 12, W + 30, dF) * forest * 0.85;
+      if (G.id === 7) { const edge = 1 - sm(W + 30, W + 80, dF); out.w = [0.5, 0.2, 0.12 + 0.12 * (1 - edge), 0.18]; return Math.max(forest, sm(W + 4, W + 14, dF) * q.sand * edge) * (0.72 + 0.26 * edge); }
+      if (G.id === 11) return sm(W + 10, W + 26, dF) * forest * 0.62;
       if (G.id === 8) { const wall = q.sand * notMang * bump(d, W - 2.5, W + 0.5, W + 12, W + 20) + (q.rock + q.cliff) * bump(d, W + 1, W + 4, W + 14, W + 24) * 0.7; out.w = [0.5, 0.2, 0.12, 0.18]; return Math.min(1, wall) * 0.85; }
-      if (G.id === 9) { out.w = [0.4, 0.15, 0.3, 0.06, 0.03, 0.06]; return Math.max(forest, q.sand * bump(d, W + 1, W + 6, W + 40, W + 60)) * 0.86; }
+      if (G.id === 9) { out.w = [0.4, 0.15, 0.3, 0.06, 0.03, 0.06]; return Math.max(forest, q.sand * bump(dF, W + 1, W + 6, W + 40, W + 60)) * 0.86; }
       return 0;
     }
     /* a grid's candidate in cell (gx, gz), if it has one: [x, z, its draw, odds] */
     const W4 = { w: null };
     function cand(G, gx, gz, out) {
-      const x = (gx + 0.1 + 0.8 * hash3(gx, gz, G.id * 16 + 1)) * G.g, z = (gz + 0.1 + 0.8 * hash3(gx, gz, G.id * 16 + 2)) * G.g;
-      const p = odds(G, x, z, W4); if (p <= 0 || hash3(gx, gz, G.id * 16 + 3) >= p) return null;
-      out[0] = x; out[1] = z; out[2] = hash3(gx, gz, G.id * 16 + 4); return out;
+      const hx = hxOf(G, gx), x = (gx + 0.1 + 0.8 * hash3(hx, gz, G.id * 16 + 1)) * G.g, z = (gz + 0.1 + 0.8 * hash3(hx, gz, G.id * 16 + 2)) * G.g;
+      const p = odds(G, x, z, W4); if (p <= 0 || hash3(hx, gz, G.id * 16 + 3) >= p) return null;
+      out[0] = x; out[1] = z; out[2] = hash3(hx, gz, G.id * 16 + 4); return out;
     }
     /* ── a tile's trees: every grid's over the tile, those that grow, each its kind and shape, turned and sized ── */
     const C0 = [0, 0, 0], C1 = [0, 0, 0];
@@ -141,19 +148,21 @@ const IsleForest = (() => {
     function treeAt(G, gx, gz, box) {
       const c = cand(G, gx, gz, C0); if (!c) return null;
       const x = c[0], z = c[1], pr = c[2]; if ((box && (x < box[0] || x >= box[0] + box[2] || z < box[1] || z >= box[1] + box[2])) || kept(x, z)) return null;
+      const hx = hxOf(G, gx);
       const w = W4.w && W4.w.slice();
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { if (!i && !j) continue; const n = cand(G, gx + i, gz + j, C1); if (n && n[2] > pr && (n[0] - x) ** 2 + (n[1] - z) ** 2 < G.g * G.g * 0.72) return null; }
       /* (which of its kinds: by the place's weights, or the one) */
       let kind = G.kinds[0];
-      if (G.kinds.length > 1 && w) { let tot = w.reduce((a, b) => a + b, 0), r = hash3(gx, gz, G.id * 16 + 5) * tot; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } } }
-      const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(gx, gz, G.id * 16 + 6) * P.length) % P.length];
-      const S = G.s || K.s, s = S[0] + (S[1] - S[0]) * hash3(gx, gz, G.id * 16 + 7);
-      return { x, y: land(x, z) - 0.15, z, s, yaw: hash3(gx, gz, G.id * 16 + 8) * TAU, p: p.i, tint: hash3(gx, gz, G.id * 16 + 9), die: hash3(gx, gz, G.id * 16 + 10), kind };
+      if (G.kinds.length > 1 && w) { let tot = w.reduce((a, b) => a + b, 0), r = hash3(hx, gz, G.id * 16 + 5) * tot; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } } }
+      const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(hx, gz, G.id * 16 + 6) * P.length) % P.length];
+      const S = G.s || K.s, s = S[0] + (S[1] - S[0]) * hash3(hx, gz, G.id * 16 + 7);
+      return { x, y: land(x, z) - 0.15, z, s, yaw: hash3(hx, gz, G.id * 16 + 8) * TAU, p: p.i, tint: hash3(hx, gz, G.id * 16 + 9), die: hash3(hx, gz, G.id * 16 + 10), kind };
     }
-    function* plan(tx, tz, TS, late) {
+    /* (only: the ids of the grids to draw from, when not all of them) */
+    function* plan(tx, tz, TS, late, only) {
       const out = [], box = [tx, tz, TS];
-      for (const G of GRIDS) {
-        if (G.ground) continue;
+      for (const G of GR) {
+        if (G.ground || (only && !only.includes(G.id))) continue;
         for (let gz = Math.floor(tz / G.g); gz * G.g < tz + TS; gz++) {
           for (let gx = Math.floor(tx / G.g); gx * G.g < tx + TS; gx++) { const t = treeAt(G, gx, gz, box); if (t) out.push(t); }
           if (late()) yield;
@@ -164,7 +173,7 @@ const IsleForest = (() => {
     /* the trees of the given kinds standing within r of (x, z), as plan has them (nearest first), and how tall each is */
     function standing(x, z, r, kinds) {
       const out = [];
-      for (const G of GRIDS) {
+      for (const G of GR) {
         if (G.ground || !G.kinds.some(k => kinds.includes(k))) continue;
         for (let gz = Math.floor((z - r) / G.g); gz * G.g < z + r; gz++) for (let gx = Math.floor((x - r) / G.g); gx * G.g < x + r; gx++) {
           const t = treeAt(G, gx, gz, null); if (!t || !kinds.includes(t.kind)) continue;
@@ -173,13 +182,13 @@ const IsleForest = (() => {
       }
       return out.sort((a, b) => a.d - b.d);
     }
-    /* a tile's cards: those of each atlas together */
-    function cards(list) {
-      const out = [];
-      atlases.forEach((a, k) => { if (!a) return; const L = list.filter(t => protos[t.p].atlas === k).map(t => Object.assign({}, t, { p: protos[t.p].ai })); if (!L.length) return;
-        const m = Impostor.cards(L, mats[k]); m.matrixAutoUpdate = false; group.add(m); out.push(m); });
-      return out;
+    /* a tile's cards: those of each atlas together (added to the forest's group; or, loose, to be drawn wherever and as
+       often as whoever asked for them wants: [the trees' cards, the small plants'], either null if there are none) */
+    function cardSets(list) {
+      return atlases.map((a, k) => { if (!a) return null; const L = list.filter(t => protos[t.p].atlas === k).map(t => Object.assign({}, t, { p: protos[t.p].ai })); if (!L.length) return null;
+        const m = Impostor.cards(L, mats[k]); m.matrixAutoUpdate = false; return m; });
     }
+    function cards(list) { const out = cardSets(list).filter(Boolean); for (const m of out) group.add(m); return out; }
 
     /* ── near the eye: the trees themselves. Every few frames, the trees within reach, nearest first, as many of each
        shape as it has room for, drawn as many copies of that shape's parts ── */
@@ -189,16 +198,16 @@ const IsleForest = (() => {
       if (pt.leaf) im.instanceColor = new T.InstancedBufferAttribute(new Float32Array(capOf(p) * 3).fill(1), 3);
       im.matrixAutoUpdate = false; group.add(im); return { im, M: pt.M, leaf: pt.leaf };
     }));
-    const GROUND = 36, GF = GRIDS.find(G => G.ground), floorMemo = new Map();
+    const GROUND = 36, GF = GR.find(G => G.ground), floorMemo = new Map();
     function floorNear(cx, cz) {
       const out = [], G = GF;
       for (let gz = Math.floor((cz - GROUND) / G.g); gz * G.g < cz + GROUND; gz++) for (let gx = Math.floor((cx - GROUND) / G.g); gx * G.g < cx + GROUND; gx++) {
         const key = gx * 100003 + gz; let tr = floorMemo.get(key);
         if (tr === undefined) {
-          tr = null; const c = cand(G, gx, gz, C0);
-          if (c && !kept(c[0], c[1])) { const w = W4.w.slice(); let r = hash3(gx, gz, 151) * w.reduce((a, b) => a + b, 0), kind = G.kinds[0]; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } }
-            const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(gx, gz, 152) * P.length) % P.length];
-            tr = { x: c[0], y: land(c[0], c[1]) - 0.04, z: c[1], s: K.s[0] + (K.s[1] - K.s[0]) * hash3(gx, gz, 153), yaw: hash3(gx, gz, 154) * TAU, p: p.i }; }
+          tr = null; const c = cand(G, gx, gz, C0), hx = hxOf(G, gx);
+          if (c && !kept(c[0], c[1])) { const w = W4.w.slice(); let r = hash3(hx, gz, 151) * w.reduce((a, b) => a + b, 0), kind = G.kinds[0]; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } }
+            const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(hx, gz, 152) * P.length) % P.length];
+            tr = { x: c[0], y: land(c[0], c[1]) - 0.04, z: c[1], s: K.s[0] + (K.s[1] - K.s[0]) * hash3(hx, gz, 153), yaw: hash3(hx, gz, 154) * TAU, p: p.i }; }
           if (floorMemo.size > 9000) floorMemo.clear();
           floorMemo.set(key, tr);
         }
@@ -272,8 +281,8 @@ const IsleForest = (() => {
     /* how closed the forest's canopy is over a point (for the shade on the ground under it) */
     /* (only a clearing opens the canopy over the ground: a path or a stream through the forest is still under it) */
     const clearings = keepOut.filter(c => c[2] > 4.6), inClearing = (x, z) => { for (const [cx, cz, r] of clearings) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; };
-    const cover = (x, z) => (inClearing(x, z) ? 0 : odds(GRIDS[3], x, z, W4));
-    return { plan, cards, nearUpdate, mats, atlases, protos, stats, setNear, cover, standing, trunks, get NEAR() { return NEAR; }, get NEARS() { return NEARS; } };
+    const cover = (x, z) => ((o.kept ? o.kept(x, z) : inClearing(x, z)) ? 0 : odds(GR[3], x, z, W4));
+    return { plan, cards, cardSets, nearUpdate, mats, atlases, protos, stats, setNear, cover, standing, trunks, group, get NEAR() { return NEAR; }, get NEARS() { return NEARS; } };
   }
   return { build, KINDS, GRIDS };
 })();

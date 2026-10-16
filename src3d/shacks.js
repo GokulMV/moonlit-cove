@@ -64,16 +64,6 @@ const Shacks = (() => {
     for (let i = -128; i < 256; i += 16) { a.beginPath(); a.moveTo(i, 0); a.lineTo(i + 128, 128); a.stroke(); a.beginPath(); a.moveTo(i + 128, 0); a.lineTo(i, 128); a.stroke(); }
     return c;
   }
-  /* an outrigger's hull: painted bands along its length (v runs round it, from the keel up) */
-  function hull(scheme) {
-    const c = cv(16, 256), a = c.getContext('2d', { willReadFrequently: true }), [base, band, top] = scheme;
-    a.fillStyle = top; a.fillRect(0, 0, 16, 256);
-    a.fillStyle = band; a.fillRect(0, 70, 16, 24);
-    a.fillStyle = base; a.fillRect(0, 94, 16, 162);
-    a.fillStyle = 'rgba(255,255,255,0.7)'; a.fillRect(0, 66, 16, 4);
-    grain(a, 16, 256, 0.1, 57);
-    return c;
-  }
   /* a soft round glow, for lights seen in the dark and the warm pool they throw on the sand */
   function blob() {
     const c = cv(64, 64), a = c.getContext('2d'), g = a.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -158,7 +148,6 @@ const Shacks = (() => {
     };
     const DOORS = ['#2f6f8f', '#3f7d52', '#a5432f', '#c9a23f', '#6b4f8f', '#2e5a6e'].map(h => lit({ map: tx(Paint.plank(79, h, 1)), roughness: 0.75 }));
     const CHAIRS = ['#c8372d', '#2d63b5', '#e8e2d6', '#2f8a5a'].map(h => lit({ color: new T.Color(h), roughness: 0.55 }));
-    const HULLS = [['#1d5a8c', '#c0392b', '#efe6d0'], ['#2f7d4f', '#e3b33c', '#f1ead8'], ['#b5402c', '#1f4f7a', '#ece2c8'], ['#e2c34a', '#2b6d8e', '#f3ecd9']].map(s => lit({ map: tx(hull(s), false), roughness: 0.6 }));
     /* the boards are lettered in Caveat: painted again once it has loaded, if it had not yet */
     const signs = new Map();
     function signMat(i, b) {
@@ -331,15 +320,16 @@ const Shacks = (() => {
     }
 
     /* ── a fishing spot: outrigger boats above the tide line, a net drying between poles, a thatch shelter ── */
-    function boat(ch, S, x, z, ry, r) {
-      const f = frame(x, z, ry), L = 5.5 + r() * 2, hm = HULLS[Math.floor(r() * HULLS.length)], side = r() < 0.5 ? -1 : 1;
-      const hg = new T.SphereGeometry(1, 14, 10, 0, TAU, 0, Math.PI * 0.62); hg.scale(0.42, 0.55, L / 2); hg.rotateX(Math.PI);
-      S.add(hm, hg, f(0, 0.42, 0));
-      S.add(M.wood, boxG(0.66, 0.05, L * 0.8, 0.8), f(0, 0.43, 0), false);
-      for (const bz of [-L * 0.18, L * 0.18]) S.add(M.wood, cylG(0.035, 0.035, 2.0, 5), f(side * 1.0, 0.5, bz, 0, 0, Math.PI / 2), false);
-      S.add(M.wood, cylG(0.09, 0.09, L * 0.62, 6), f(side * 1.95, 0.12, 0, Math.PI / 2, 0, 0));
-      for (let i = 0; i < 2; i++) S.add(M.wood, boxG(0.06, 0.05, 1.8), f((r() - 0.5) * 0.3, 0.47, (r() - 0.5) * L * 0.4, 0, (r() - 0.5) * 0.5, 0), false);
-      for (let k = -1; k <= 1; k++) ch.obstacle(...wpos(f, side * 0.45, k * L / 3.2), 0.85, 'boat');
+    /* an outrigger canoe (models/struct/outrigger.js) lying along the beach, its float toward the sea or the land; near, the
+       boat itself; further off, the same in fewer facets */
+    function boat(ch, S, x, z, ry, r, livery) {
+      const side = r() < 0.5 ? -1 : 1, seed = 1 + Math.floor(r() * 1e6), th = ry - Math.PI / 2;
+      const near = Models.make('struct/outrigger', { seed, livery, side }), far = Models.make('struct/outrigger', { seed, livery, side, lite: true });
+      for (const [o, isFar] of [[near, false], [far, true]]) { o.position.set(x, 0, z); o.rotation.y = th; o.updateMatrixWorld(true); o.traverse(m => { if (m.isMesh) ch.keep(m.geometry); }); S.extra.push([o, isFar]); }
+      /* (what the van and a walker go round: the hull along its length, the float off its side) */
+      const I = near.userData.info, c = Math.cos(th), s = Math.sin(th), at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
+      for (let k = -2; k <= 2; k++) ch.obstacle(...at(k * I.len / 5, 0), 0.5, 'boat');
+      for (const fx of [I.fx0 + 0.4, (I.fx0 + I.fx1) / 2, I.fx1 - 0.4]) ch.obstacle(...at(fx, I.zf), 0.25, 'boat');
     }
     function fishing(ch, S, x, ry, r, sz, vz) {
       const z = vz - 1.2, f = frame(x, z, ry);
@@ -365,7 +355,9 @@ const Shacks = (() => {
       /* the boats, down the beach toward the water, above where the waves run */
       const nb = 1 + (r() < 0.6 ? 1 : 0);
       /* (lying along the beach, a little above where the waves run) */
-      for (let i = 0; i < nb; i++) { const bx = i ? 3.8 + r() * 1.5 : -3.0 - r() * 1.5, bz = Math.min(-2.6, sz + 4.6 + r() * 0.8 - z); boat(ch, S, ...wpos(f, bx, bz), ry + Math.PI / 2 + (r() - 0.5) * 0.35, r); }
+      /* (each its own boat: its own colours, its own name) */
+      const NL = Models.outriggerLiveries || 6, l0 = Math.floor(r() * NL), l1 = (l0 + 1 + Math.floor(r() * (NL - 1))) % NL;
+      for (let i = 0; i < nb; i++) { const bx = i ? 4.4 + r() * 1.4 : -4.2 - r() * 1.4, bz = Math.min(-2.6, sz + 4.8 + r() * 0.8 - z); boat(ch, S, ...wpos(f, bx, bz), ry + Math.PI / 2 + (r() - 0.5) * 0.3, r, i ? l1 : l0); }
       return { lights: 1 };
     }
 
@@ -584,7 +576,7 @@ const Shacks = (() => {
     /* (for the test bench: the sites laid out so far, along the coast) */
     const sites = () => [...plans.values()].flat().map(p => ({ kind: p.kind, x: p.x, z: Layout.vegZ(p.x) }));
     const castleSites = () => mine.map(L => ({ x: L.p.x, z: L.p.z, wear: L.p.wear, gone: !!L.p.gone }));
-    return { update, sites, castleSites, adopt, restore, raise, squash, obstacles, shift, clearMine, get castles() { return castles; }, get count() { return count; }, M, debug: { liveC, mine } };
+    return { update, sites, castleSites, adopt, restore, raise, squash, obstacles, shift, clearMine, get castles() { return castles; }, get count() { return count; }, M, debug: { liveC, mine, plan } };
   }
   return { build };
 })();
