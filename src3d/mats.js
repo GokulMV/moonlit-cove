@@ -396,20 +396,20 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
       vec3 nG = normalize((vec4(vNormal, 0.0)*viewMatrix).xyz), vG = normalize(cameraPosition - vWPos);
       float face = smoothstep(0.12, 0.45, dot(nG, vG))*smoothstep(8.0, 40.0, cameraPosition.y - vWPos.y); cnGrad *= face; cnTint = mix(vec3(0.66), cnTint, 0.3 + 0.7*face); }` : ''}
     vec3 vegC = diffuseColor.rgb*(0.68 + 0.5*n1*n2 + 0.28*n3)*cnTint*1.45;${key === 'land' && !Layout.isle ? `
-    /* (along the beach, under the trees: the forest's floor, its fallen leaves brown and grey, moss and a seedling's green
-       here and there, the light coming down through the canopy in flecks; out at the forest's edge, grass and herbs. Up
-       close, the leaves themselves; further off, where a leaf is a pixel or two, their average, smooth: no pattern) */
-    { float cov = smoothstep(1.0, 8.0, shoreVeg(vWPos.xz))*(1.0 - vRock);
+    /* (along the beach the land is grass, under the trees as out at the forest's edge: the sward the ground's own shader
+       draws at the top of the beach (glsl.js GROUND_FS), close by the dark of the soil and the stems between the tufts
+       (grass.js's blades over it), further off the sward's own colour as they would show it: greener and thicker in its
+       damp stretches, darker in its clumps, drifts of straw where it has dried) */
+    { float cov = smoothstep(-1.0, 2.0, shoreVeg(vWPos.xz))*(1.0 - vRock);
       if (cov > 0.0){
         /* (where along the beach it is, as it goes on round the loop: so nothing jumps when the frame does) */
         vec3 wq = vWPos + vec3(uLoopX, 0.0, 0.0);
-        float l1 = vnz(wq*0.45 + 3.0), l2 = vnz(wq*2.3), l3 = vnz(wq*9.0 + 1.0), l4 = vnz(wq*31.0), fw = length(fwidth(vWPos.xz));
-        float dK = 1.0 - smoothstep(0.05, 0.5, fw);
-        vec3 litter = mix(vec3(0.15, 0.105, 0.062), vec3(0.115, 0.095, 0.074), l2)*(0.72 + mix(0.0, 0.32*l3 + 0.18*l4, dK) + 0.1*l1);
-        litter = mix(litter, vec3(0.045, 0.068, 0.026)*(0.8 + 0.4*l4*dK), smoothstep(0.55, 0.8, l1*0.6 + l3*0.4)*0.5);
-        { float lk = (1.0 - smoothstep(0.01, 0.045, fw)); if (lk > 0.0) litter = mix(litter, litterAt(wq.xz)*(0.64 + 0.22*l3), lk); }
-        float fleck = smoothstep(0.7, 0.78, vnz(wq*0.8 + 11.0)*0.65 + l3*0.35);
-        vegC = mix(vegC, litter*mix(0.62, 0.42 + 0.75*fleck, dK), cov);
+        float g1 = vnz(wq*0.0435 + 2.3), g2 = vnz(wq*0.154 + 9.4), g3 = vnz(wq*0.0175 + 5.5), g4 = vnz(wq*0.71 + 0.7), g5 = vnz(wq*0.0538 + 3.0);
+        float lush = smoothstep(0.25, 0.75, g3*0.55 + g1*0.45), straw = smoothstep(0.6, 0.82, g5*0.7 + g2*0.3)*(1.0 - 0.7*lush);
+        vec3 nearC = mix(vec3(0.07, 0.085, 0.035), vec3(0.1, 0.11, 0.05), g2)*(0.75 + 0.5*g1);
+        vec3 farC = mix(vec3(0.075, 0.095, 0.032), vec3(0.1, 0.14, 0.038), lush)*(0.6 + 0.75*g2);
+        farC = mix(farC, vec3(0.19, 0.165, 0.08), straw*0.55)*(0.8 + 0.4*g4);
+        vegC = mix(vegC, mix(nearC, farC, smoothstep(10.0, 32.0, distance(vWPos, cameraPosition))), cov);
       } }` : ''}${key === 'land' && Layout.isle ? `
     /* (round the island, near the eye, the ground as it is underfoot: under the trees the forest's floor, its fallen
        leaves brown and grey, a seedling's green here and there, the light through the canopy in flecks; out in the open,

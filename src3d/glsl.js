@@ -1272,12 +1272,8 @@ void main(){
       vec2 WD = vec2(${f(Layout.wind[0])}, ${f(Layout.wind[1])});
       float gst = (0.25 + gfN(p*0.09 - WD*uTime*1.1))*(0.55 + 0.45*gfN(p*0.031 - WD*uTime*0.35 + 5.0));
       farC *= 0.9 + 0.18*gst*min(uWindK.x, 1.5);
-      swd = mix(nearC, farC, smoothstep(10.0, 32.0, dist));${Layout.isle ? '' : `
-      /* (along the beach the grass grows only on the open ground at its top (vergeBand, as grass.js's): further in, under
-         the canopy, the forest's floor, dead leaves on dark earth) */
-      vec4 c4 = coastAt4(pw.x); float kq = inversesqrt(1.0 + c4.y*c4.y), vb = max(vergeBand((p.y - c4.x)*kq, (c4.z - c4.x)*kq, c4.w*kq), lawnK);
-      vec3 litter = mix(vec3(0.07, 0.056, 0.038), vec3(0.11, 0.085, 0.052), g2.g)*(0.7 + 0.5*nb.g)*(0.85 + 0.3*g4.b);
-      swd = mix(litter, swd, vb);`} }
+      swd = mix(nearC, farC, smoothstep(10.0, 32.0, dist)); }
+    /* (along the beach the grass goes on in under the trees, the whole forest's floor a sward: grass.js's blades on it) */
     alb = mix(alb, ${Layout.isle ? `mix(swd, vec3(0.095, 0.083, 0.063)*(0.82 + 0.3*nb.r), mudK)` : `swd`}, veg);   /* (round the island, in the mangroves, their mud, not a green verge) */
     /* the high-water line: a faint pale seam of fine sand and burst bubbles, drier than the sand below it */
     float mark = w.mark*(1.0 - veg)*(1.0 - w.cover)*(1.0 - 0.7*uWet);

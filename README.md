@@ -8,7 +8,7 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 
 ## In the cove
 
-- Walk the beach, wade out into the sea (the water splashes round your feet) or wander in under the rainforest behind it, or let it walk itself
+- Walk the beach, wade out into the sea (the water splashes round your feet) or wander in through the grass under the rainforest behind it, or let it walk itself
 - Kneel and build a sand castle (C, while walking on the sand); the waves wash it away, and the van flattens it
 - Stay in the beach huts either side of the camp: open the doors and shutters, light the lamps, lie in the hammock, read the boards in the work hut
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands

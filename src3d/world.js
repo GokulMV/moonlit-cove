@@ -859,9 +859,10 @@ void main(){
 
     /* how far in behind the forest's edge the open ground goes before the canopy closes over it, at a world x: the grass
        grows that far (grass.js, and the ground's colour under it, through the coast's numbers, Mats.coastReach) */
-    /* (the forest's own trees (FR, below) stand right behind the beach's top: the open grass is only a few metres deep) */
+    /* (the forest's own trees (FR, below) stand right behind the beach's top, and the grass goes on in under them: the
+       whole forest's floor a sward) */
     const FR = opts.forestR && typeof IsleForest !== 'undefined' && typeof Impostor !== 'undefined' ? opts.forestR : null;
-    const reach = FR ? xw => 4.5 + 3 * vnX(xw + Layout.O.x, 0, 0.045, 1.5) : xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
+    const reach = FR ? () => 2000 : xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
     Mats.coastReach(reach);
     /* the forest's clearing round the camp, in the world's coordinates */
     const clear = (x, z) => { const dx = Layout.wrapD(x - Layout.camp.x); x = Layout.camp.x + dx; return (Math.abs(x) < 17 && z < 30) || (Math.abs(dx) < 10 && z < Layout.vegZ(x) + 6); };   /* (each time round the loop) */
@@ -903,22 +904,45 @@ void main(){
       };
       /* (a hut's or a shack's clearing is kept clear of the trees; the undergrowth comes in nearer, up round its walls) */
       const SMALLG = [7, 8, 9, 11];
+      /* (round the camp the forest comes in among the camp's own palms, trees, bushes and fruit trees, leaving their feet
+         clear, and the places the camp's views are taken from; how tall it grows there, tall() below) */
+      const VIEWS = [[1.8, 5.4], [4.4, 3.9], [-0.95, 1.3]];
       const kept = (x, z, G) => {
-        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x), rk = G && SMALLG.includes(G.id) ? 0.55 : 1;
+        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x), small = G && SMALLG.includes(G.id), rk = small ? 0.55 : 1;
         if (Math.abs(dx) < 60) {
           const xx = Layout.camp.x + dx, C = Layout.camp;
-          if ((xx - C.x - 1) ** 2 + (zw - C.z + 0.8) ** 2 < 15 * 15) return true;
-          for (const q of Layout.palms) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < 16) return true;
-          for (const q of Layout.trees) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (q[2] + 2.2) ** 2) return true;
-          for (const q of Layout.bushes || []) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (q[2] + 0.8) ** 2) return true;
-          for (const q of Layout.fruit || []) if ((xx - q.x) ** 2 + (zw - q.z) ** 2 < 5 * 5) return true;
+          if ((xx - C.x - 1) ** 2 + (zw - C.z + 0.8) ** 2 < 7 * 7) return true;
+          for (const q of VIEWS) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < 3.2 * 3.2) return true;
+          for (const q of Layout.palms) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (small ? 1.6 : 3.2) ** 2) return true;
+          for (const q of Layout.trees) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (small ? q[2] * 0.6 : q[2] + 1.6) ** 2) return true;
+          for (const q of Layout.bushes || []) if ((xx - q[0]) ** 2 + (zw - q[1]) ** 2 < (q[2] + 0.25) ** 2) return true;
+          for (const q of Layout.fruit || []) if ((xx - q.x) ** 2 + (zw - q.z) ** 2 < (small ? (q.opts && q.opts.H ? 3.2 : 2.2) : 4.5) ** 2) return true;
         }
         const c = Math.floor((x - X0) / CW);
         for (let k = c - 1; k <= c + 1; k++) { const cw = cwOf(k), sh = (k - cw) * CW, L = claimsOf(cw); for (let i = 0; i < L.length; i++) { const q = L[i], r = q[2] * rk; if ((x - sh - q[0]) ** 2 + (z - q[1]) ** 2 < r * r) return true; } }
         /* (bare rock where a headland's is; the steep faces of the hills wooded as the rest) */
         return massif(x, z) > 0.25;
       };
-      IF = IsleForest.build(fRoot, CI, { R: FR, land: (x, z) => land(x, z), period: P, kept, shift: 9, sandEdge: 0.8, near: 72, nearSmall: 40 });
+      /* (and round the camp, nothing grows up into the home view (Layout.cameras.wide: from over the trees behind the camp,
+         down over it to the beach and the sea): under it the forest comes in low by the camp and rises toward the view's
+         foot, as a forest's edge rises from its shrubs to its canopy) */
+      /* (toward the view's sides the forest rises again to its full height, smoothly; and no crown comes round the place
+         the view is taken from) */
+      const HV = Layout.cameras.wide.pos, HZ = -3, HY = 0.4;
+      const tall = (x, z) => {
+        const xw = x - o.x, zw = z - o.z, dx = Layout.wrapD(xw - Layout.camp.x), xx = Layout.camp.x + dx, ahead = HV[2] - zw;
+        if (Math.abs(dx) > 80) return 1e9;
+        let cap = (xx - HV[0]) ** 2 + ahead * ahead < 18 * 18 ? HV[1] - 3.5 : 1e9;
+        const w = Math.abs(xx - HV[0]) / Math.max(Math.max(ahead, 0) * 1.15 + 6, 18 - ahead);
+        if (ahead >= 0.5 && w <= 1) cap = Math.min(cap, Math.max(0, HY + (HV[1] - HY) * (zw - HZ) / (HV[2] - HZ) - 0.6) + 45 * sm(0.82, 1, w));
+        /* (and round the camp's fruit trees the undergrowth is low, so they stand out of it, their fruit in sight) */
+        for (const q of Layout.fruit || []) { const d = Math.hypot(xx - q.x, zw - q.z); if (d < 7) cap = Math.min(cap, 1.4 + 0.55 * d); }
+        return cap;
+      };
+      /* (the forest packed close: the young trees, the shrubs and palms under the canopy and the green wall along the
+         beach's top nearer each other than the island's, the floor's ferns and gingers too) */
+      IF = IsleForest.build(fRoot, CI, { R: FR, land: (x, z) => land(x, z), period: P, kept, tall, shift: 9, sandEdge: 0.8, near: 72, nearSmall: 40,
+        cells: { 7: 3.4, 8: 3.0, 9: 1.35, 10: 6.2 }, oddsK: { 8: 1.12, 11: 1.22 } });
     }
     /* a stretch of the loop's forest (cw, its chunk's place round the loop): its trees in bands going in from the beach,
        and their cards ([the trees', the small plants']), worked out a little at a time */
@@ -969,8 +993,12 @@ void main(){
         const cw = cwOf(c), col = FCOL.get(cw); if (!col || !col.done) continue;
         for (const B of fShifted(col, cw, (c - cw) * CW)) fTiles.push({ trees: B.trees, x: X0 + c * CW, z: B.z, TS: FTS });
       }
-      IF.nearUpdate(cx, camY, cz, fTiles);
+      if (VIEW) VIEW.off = [lx + o.x, 0, o.z];
+      IF.nearUpdate(cx, camY, cz, fTiles, VIEW);
     }
+    /* (the camera, and the key light's shadow camera when it casts: the trees near the eye that neither sees are not drawn) */
+    let VIEW = null;
+    const setView = (cam, sh) => { VIEW = cam ? { cam, sh: sh || null, off: [0, 0, 0] } : null; };
 
     /* ── what the coast's hills, headlands, mountains and forest shade from the key light, the sun by day and the moon by
        night: over the coast round the camera, how much of the light reaches each point of the ground, the sea or the
@@ -1382,7 +1410,7 @@ void main(){
       return n;
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
-    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, get loop() { return lx; }, forest: IF, walkIn: IF ? 60 : 0,
+    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, setView, get loop() { return lx; }, forest: IF, walkIn: IF ? 60 : 0,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },

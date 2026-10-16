@@ -28,7 +28,7 @@ const IsleForest = (() => {
   /* ── the kinds: the model each is grown from and its shapes (seeds), how big each grows (its scale), and how far off it
      is still drawn as itself rather than its card ── */
   const KINDS = {
-    canopy: { model: 'flora/canopy', seeds: [3, 7, 19], opts: { lod: 1 }, s: [0.85, 1.28], cap: 200 },
+    canopy: { model: 'flora/canopy', seeds: [3, 7, 19], opts: { lod: 1 }, s: [0.85, 1.28], cap: 240 },
     emergent: { model: 'flora/emergent', seeds: [2, 5], opts: { lod: 1 }, s: [0.8, 1.05] },
     tualang: { model: 'flora/tualang', seeds: [3], opts: { lod: 1 }, s: [0.85, 1.0] },
     fig: { model: 'flora/fig', seeds: [4], opts: { lod: 1 }, s: [0.8, 1.0] },
@@ -38,7 +38,7 @@ const IsleForest = (() => {
     coconut: { model: 'fruit/coconut-palm', seeds: [2, 4], opts: { fruit: false }, s: [0.8, 1.15] },
     /* (the small ones, photographed smaller) */
     hibiscus: { model: 'flora/hibiscus', seeds: [2], opts: { lod: 0 }, s: [0.8, 1.25], small: true },
-    understory: { model: 'flora/understory', seeds: [2, 9, 13], opts: { lod: 0 }, s: [0.8, 1.3], small: true, cap: 300 },
+    understory: { model: 'flora/understory', seeds: [2, 9, 13], opts: { lod: 0 }, s: [0.8, 1.3], small: true, cap: 460 },
     fanpalm: { model: 'flora/fanpalm', seeds: [2, 5], opts: {}, s: [0.85, 1.35], small: true },
     treefern: { model: 'flora/treefern', seeds: [3], opts: {}, s: [0.85, 1.2], small: true },
     pandanus: { model: 'flora/pandanus', seeds: [2], opts: {}, s: [0.8, 1.25], small: true },
@@ -81,11 +81,15 @@ const IsleForest = (() => {
   /* o: { R (the renderer, to photograph the cards with), land(x, z), keep (places kept clear), near, nearSmall,
      period (the grids drawn a whole number of cells round a loop that long, so the forest comes round again with it:
      the beach's loop), kept(x, z) (whether a place is kept clear, in place of the camp's and keep's), shift (the forest
-     proper that much nearer the beach's top, m), sandEdge (nothing on the sand short of that far in from its top, m) } */
+     proper that much nearer the beach's top, m), sandEdge (nothing on the sand short of that far in from its top, m),
+     cells ({ grid id: its cell, m }, in place of the grid's own: that grid's plants that much nearer each other),
+     oddsK ({ grid id: × its odds }), tall(x, z) (how tall a plant may grow there, m: one taller is grown smaller, as a
+     young one, or not at all) } */
   function build(root, I, o) {
     const R = o.R, land = o.land, SQ = {}, group = new T.Group(); group.name = 'forest'; group.matrixAutoUpdate = false; root.add(group);
     /* (round a loop each grid a whole number of cells, its cells' numbers taken round it: the same trees each time round) */
-    const GR = o.period ? GRIDS.map(G => { const n = Math.round(o.period / G.g); return Object.assign({}, G, { g: o.period / n, n }); }) : GRIDS;
+    const GR = GRIDS.map(G => { const g = (o.cells && o.cells[G.id]) || G.g; if (!o.period) return Object.assign({}, G, { g }); const n = Math.round(o.period / g); return Object.assign({}, G, { g: o.period / n, n }); });
+    const OK = o.oddsK || {};
     const hxOf = (G, gx) => G.n ? ((gx % G.n) + G.n) % G.n : gx, SH = o.shift || 0;
     /* ── the shapes: each kind's models grown, their parts to be drawn many times, and their pictures for the cards ── */
     const protos = [], byKind = {};
@@ -113,7 +117,8 @@ const IsleForest = (() => {
     const KG = 16, kgrid = new Map();
     for (const c of keepOut) { const [cx, cz, r] = c; for (let gz = Math.floor((cz - r) / KG); gz <= Math.floor((cz + r) / KG); gz++) for (let gx = Math.floor((cx - r) / KG); gx <= Math.floor((cx + r) / KG); gx++) { const k = gx * 65536 + gz; let L = kgrid.get(k); if (!L) kgrid.set(k, (L = [])); L.push(c); } }
     const kept = o.kept || ((x, z) => { const L = kgrid.get(Math.floor(x / KG) * 65536 + Math.floor(z / KG)); if (L) for (const [cx, cz, r] of L) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return Math.abs(x - camp.x) < 22 && z < camp.z + 20; });
-    function odds(G, x, z, out) {
+    function odds(G, x, z, out) { const p = odds0(G, x, z, out); return OK[G.id] ? Math.min(1, p * OK[G.id]) : p; }
+    function odds0(G, x, z, out) {
       const s = I.sdf(x, z); if (s > 9) return 0;
       const q = I.shore(I.uAt(x, z), SQ), d = -s, W = q.W, dF = d + SH;
       /* (o.sandEdge: nothing grows out on the beach's sand, short of that far in from its top; only the palms lean out over
@@ -158,7 +163,9 @@ const IsleForest = (() => {
       let kind = G.kinds[0];
       if (G.kinds.length > 1 && w) { let tot = w.reduce((a, b) => a + b, 0), r = hash3(hx, gz, G.id * 16 + 5) * tot; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } } }
       const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(hx, gz, G.id * 16 + 6) * P.length) % P.length];
-      const S = G.s || K.s, s = S[0] + (S[1] - S[0]) * hash3(hx, gz, G.id * 16 + 7);
+      const S = G.s || K.s; let s = S[0] + (S[1] - S[0]) * hash3(hx, gz, G.id * 16 + 7);
+      /* (where only so tall a plant may grow (o.tall), a taller one younger, smaller; much too tall for it, none) */
+      if (o.tall) { const hM = o.tall(x, z); if (p.H * s > hM) { if (p.H * S[0] * 0.5 > hM) return null; s = hM / p.H; } }
       return { x, y: land(x, z) - 0.15, z, s, yaw: hash3(hx, gz, G.id * 16 + 8) * TAU, p: p.i, tint: hash3(hx, gz, G.id * 16 + 9), die: hash3(hx, gz, G.id * 16 + 10), kind };
     }
     /* (only: the ids of the grids to draw from, when not all of them) */
@@ -195,7 +202,7 @@ const IsleForest = (() => {
 
     /* ── near the eye: the trees themselves. Every few frames, the trees within reach, nearest first, as many of each
        shape as it has room for, drawn as many copies of that shape's parts ── */
-    const capOf = p => KINDS[p.kind].cap || (KINDS[p.kind].ground ? 420 : KINDS[p.kind].small ? 240 : 150), near = protos.map(p => p.parts.map(pt => {
+    const capOf = p => KINDS[p.kind].cap || (KINDS[p.kind].ground ? 560 : KINDS[p.kind].small ? 340 : 170), near = protos.map(p => p.parts.map(pt => {
       const im = new T.InstancedMesh(pt.geo, pt.mat, capOf(p)); im.count = 0; im.frustumCulled = false; im.castShadow = pt.cast; im.receiveShadow = true; if (pt.depth) im.customDepthMaterial = pt.depth;
       /* (the leaves each tree's own green, as its card has it) */
       if (pt.leaf) im.instanceColor = new T.InstancedBufferAttribute(new Float32Array(capOf(p) * 3).fill(1), 3);
@@ -210,7 +217,8 @@ const IsleForest = (() => {
           tr = null; const c = cand(G, gx, gz, C0), hx = hxOf(G, gx);
           if (c && !kept(c[0], c[1], G)) { const w = W4.w.slice(); let r = hash3(hx, gz, 151) * w.reduce((a, b) => a + b, 0), kind = G.kinds[0]; for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) { kind = G.kinds[k]; break; } }
             const K = KINDS[kind], P = byKind[kind], p = P[Math.floor(hash3(hx, gz, 152) * P.length) % P.length];
-            tr = { x: c[0], y: land(c[0], c[1]) - 0.04, z: c[1], s: K.s[0] + (K.s[1] - K.s[0]) * hash3(hx, gz, 153), yaw: hash3(hx, gz, 154) * TAU, p: p.i }; }
+            tr = { x: c[0], y: land(c[0], c[1]) - 0.04, z: c[1], s: K.s[0] + (K.s[1] - K.s[0]) * hash3(hx, gz, 153), yaw: hash3(hx, gz, 154) * TAU, p: p.i };
+            if (o.tall) { const hM = o.tall(c[0], c[1]); if (p.H * tr.s > hM) tr.s = p.H * K.s[0] * 0.5 > hM ? 0 : hM / p.H; if (!tr.s) tr = null; } }
           if (floorMemo.size > 9000) floorMemo.clear();
           floorMemo.set(key, tr);
         }
@@ -227,17 +235,36 @@ const IsleForest = (() => {
       return TQ;
     }
     let lastX = 1e9, lastZ = 1e9, frame = 0; const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), Y = new T.Vector3(0, 1, 0);
-    function nearUpdate(cx, cy, cz, tiles) {
+    /* (view: { cam, the camera; sh(), the key light's shadow camera, when it casts; off, where the camera's frame is in
+       the forest's }: then only the trees the eye can see, its view a little widened, or that cast the key light's
+       shadow, or that stand close round the eye (for a turn of the head, and the torch's shadows), are drawn) */
+    const frC = new T.Frustum(), frS = new T.Frustum(), PM = new T.Matrix4(), VM = new T.Matrix4(), SPH = new T.Sphere(), FWD = new T.Vector3(), lastF = new T.Vector3();
+    let shOn = false, OFF = [0, 0, 0];
+    function viewSets(view) {
+      if (!view || !view.cam) return false;
+      const c = view.cam, D = Math.PI / 180, mg = 16 * D, tv = Math.tan(c.fov * D / 2), n = 0.2;
+      const hv = Math.min(Math.atan(tv) + mg, 1.45), hh = Math.min(Math.atan(tv * c.aspect) + mg, 1.45);
+      c.updateMatrixWorld(); PM.makePerspective(-n * Math.tan(hh), n * Math.tan(hh), n * Math.tan(hv), -n * Math.tan(hv), n, 4000);
+      frC.setFromProjectionMatrix(VM.multiplyMatrices(PM, c.matrixWorldInverse));
+      const sh = typeof view.sh === 'function' ? view.sh() : view.sh; shOn = !!sh;
+      if (shOn) frS.setFromProjectionMatrix(VM.multiplyMatrices(sh.projectionMatrix, sh.matrixWorldInverse));
+      OFF = view.off || OFF; return true;
+    }
+    const seen = (x, y, z, r) => { SPH.center.set(x - OFF[0], y - OFF[1], z - OFF[2]); SPH.radius = r; return frC.intersectsSphere(SPH) || (shOn && frS.intersectsSphere(SPH)); };
+    function nearUpdate(cx, cy, cz, tiles, view) {
       frame++;
-      if (frame % 4 && Math.hypot(cx - lastX, cz - lastZ) < 4) return;
-      lastX = cx; lastZ = cz;
-      const pick = protos.map(() => []), R2 = (NEAR + FADE) ** 2, RS2 = (NEARS + FADE) ** 2;
+      const vOn = !!(view && view.cam); if (vOn) view.cam.getWorldDirection(FWD);
+      if (frame % 4 && Math.hypot(cx - lastX, cz - lastZ) < 4 && !(vOn && FWD.dot(lastF) < 0.994)) return;
+      lastX = cx; lastZ = cz; if (vOn) lastF.copy(FWD);
+      const pick = protos.map(() => []), R2 = (NEAR + FADE) ** 2, RS2 = (NEARS + FADE) ** 2, cull = viewSets(view), A2 = 15 * 15;
       for (const t of tiles) {
         if (!t.trees || Math.max(0, t.x - cx, cx - t.x - t.TS) ** 2 + Math.max(0, t.z - cz, cz - t.z - t.TS) ** 2 > R2) continue;
-        for (const tr of t.trees) { const d2 = (tr.x - cx) ** 2 + (tr.y - cy) ** 2 * 0.3 + (tr.z - cz) ** 2; if (d2 < (protos[tr.p].atlas ? RS2 : R2)) pick[tr.p].push([d2, tr]); }
+        for (const tr of t.trees) { const d2 = (tr.x - cx) ** 2 + (tr.y - cy) ** 2 * 0.3 + (tr.z - cz) ** 2; if (d2 >= (protos[tr.p].atlas ? RS2 : R2)) continue;
+          if (cull && d2 > A2) { const h = protos[tr.p].H * tr.s; if (!seen(tr.x, tr.y + h * 0.5, tr.z, h * 0.62 + 1)) continue; }
+          pick[tr.p].push([d2, tr]); }
       }
       /* (the floor round the eye, out to GROUND, drawn from its grid as the eye comes near; and none of it high up) */
-      if (cy - land(cx, cz) < 40) for (const tr of floorNear(cx, cz)) { const d2 = (tr.x - cx) ** 2 + (tr.z - cz) ** 2; pick[tr.p].push([d2, tr]); }
+      if (cy - land(cx, cz) < 40) for (const tr of floorNear(cx, cz)) { const d2 = (tr.x - cx) ** 2 + (tr.z - cz) ** 2; if (cull && d2 > A2 && !seen(tr.x, tr.y + 0.7, tr.z, 1.8)) continue; pick[tr.p].push([d2, tr]); }
       pick.forEach((L, i) => {
         L.sort((a, b) => a[0] - b[0]); const n = Math.min(capOf(protos[i]), L.length);
         for (const part of near[i]) {

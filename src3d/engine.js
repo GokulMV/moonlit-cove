@@ -836,6 +836,7 @@ const Engine = (() => {
     const hutPlan = typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.isle ? Layout.island() : beachShore) : null;
     Layout.hutSites = hutPlan ? hutPlan.map(p => [p.x, p.z]) : [];
     world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null, forestR: opts.forest !== false ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
+    if (world.setView) world.setView(camera, () => R.shadowMap.enabled && keyLight.castShadow ? keyLight.shadow.camera : null);
     /* (along the beach, each hut's clearing kept clear of the forest's trees: wherever it comes round in the loop, in the
        chunks' own frame) */
     if (hutPlan && !Layout.isle) world.place(ch => { const out = []; for (const p of hutPlan) { const k = Math.round((ch.x0 + world.CW / 2 - p.clear[0]) / Layout.P), cx = p.clear[0] + k * Layout.P; if (cx > ch.x0 - p.clear[2] && cx < ch.x1 + p.clear[2]) out.push([cx, p.clear[1], p.clear[2]]); } return out; });
@@ -863,7 +864,7 @@ const Engine = (() => {
     if (typeof IsleGrass !== 'undefined' && opts.grass !== false) {
       /* (along the beach: on the ground there, the sand or the forest floor rising out of it; none in the camp, under the
          van or by the fire) */
-      const go = Layout.isle ? {} : { reach: x => world.reach(x), ground: (x, z) => Math.max(0, world.land(x, z) - 0.22), no: [[Layout.camp.x, Layout.camp.z, 8.5], [Layout.van.x, Layout.van.z, 4.5], [Layout.fire.x, Layout.fire.z, 3.5], [10.5, -3.7, 2.5]] };
+      const go = Layout.isle ? {} : { reach: x => world.reach(x), farIn: world.forest ? 30 : Infinity, ground: (x, z) => Math.max(0, world.land(x, z) - 0.22), no: [[Layout.camp.x, Layout.camp.z, 8.5], [Layout.van.x, Layout.van.z, 4.5], [Layout.fire.x, Layout.fire.z, 3.5], [10.5, -3.7, 2.5]] };
       grass = IsleGrass.build(natG, go); Object.assign(api, { grass }); if (huts) grass.setClear(huts.plan.map(p => p.lawn));
     }
     if (huts) huts.plan.slice(0, Mats.U.uLawn.value.length).forEach((p, i) => Mats.U.uLawn.value[i].set(p.lawn[0], p.lawn[1], p.lawn[2], p.lawn[3] ?? 1));

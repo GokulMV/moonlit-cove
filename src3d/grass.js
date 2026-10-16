@@ -79,8 +79,8 @@ float density(vec2 p){
   vec2 pu = p + vec2(uLoopX, 0.0);   /* (its clumps where they are along the beach as it goes on: glsl.js uLoopX) */
   float clump = smoothstep(0.32, 0.62, gN(pu*0.33 + 3.1))*0.65 + 0.35*smoothstep(0.25, 0.75, gN(pu*1.4 + 9.7));
   float tus = smoothstep(max(W*0.55, W - 9.0), max(W*0.55, W - 9.0) + 2.5, d)*(1.0 - smoothstep(W - 2.5, W - 0.2, d))*smoothstep(0.7, 0.84, gN(pu*0.55 + 1.3))*0.8;
-  /* (a sward: thinner in its hollows, never bare) */
-  float bandG = band*(0.6 + 0.4*clump), g = max(bandG, tus);
+  /* (a sward: thinner in its hollows, never bare; a little thinner in under the trees, in their shade) */
+  float bandG = band*(0.6 + 0.4*clump)*(1.0 - 0.25*smoothstep(W + 14.0, W + 40.0, d)), g = max(bandG, tus);
   gTus = step(bandG, tus)*step(0.01, tus);
   gLawn = 0.0;
   for (int i = 0; i < 8; i++){ vec4 l4 = uClr[i]; if (l4.z > 0.0){ float l = l4.w*(1.0 - smoothstep(l4.z*0.6, l4.z, length(p - l4.xy))); gLawn = max(gLawn, l); g = max(g, l*(0.7 + 0.3*clump)); } }
@@ -192,7 +192,7 @@ void main(){
     const setClear = list => { U.uClr.value.forEach((v, i) => { const c = list[i]; if (c) v.set(c[0], c[1], c[2], c[3] ?? 1); else v.set(0, 0, 0, 0); }); clr = list.slice(); has.clear(); lastX = 1e9; };
     let clr = [];
     /* one instanced mesh for each level: the patches it draws, as many as fit round the eye */
-    const CAP = [36, 70, 120];
+    const CAP = [40, 84, 210];
     const levels = LODS.map((L, i) => {
       const g = patchGeo(L.seg, L.per), A = new Float32Array(CAP[i] * 3), at = new T.InstancedBufferAttribute(A, 3); at.setUsage(T.DynamicDrawUsage);
       /* (along the beach, the ground's height at each patch's four corners: the blades stand on it, between them) */
@@ -202,8 +202,11 @@ void main(){
       return { g, A, at, AH, ah, m, cap: CAP[i] };
     });
     /* which patches have any grass, worked out once each on the CPU from the island's or the beach's own numbers (the
-       same as the shader's, roughly: a patch it might give blades to) */
+       same as the shader's, roughly: a patch it might give blades to). 0: none; 1: only near the eye (its two nearer
+       levels: deep in under the trees, o.farIn metres past the forest's edge, where the undergrowth hides the grass
+       from further off); 2: at every level */
     const I = Layout.isle ? Layout.island() : null, SQ = {}, has = new Map(), keyOf = (px, pz) => Math.round(px / PATCH) * 65536 + Math.round(pz / PATCH);
+    const FAR_IN = o.farIn ?? Infinity;
     const upSand = (x, z) => {
       if (I) { const s = I.sdf(x, z), q = I.shore(I.uAt(x, z), SQ); return [-s, q.W]; }
       const g = Layout.shoreDZ(x), k = 1 / Math.sqrt(1 + g * g), sz = Layout.shoreMeanZ(x); return [(z - sz) * k, (Layout.vegZ(x) - sz) * k, Math.max(10, o.reach ? o.reach(x) : 17) * k];
@@ -211,11 +214,11 @@ void main(){
     function patchHas(px, pz) {
       const key = keyOf(px, pz); let v = has.get(key);
       if (v !== undefined) return v;
-      v = false;
-      for (let j = 0; j <= 2 && !v; j++) for (let i = 0; i <= 2 && !v; i++) {
+      v = 0;
+      for (let j = 0; j <= 2 && v < 2; j++) for (let i = 0; i <= 2 && v < 2; i++) {
         const x = px + i * PATCH / 2, z = pz + j * PATCH / 2, [d, W, R] = upSand(x, z);
-        if (d > (I ? W - 11 : W * 0.5) && d < W + (I ? 18 : R + 6)) v = true;
-        for (const c of clr) if (Math.hypot(x - c[0], z - c[1]) < c[2] + PATCH) v = true;
+        if (d > (I ? W - 11 : W * 0.5) && d < W + (I ? 18 : R + 6)) v = Math.max(v, I || d < W + FAR_IN + PATCH ? 2 : 1);
+        for (const c of clr) if (Math.hypot(x - c[0], z - c[1]) < c[2] + PATCH) v = 2;
       }
       if (has.size > 20000) has.clear();
       has.set(key, v); return v;
@@ -242,7 +245,8 @@ void main(){
         const px = gx * PATCH, pz = gz * PATCH, d = Math.hypot(px + PATCH / 2 - cx, pz + PATCH / 2 - cz);
         if (d > RQ + PATCH * 0.7) continue;
         const L = D.findIndex(q => d < q), li = L < 0 ? 2 : L, lv = levels[li];
-        if (n[li] >= lv.cap || !patchHas(px, pz)) continue;
+        if (n[li] >= lv.cap) continue;
+        const hv = patchHas(px, pz); if (!hv || (li === 2 && hv < 2)) continue;
         lv.A.set([px, pz, li], n[li] * 3);
         if (!I) lv.AH.set([hAt(px, pz), hAt(px + PATCH, pz), hAt(px, pz + PATCH), hAt(px + PATCH, pz + PATCH)], n[li] * 4);
         n[li]++;
