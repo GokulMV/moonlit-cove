@@ -1829,7 +1829,7 @@
      compiled next, in the background, and the loader stays until the first frames have been drawn */
   const afterPaint = fn => { let go = false; const run = () => { if (!go) { go = true; setTimeout(fn, 0); } }; requestAnimationFrame(() => requestAnimationFrame(run)); setTimeout(run, document.hidden ? 0 : 3000); };
   afterPaint(() => {
-    try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40 }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
+    try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40, forest: window.__coveForest !== false }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
     catch (e) { introFailed(); console.error(e); return; }
     /* print the menu card with the résumé's own words once the page fonts are ready */
     const printCovers = () => { Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };

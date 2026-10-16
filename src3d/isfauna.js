@@ -22,18 +22,18 @@ const IsleFauna = (() => {
      move (ground: walk and pause; wader: stalk the shallows; critter: small, on the mud; flier: across the sky; soarer:
      circling); their clips; their pace (m/s at the walk clip's own rate); how near they let the eye come; their size */
   const KINDS = {
-    pig: { model: 'wild/pig', n: 2, hab: 'beachtop', move: 'ground', walk: 'walk', v: 0.75, idle: ['root', 'sniff', 'graze', 'stand'], flee: 'trot', fv: 2.6, near: 9, s: [0.8, 1.0], group: 3 },
-    macaque: { model: 'wild/macaque', n: 4, hab: 'beachtop', move: 'ground', walk: 'walk', v: 0.55, idle: ['sit', 'eat', 'groom', 'scratch', 'stand'], flee: 'run', fv: 3.0, near: 7, s: [0.75, 1.0], group: 5 },
-    monitor: { model: 'wild/monitor', n: 1, hab: 'creekbank', move: 'ground', walk: 'walk', v: 0.35, idle: ['bask', 'tongue', 'stand'], flee: 'run', fv: 2.4, near: 6, s: [0.9, 1.1] },
-    egret: { model: 'wild/egret', n: 3, hab: 'mud', move: 'wader', walk: 'stalk', v: 0.12, idle: ['stand', 'stalk', 'strike', 'stir', 'preen'], near: 13, s: [0.95, 1.05], group: 3 },
+    pig: { model: 'wild/pig', n: 2, hab: 'beachtop', move: 'ground', walk: 'walk', v: 0.75, cw: 0.9, idle: ['root', 'sniff', 'graze', 'stand'], flee: 'trot', fv: 2.4, cf: 2.2, near: 9, s: [0.8, 1.0], group: 3 },
+    macaque: { model: 'wild/macaque', n: 4, hab: 'beachtop', move: 'ground', walk: 'walk', v: 0.6, cw: 0.7, idle: ['sit', 'eat', 'groom', 'scratch', 'stand'], flee: 'run', fv: 2.6, cf: 2.4, near: 7, s: [0.75, 1.0], group: 5 },
+    monitor: { model: 'wild/monitor', n: 1, hab: 'creekbank', move: 'ground', walk: 'walk', v: 0.2, cw: 0.18, idle: ['bask', 'tongue', 'stand'], flee: 'run', fv: 1.15, cf: 1.06, near: 6, s: [0.9, 1.1] },
+    egret: { model: 'wild/egret', n: 3, hab: 'mud', move: 'wader', walk: 'stalk', v: 0.12, cw: 0.12, idle: ['stand', 'stalk', 'strike', 'stir', 'preen'], near: 13, s: [0.95, 1.05], group: 3 },
     mudskipper: { model: 'wild/mudskipper', n: 6, hab: 'mud', move: 'critter', walk: 'skip', v: 0.5, idle: ['rest', 'display', 'crawl'], near: 4, s: [0.9, 1.15], group: 6 },
     fiddler: { model: 'wild/fiddler', n: 8, hab: 'mud', move: 'critter', walk: 'walk', v: 0.25, idle: ['stand', 'wave', 'feed', 'wave'], near: 3, s: [0.9, 1.15], group: 8 },
     hornbill: { model: 'wild/hornbill', n: 2, hab: 'sky', move: 'flier', fly: 'fly', glide: 'flapglide', v: 9, alt: [28, 55], s: [1, 1] },
-    kite: { model: 'wild/kite', n: 1, hab: 'coast', move: 'soarer', fly: 'soar', v: 8, alt: [55, 110], s: [1, 1] },
+    kite: { model: 'wild/kite', n: 1, hab: 'coast', move: 'soarer', fly: 'soar', v: 8.5, alt: [55, 110], s: [1, 1] },
     /* (a proboscis monkey's harem down out of the mangroves' trees on the mud behind them: the big-nosed male and his
        females) */
-    proboscis: { model: 'wild/proboscis', n: 1, hab: 'mangback', move: 'ground', walk: 'walk', v: 0.5, idle: ['sit', 'eat', 'sit', 'scratch', 'stand'], flee: 'run', fv: 2.8, near: 14, s: [0.95, 1.05] },
-    proboscisF: { model: 'wild/proboscis', opts: { female: true }, n: 3, hab: 'mangback', move: 'ground', walk: 'walk', v: 0.5, idle: ['sit', 'eat', 'groom', 'sit', 'stand'], flee: 'run', fv: 2.8, near: 14, s: [0.9, 1.05], group: 3 },
+    proboscis: { model: 'wild/proboscis', n: 1, hab: 'mangback', move: 'ground', walk: 'walk', v: 0.6, cw: 0.7, idle: ['sit', 'eat', 'sit', 'scratch', 'stand'], flee: 'run', fv: 2.5, cf: 2.4, near: 14, s: [0.95, 1.05] },
+    proboscisF: { model: 'wild/proboscis', opts: { female: true }, n: 3, hab: 'mangback', move: 'ground', walk: 'walk', v: 0.6, cw: 0.7, idle: ['sit', 'eat', 'groom', 'sit', 'stand'], flee: 'run', fv: 2.5, cf: 2.4, near: 14, s: [0.9, 1.05], group: 3 },
     /* (a stork-billed kingfisher on a dead snag over the creek's water, bobbing, watching the water, now and then
        plunging for a fish; come near and it flies off low along the water) */
     kingfisher: { model: 'wild/kingfisher', n: 1, hab: 'perch', move: 'percher', idle: ['perch', 'bob', 'scan', 'bob', 'preen'], near: 11, s: [1, 1] },
@@ -205,7 +205,9 @@ const IsleFauna = (() => {
         const top = a.top;
         if (dEye < K.near && a.state !== 'flee') { const s1 = a.sp.tx * dx + a.sp.tz * dz >= 0 ? 1 : -1; a.h = Math.atan2(-a.sp.tz * s1, a.sp.tx * s1); a.state = 'flee'; a.until = t + 4; a.y = top.y; setClip(a, 'takeoff'); }
         if (a.state === 'flee') {
-          const v = 8; a.x += Math.cos(a.h) * v * dt; a.z -= Math.sin(a.h) * v * dt; a.y += (Math.max(land(a.x, a.z), 0) + 1.2 - a.y) * Math.min(1, dt * 2);
+          /* (off its snag: a drop and a few hard beats, gathering speed low over the water) */
+          a.v = Math.min(8, (a.v || 0) + 9 * dt); const v = a.v; a.x += Math.cos(a.h) * v * dt; a.z -= Math.sin(a.h) * v * dt; a.y += (Math.max(land(a.x, a.z), 0) + 1.2 - a.y) * Math.min(1, dt * 2);
+          a.pitch = -0.25 * Math.max(0, 1 - (t - (a.until - 4)) / 0.8);
           if (t > a.until - 3.4) setClip(a, 'fly');
           if (t > a.until) a.gone = true;
         } else if (a.state === 'dive') {
@@ -220,46 +222,95 @@ const IsleFauna = (() => {
           else if (t > a.until) { a.until = t + 3 + 5 * hash(a.g.id, Math.floor(t * 3)); setClip(a, K.idle[Math.floor(hash(a.g.id, Math.floor(t)) * K.idle.length) % K.idle.length]); }
         }
       } else if (K.move === 'flier') {
-        /* (across the island and back, high over the canopy: a long straight flap and glide, a slow turn at the ends) */
+        /* (across the island and back, high over the canopy: a long straight flap and glide, a slow turn at the ends,
+           banked into its turns, its nose up as it climbs and down as it sinks) */
         a.ph += dt * K.v / Math.max(80, a.R * 2.4);
         const ang = a.ph, R = a.R * 3, x = a.cx + Math.cos(ang) * R, z = a.cz + Math.sin(ang * 0.7) * R * 0.6;
-        const h = Math.atan2(-(z - a.z), x - a.x); a.x = x; a.z = z; a.y = Math.max(land(x, z), 0) + a.alt + 30 * Math.max(0, Math.sin(ang * 0.37));
-        if (Number.isFinite(h)) a.h += wrapA(h - a.h) * Math.min(1, dt * 2);
+        const y = Math.max(land(x, z), 0) + a.alt + 30 * Math.max(0, Math.sin(ang * 0.37)), h = Math.atan2(-(z - a.z), x - a.x), vy = dt > 0 ? (y - a.y) / dt : 0;
+        if (!a.aloft) { a.aloft = true; a.y = y; a.h = Number.isFinite(h) ? h : a.h; }
+        a.x = x; a.z = z; a.y += (y - a.y) * Math.min(1, dt * 1.5);
+        if (Number.isFinite(h)) { const dh = wrapA(h - a.h) * Math.min(1, dt * 2); a.h += dh; a.roll = (a.roll || 0) + (Math.max(-0.6, Math.min(0.6, -(dt > 0 ? dh / dt : 0) * K.v / 9.8)) - (a.roll || 0)) * Math.min(1, dt * 2); }
+        a.pitch = (a.pitch || 0) + (Math.max(-0.25, Math.min(0.25, Math.atan2(vy, K.v))) - (a.pitch || 0)) * Math.min(1, dt * 2);
         setClip(a, Math.sin(t * 0.3 + a.R) > 0.2 ? K.glide : K.fly);
       } else if (K.move === 'soarer') {
-        /* (circling on the air rising off the coast, now and then drifting off along it) */
-        a.ph += dt * K.v / a.R; a.cx += Math.cos(t * 0.01 + a.R) * dt * 1.2; a.cz += Math.sin(t * 0.013) * dt * 1.2;
-        const x = a.cx + Math.cos(a.ph) * a.R, z = a.cz + Math.sin(a.ph) * a.R, h = Math.atan2(-(z - a.z), x - a.x);
-        a.x = x; a.z = z; a.y = a.alt + 8 * Math.sin(a.ph * 0.5); if (Number.isFinite(h)) a.h = h; setClip(a, K.fly);
+        /* (circling on the air rising off the coast, banked into the circle as a soaring bird is, its circle drifting with
+           the wind and now and then off along the coast; each round a little up or down) */
+        if (!a.Rs) a.Rs = 32 + 26 * hash(a.g.id, 41);
+        a.ph += dt * K.v / a.Rs; a.cx += Math.cos(t * 0.01 + a.R) * dt * 1.2; a.cz += Math.sin(t * 0.013) * dt * 1.2;
+        const x = a.cx + Math.cos(a.ph) * a.Rs, z = a.cz + Math.sin(a.ph) * a.Rs, h = Math.atan2(-(z - a.z), x - a.x);
+        a.x = x; a.z = z; a.y = a.alt + 8 * Math.sin(a.ph * 0.5);
+        /* (the bank its turning needs, tan b = v ω / g, the inside wing down; a little hunting in it, as on rough air) */
+        if (Number.isFinite(h)) { const w = dt > 0 ? wrapA(h - a.h) / dt : 0; a.h = h; a.roll = Math.max(-0.7, Math.min(0.7, -Math.atan(w * K.v / 9.8))) + 0.05 * Math.sin(t * 0.9 + a.R); }
+        a.pitch = 0.03 * Math.cos(a.ph * 0.5);
+        setClip(a, K.fly);
       } else {
         /* (on the ground: pauses — rooting, sitting, stalking — and walks between them, round its spot; too near, it moves
-           off away from the eye, and comes back when left alone) */
+           off away from the eye, and comes back when left alone. It goes as an animal does: speeding up and slowing down
+           over a moment, turning at a turning pace and slowing for a sharp turn, its legs going as fast as it goes, so its
+           feet are set down and pushed off rather than slid over the ground; at the edge of its ground it steers back
+           rather than bouncing off it) */
         const flee = dEye < K.near;
-        if (flee && a.state !== 'flee') { a.state = 'flee'; a.until = t + 3 + 2 * hash(a.g.id, 3); }
-        if (!flee && a.state === 'flee' && t > a.until) { a.state = 'idle'; a.until = t + 2; }
+        if (flee && a.state !== 'flee') { a.state = 'flee'; a.until = t + 3 + 2 * hash(a.g.id, 3); if (K.move === 'wader') { a.fly = { t0: t, ph: 'crouch' }; } }
+        if (!flee && a.state === 'flee' && t > a.until && !(a.fly && a.fly.ph !== 'down')) { a.state = 'idle'; a.until = t + 2; }
         if (a.state !== 'flee' && t > a.until) {
           const r = hash(Math.floor(t * 10), a.g.id);
-          if (a.state === 'idle' && r < 0.55) { a.state = 'walk'; a.until = t + 3 + 6 * r; const bx = a.home[0] - a.x, bz = a.home[1] - a.z, back = Math.hypot(bx, bz) > 10; a.h = back ? Math.atan2(-bz, bx) : a.h + (r - 0.27) * 2.2; }
+          if (a.state === 'idle' && r < 0.55) { a.state = 'walk'; a.until = t + 3 + 6 * r; const bx = a.home[0] - a.x, bz = a.home[1] - a.z, back = Math.hypot(bx, bz) > 10; a.hT = back ? Math.atan2(-bz, bx) : a.h + (r - 0.27) * 2.2; }
           else { a.state = 'idle'; a.until = t + 3 + 7 * r; a.idle = K.idle[Math.floor(hash(a.g.id, Math.floor(t)) * K.idle.length) % K.idle.length]; }
         }
-        let v = 0;
-        if (a.state === 'flee') {
-          if (K.move === 'wader') {
-            /* (a heron lifts off and flies a little way along the shore, and lands) */
-            const away = Math.atan2(-dz, dx); a.h += wrapA(away - a.h) * Math.min(1, dt * 3); v = 5;
-            a.y = Math.min(a.y + dt * 2.5, 4); setClip(a, a.y < 3 ? 'takeoff' : 'fly');
-          } else if (K.move === 'critter') { setClip(a, K.walk, 2); v = K.v * 2.5; const away = Math.atan2(-dz, dx); a.h += wrapA(away - a.h) * Math.min(1, dt * 4); }
-          else { const away = Math.atan2(-dz, dx); a.h += wrapA(away - a.h) * Math.min(1, dt * 3); setClip(a, K.flee); v = K.fv; }
-        } else if (a.state === 'walk') { setClip(a, K.walk); v = K.v; if (K.move === 'wader' && a.y > 0.01) a.y = Math.max(0, a.y - dt * 2); }
-        else { setClip(a, a.idle || K.idle[0]); if (K.move === 'wader' && a.y > 0.01) { a.y = Math.max(0, a.y - dt * 2); setClip(a, 'land'); } }
-        a.x += Math.cos(a.h) * v * dt; a.z -= Math.sin(a.h) * v * dt;
-        /* (kept to their ground: the beach's top for the pigs and the monkeys, the mud for the mud's own) */
-        const s = I.sdf(a.x, a.z);
-        if (K.move === 'critter' || K.move === 'wader' ? s > (K.move === 'wader' ? 1.5 : 0.5) : s > -2) { a.x -= Math.cos(a.h) * v * dt * 2; a.z += Math.sin(a.h) * v * dt * 2; a.h += Math.PI * 0.6; }
-        a.y = (K.move === 'wader' ? a.y : 0);
+        if (a.hT === undefined) { a.hT = a.h; a.v = 0; a.w = 0; }
+        const outOf = (x, z) => { const s = I.sdf(x, z); return K.move === 'critter' || K.move === 'wader' ? s > (K.move === 'wader' ? 1.5 : 0.5) : s > -2; };
+        if (K.move === 'wader' && a.fly) {
+          /* a heron put up: a crouch, a spring off its legs with the first strong beats, climbing away along the shore as it
+             gathers speed, a stretch of slow flight a few metres up, a glide down, its wings and legs thrown forward to
+             stop, and it stands again, further along */
+          const F = a.fly, e = t - F.t0;
+          if (F.ph === 'crouch') { setClip(a, 'takeoff'); a.v = 0; if (e > 0.22) { F.ph = 'up'; F.t1 = t; const s1 = (a.sp.tx * dx + a.sp.tz * dz) >= 0 ? 1 : -1; F.hT = Math.atan2(-a.sp.tz * s1, a.sp.tx * s1); F.dist = 18 + 22 * hash(a.g.id, Math.floor(t)); F.x0 = a.x; F.z0 = a.z; } }
+          else if (F.ph === 'up') { const u = t - F.t1; setClip(a, u < 0.9 ? 'takeoff' : K.fly || 'fly'); a.v += (5.2 - a.v) * Math.min(1, dt * 1.6); a.vy = Math.max(0, 2.2 - 0.9 * u); a.y += a.vy * dt; a.hT = F.hT; a.pitch = 0.32 * Math.max(0, 1 - u / 1.4); if (a.y > 3.2 || u > 2.4) F.ph = 'cruise'; }
+          else if (F.ph === 'cruise') { setClip(a, 'fly'); a.v += (5.5 - a.v) * Math.min(1, dt); a.y += (3.4 - a.y) * Math.min(1, dt); a.pitch *= 0.95; if (Math.hypot(a.x - F.x0, a.z - F.z0) > F.dist && dEye > K.near * 1.3) F.ph = 'glide'; }
+          else if (F.ph === 'glide') { setClip(a, 'glide'); a.v += (3.4 - a.v) * Math.min(1, dt * 0.8); a.y = Math.max(0.6, a.y - 1.1 * dt); a.pitch += (0.05 - a.pitch) * Math.min(1, dt * 2); if (a.y <= 0.65) { F.ph = 'flare'; F.t2 = t; } }
+          else if (F.ph === 'flare') { const u = t - F.t2; setClip(a, 'land'); a.v = Math.max(0, a.v - 5.5 * dt); a.y = Math.max(0, a.y - (0.9 + 1.2 * u) * dt); a.pitch = 0.42 * Math.sin(Math.min(1, u / 0.6) * Math.PI); if (a.y <= 0 && a.v <= 0.05) { F.ph = 'down'; a.fly = null; a.state = 'idle'; a.until = t + 2.5; a.home = [a.x, a.z]; a.pitch = 0; a.roll = 0; a.v = 0; a.hT = a.h; } }
+          /* (over the water or the sand, never over the forest: kept out from the trees' line) */
+          if (a.fly && I.sdf(a.x, a.z) < -6) a.hT = Math.atan2(-a.sp.nz, a.sp.nx);
+        }
+        let vT = 0;
+        if (a.state === 'flee' && !a.fly) { a.hT = Math.atan2(-dz, dx); vT = K.move === 'critter' ? K.v * 2.5 : K.fv; }
+        else if (a.state === 'walk') vT = K.v;
+        /* (the edge of its ground, a stride or two ahead: steer back toward its spot, or along the edge away from the eye) */
+        if (!a.fly && vT > 0) {
+          const ahead = 0.8 + a.v * 0.9;
+          if (outOf(a.x + Math.cos(a.h) * ahead, a.z - Math.sin(a.h) * ahead)) {
+            const bx = a.home[0] - a.x, bz = a.home[1] - a.z;
+            a.hT = a.state === 'flee' ? a.h + (wrapA(Math.atan2(-dz, dx) - a.h) >= 0 ? 1.3 : -1.3) : Math.atan2(-bz, bx);
+          }
+        }
+        /* turning: toward the way it wants to go, its turn eased in and out, faster when it runs */
+        const dh = wrapA(a.hT - a.h), wMax = (a.fly ? 1.6 : a.state === 'flee' ? 2.8 : 1.3) * (K.move === 'critter' ? 2 : 1);
+        a.w += (Math.max(-wMax, Math.min(wMax, dh * 2.6)) - a.w) * Math.min(1, dt * 7);
+        a.h += a.w * dt;
+        if (a.fly) a.roll = (a.roll || 0) + (Math.max(-0.5, Math.min(0.5, -a.w * a.v / 9.8)) - (a.roll || 0)) * Math.min(1, dt * 4);
+        if (!a.fly) {
+          /* the pace: up over half a second, down a little sooner, slower round a sharp turn */
+          const vT2 = vT * (1 - 0.6 * Math.min(1, Math.abs(dh) / 1.5));
+          a.v += (vT2 - a.v) * (1 - Math.exp(-dt / (vT2 > a.v ? 0.5 : 0.32)));
+          if (a.v < 0.004 && vT2 === 0) a.v = 0;
+        }
+        let nx = a.x + Math.cos(a.h) * a.v * dt, nz = a.z - Math.sin(a.h) * a.v * dt;
+        /* (never over the edge: if it would be, it stays and slows, already turning back) */
+        if (!a.fly && outOf(nx, nz) && !outOf(a.x, a.z)) { nx = a.x; nz = a.z; a.v *= 0.6; }
+        a.x = nx; a.z = nz;
+        /* the legs as fast as it goes: the walk's or the run's cadence for its speed and its size, the walk slowing to a
+           stop before it stands, sits or roots */
+        if (!a.fly) {
+          const sz = a.s, vw = (K.cw || K.v) * sz, vr = (K.cf || K.fv || vw * 3) * sz;
+          if (a.gait === 'run' ? a.v < vr * 0.55 : a.v > vr * 0.68) a.gait = a.gait === 'run' ? 'walk' : (K.flee ? 'run' : 'walk');
+          if (a.v < 0.1 * vw && (a.state === 'idle' || vT === 0)) { setClip(a, a.idle || K.idle[0], 1); if (K.move === 'wader' && a.y > 0.01) a.y = Math.max(0, a.y - dt * 2); }
+          else if (a.gait === 'run' && K.flee) setClip(a, K.flee, Math.round(Math.max(0.5, Math.min(1.7, a.v / vr)) * 20) / 20);
+          else setClip(a, K.walk, Math.round(Math.max(0.3, Math.min(1.9, a.v / vw)) * 20) / 20);
+          a.y = K.move === 'wader' ? Math.max(0, a.y) : 0;
+        }
       }
       const gy = K.move === 'flier' || K.move === 'soarer' || K.move === 'commuter' ? a.y : K.move === 'percher' ? (a.state === 'flee' ? a.y : a.yy) : Math.max(land(a.x, a.z), -0.04) + a.y;
-      a.g.position.set(a.x, gy, a.z); a.g.rotation.set(0, a.h, 0); a.g.updateMatrixWorld();
+      a.g.position.set(a.x, gy, a.z); a.g.rotation.set(a.roll || 0, a.h, a.pitch || 0, 'YXZ'); a.g.updateMatrixWorld();
       a.rig.update(dt);
     }
     /* ── for the inspect view (inspect.js): the animals out round the eye, each to be held up and looked at close, and let

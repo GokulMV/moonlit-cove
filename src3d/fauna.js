@@ -740,7 +740,7 @@ void main(){
           }
           if (!q.fresh) return false;
         }
-        Object.assign(g, { mode: 'stand', x: q.x + (rnd() - 0.5) * 3.2, z: q.z + (rnd() - 0.5) * 1.6, y: 0, yaw: windYaw + (rnd() - 0.5) * 1.4, pitch: 0.06, roll: 0, fold: 1, legs: 1, amp: 0, v: 0, cyc: 1 + rnd() * 6 });
+        Object.assign(g, { mode: 'stand', x: q.x + (rnd() - 0.5) * 3.2, z: q.z + (rnd() - 0.5) * 1.6, y: 0, yaw: windYaw + (rnd() - 0.5) * 1.4, pitch: 0.06, roll: 0, fold: 1, legs: 1, amp: 0, v: 0, vy: 0, sprung: false, cyc: 1 + rnd() * 6 });
         g.yawT = g.yaw; return true;
       }
       /* lift off, away from (fx, fz) and into the breeze */
@@ -784,13 +784,20 @@ void main(){
           if (w) for (const h of L) if (h.grp === g.grp && h.mode === 'stand') lift(h, t, h === g ? 0 : rnd() * 0.7, w === 1 ? th.vx : th.cx, w === 1 ? th.vz : th.cz);
           if (g.mode === 'stand' && Math.abs(g.x - cam.x) > 140) { g.mode = 'off'; grp[g.grp].fresh = false; }
         } else if (g.mode === 'lift') {
+          /* (a crouch, the wings half open; then a spring off its legs into the first hard beats, climbing steeply while it
+             is slow, the climb flattening as it gathers speed, the beats slowing as it gets going) */
           const e = t - g.t0;
-          if (e > 0) {
-            g.legs = Math.max(0, 1 - e / 0.45); g.fold = Math.max(0, 1 - e / 0.22);
-            g.v = Math.min(7.5, g.v + 6 * dt); g.y += 2.6 * Math.max(0.15, 1 - e / 3) * dt;
-            g.amp += (0.95 - g.amp) * Math.min(1, dt * 8); g.ph += TAU * 3.6 * dt; g.pitch = 0.35 * Math.max(0, 1 - e / 2.2);
-            fly(g, dt, g.yawT, 2.2);
-            if (e > 3.2) { g.mode = 'leave'; g.alt = g.y + 5 + rnd() * 8; g.flap = true; g.cyc = 1; }
+          if (e > 0 && e < 0.15) { const c = sm(0, 0.15, e); g.legs = 1 - 0.3 * c; g.fold = 1 - 0.55 * c; g.amp += (0.35 - g.amp) * Math.min(1, dt * 10); g.ph += TAU * 2 * dt * c; g.pitch += (0.28 - g.pitch) * Math.min(1, dt * 10); }
+          else if (e >= 0.15) {
+            const u = e - 0.15;
+            if (!g.sprung) { g.sprung = true; g.vy = 2.4 + 0.6 * rnd(); g.v = 0.6; }
+            g.legs = Math.max(0, g.legs - dt / 0.3); g.fold = Math.max(0, g.fold - dt / 0.1);
+            g.v += (7.5 - g.v) * (1 - Math.exp(-dt / 0.85));
+            g.vy += (0.5 + 1.5 * Math.max(0, 1 - u / 2.6) - g.vy) * Math.min(1, dt * 1.6); g.y += g.vy * dt;
+            g.amp += (1 - g.amp) * Math.min(1, dt * 9); g.ph += TAU * (4.3 - 1.0 * Math.min(1, u / 1.6)) * dt;
+            g.pitch += (Math.atan2(g.vy, Math.max(g.v, 1.4)) * 0.85 - g.pitch) * Math.min(1, dt * 6);
+            fly(g, dt, g.yawT, 1.4 + 1.2 * Math.min(1, g.v / 5));
+            if (u > 3.0) { g.mode = 'leave'; g.sprung = false; g.alt = g.y + 5 + rnd() * 8; g.flap = true; g.cyc = 1; }
           }
         } else if (g.mode === 'leave') {
           /* away from the camera and out over the sea, climbing; gone once far off */

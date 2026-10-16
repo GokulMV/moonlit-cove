@@ -935,7 +935,11 @@ void main(){
         yield;
       }
       const [main, small] = IF.cardSets(all);
-      Object.assign(col, { done: true, bands, main, small, n: all.length });
+      /* (and for further off, only the trees whose crowns make the forest's top: the canopy's, the emergents', the palms
+         and the beach trees full grown; the young ones and the poles under them are not seen from out there) */
+      const TOP = ['canopy', 'emergent', 'tualang', 'fig', 'terminalia', 'barringtonia', 'casuarina', 'coconut'];
+      const [farM] = IF.cardSets(all.filter(t => TOP.includes(t.kind) && t.s > 0.78));
+      Object.assign(col, { done: true, bands, main, small, far: farM, n: all.length });
       return col;
     }
     /* (its trees where it comes round again, d metres on: copies, made once) */
@@ -947,7 +951,7 @@ void main(){
     }
     function* forestPart(ch) {
       const col = yield* fColumn(ch.cw), d = (ch.c - ch.cw) * CW;
-      for (const [m, grp] of [[col.main, ch.g.forest], [col.small, ch.g.forestS]]) {
+      for (const [m, grp] of [[col.main, ch.g.forest], [col.small, ch.g.forestS], [col.far, ch.g.forestF]]) {
         if (!m) continue;
         const o2 = new T.Mesh(m.geometry, m.material); o2.position.set(d - o.x, 0, -o.z); o2.updateMatrix(); o2.matrixAutoUpdate = false; grp.add(o2);
       }
@@ -1109,7 +1113,7 @@ void main(){
       /* something the van must drive round, [x, z, radius, kind] in world coordinates (kept in 8 m buckets along the chunk) */
       ch.obstacle = (x, z, r, kind) => { ch.obs[Math.max(0, Math.min(CW / 8 - 1, Math.floor((x - ch.x0) / 8)))].push([x, z, r, kind]); };
       ch.keep = g => { ch.own.all.push(g); return g; };   /* a geometry of its own, to go when the chunk does */
-      for (const k of ['base', 'baseFar', 'rk', 'rkFar', 'fx', 'near', 'far', 'tiny', 'forest', 'forestS']) { const g = new T.Group(); g.matrixAutoUpdate = false; ch.g[k] = g; ch.root.add(g); }
+      for (const k of ['base', 'baseFar', 'rk', 'rkFar', 'fx', 'near', 'far', 'tiny', 'forest', 'forestS', 'forestF']) { const g = new T.Group(); g.matrixAutoUpdate = false; ch.g[k] = g; ch.root.add(g); }
       ch.tiny = ch.g.tiny; ch.near = ch.g.near; ch.far = ch.g.far;   /* where decorations go */
       ch.root.matrixAutoUpdate = false; worldG.add(ch.root);
       chunks.set(c, ch); live.push(ch); return ch;
@@ -1274,7 +1278,7 @@ void main(){
       g.base.visible = fine; g.baseFar.visible = !fine && !!h.baseFar;
       g.rk.visible = g.fx.visible = g.near.visible = d < LOD.near;
       g.rkFar.visible = d >= LOD.near && d < LOD.rocks; g.far.visible = d >= LOD.near && d < LOD.mid;
-      g.tiny.visible = d < LOD.tiny; ch.root.visible = d < LOD.view; g.forestS.visible = d < LOD.mid;
+      g.tiny.visible = d < LOD.tiny; ch.root.visible = d < LOD.view; g.forestS.visible = d < LOD.mid; g.forest.visible = d < 900; g.forestF.visible = d >= 900;
     }
     function step(ch, k, slice = 1.5) {
       const gen = ch.jobs[k] || (ch.jobs[k] = MAKE[k](ch));
@@ -1321,7 +1325,7 @@ void main(){
       const moved = o.x !== Layout.O.x || o.z !== Layout.O.z;
       while (live.length) recycle(live[live.length - 1]); o.x = Layout.O.x; o.z = Layout.O.z; ver = Layout.coastVer;
       /* (and the forest's stretches, kept clear of what the hooks now claim, where the coast now is) */
-      for (const col of FCOL.values()) for (const m of [col.main, col.small]) if (m) m.geometry.dispose();
+      for (const col of FCOL.values()) for (const m of [col.main, col.small, col.far]) if (m) m.geometry.dispose();
       FCOL.clear(); FSHIFT.clear(); fClaims.clear(); if (IF) placeF();
       if (shade && moved) shade.invalidate();
       prime();
