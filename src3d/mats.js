@@ -43,7 +43,7 @@ const Mats = (() => {
   const CT = { N: 4096, step: [0.5, 4] }, ctData = new Float32Array(CT.N * 2 * 4);
   const ctTex = new THREE.DataTexture(ctData, CT.N, 2, THREE.RGBAFormat, THREE.FloatType);
   ctTex.magFilter = ctTex.minFilter = THREE.NearestFilter; ctTex.generateMipmaps = false; ctTex.needsUpdate = true;
-  const coastU = { uCoastT: { value: ctTex }, uCoastW: { value: V4(-1, 1, -8, 8) }, uTideZ: { value: 0 } };
+  const coastU = { uCoastT: { value: ctTex }, uCoastW: { value: V4(-1, 1, -8, 8) }, uTideZ: { value: 0 }, uLoopX: { value: 0 } };
   /* the island's shore, when there is one (glsl.js ISLE_GL; isleUp fills them in) */
   if (Layout.isle) Object.assign(coastU, { uIsF: { value: null }, uIsU: { value: null }, uIsL: { value: null }, uIsKC: { value: null }, uIsG: { value: V4() }, uIsD: { value: V4() }, uIsN: { value: V4() } });
   /* what the land and the forest shade from the key light, round the island (isle.js) or along the coast (world.js), as
@@ -388,7 +388,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
     }
     /* (under the trees and on the hills the ground is thick with shrubs and saplings, crown against crown, shade in
        between: from above it is no lawn) */
-    ${key === 'land' ? 'cnAt(vWPos, 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}${key === 'land' && Layout.isle ? `
+    ${key === 'land' ? 'cnAt(vWPos + vec3(uLoopX, 0.0, 0.0), 1.7, 3.0, 0.55, 0.9, 0.45);' : 'cnTint = vec3(0.66);'}${key === 'land' && Layout.isle ? `
     /* (but not on the mangroves' mud: bare, nothing growing on it but the trees. And the crowns are a thing seen from
        above: seen along the ground, at a glance, or from under the trees, or up a hill from below, the shrubs' domes
        would read as a cobbled street, so they fade away as the ground is seen more edge-on, or from no higher than it) */
@@ -455,7 +455,7 @@ void cnAt(vec3 w, float S1, float S2, float H1, float H2, float gap){
          its own green, lit on its sunny side, clumps of leaves over it, the gaps between them in deep shade; light
          through the edges */
       if (key === 'canopy') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-  cnAt(vWPos, 6.2, 11.5, 2.6, 4.2, 0.3); diffuseColor.rgb *= cnTint;`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  cnAt(vWPos + vec3(uLoopX, 0.0, 0.0), 6.2, 11.5, 2.6, 4.2, 0.3); diffuseColor.rgb *= cnTint;`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   { vec3 gv = mat3(viewMatrix)*cnGrad; normal = normalize(normal - (gv - dot(gv, normal)*normal)); }`);
       if (key === 'van') sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
   { /* two-tone paint split at the belt line, a thin bright trim, dark wheel wells and underside */

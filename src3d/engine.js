@@ -30,7 +30,7 @@ const Engine = (() => {
      weather map's 36 km, the billows' 3.3 km, the detail's 340 m), so the shaders' sums stay exact however long it runs.
      A leap of the clock (a new hour picked) leaves them where they are. */
   const CLOUD_WIND = 16, CLOUD_RISE = 1.5;   /* metres per tick of the clouds' clock (about 0.8 of a second at 1×: some 13 m/s) */
-  const cloudMo = { ct: null, s: 0, x: 0, z: 0, b: 0, dx: 0, dz: 0, dct: 0, jump: true }, cloudDD = [0, 0], cloudShell = [0, 2200];
+  const cloudMo = { ct: null, s: 0, x: 0, z: 0, b: 0, dx: 0, dz: 0, dct: 0, jump: true, lx: 0, ls: 0 }, cloudDD = [0, 0], cloudShell = [0, 2200];   /* (lx, ls: how far the world's frame has been carried round the beach's loop, in x and along the wind: loopShift) */
   let campShade = 1;
   const wrapP = (v, P) => v - Math.floor(v / P) * P;
   /* the clouds' shadow at (x, z), worked out as the ground shader does (GLSL.CLOUDSHADOW) from the weather map's own
@@ -70,10 +70,11 @@ const Engine = (() => {
     cloudMo.x += cloudMo.dx; cloudMo.z += cloudMo.dz; cloudMo.b += CLOUD_RISE * dct;
     /* (the altocumulus, a third faster up there, its patches a little slower than its cloudlets, rising half as fast:
        its cloudlets repeat every 3300/1.4 m, its frayed edges every 240 m) */
-    su.uAltoD.value.set(wrapP(1.3 * cloudMo.s, 3300 / 1.4), wrapP(1.3 * 0.9 * cloudMo.s, 36000), wrapP(0.5 * cloudMo.b, 3300 / 1.4), wrapP(1.3 * cloudMo.s, 240));
-    su.uDriftW.value.set(wrapP(cloudMo.x, 36000), wrapP(cloudMo.z, 36000));
-    su.uDriftS.value.set(wrapP(cloudMo.x, 3300), wrapP(cloudMo.b, 3300), wrapP(cloudMo.z, 3300));
-    su.uDriftT.value.set(wrapP(cloudMo.x, 340), wrapP(cloudMo.b, 340), wrapP(cloudMo.z, 340));
+    su.uAltoD.value.set(wrapP(1.3 * cloudMo.s + cloudMo.ls, 3300 / 1.4), wrapP(1.3 * 0.9 * cloudMo.s + cloudMo.ls, 36000), wrapP(0.5 * cloudMo.b, 3300 / 1.4), wrapP(1.3 * cloudMo.s + cloudMo.ls, 240));
+    const cx = cloudMo.x + cloudMo.lx;
+    su.uDriftW.value.set(wrapP(cx, 36000), wrapP(cloudMo.z, 36000));
+    su.uDriftS.value.set(wrapP(cx, 3300), wrapP(cloudMo.b, 3300), wrapP(cloudMo.z, 3300));
+    su.uDriftT.value.set(wrapP(cx, 340), wrapP(cloudMo.b, 340), wrapP(cloudMo.z, 340));
     su.uHiDrift.value.set(cloudMo.x, cloudMo.z);
   }
   const Lw = { string: 0, lantern: 0, van: 0, fairy: 0 }, Fw = { i: 0, smoke: 0, steam: 0 };
@@ -202,7 +203,7 @@ const Engine = (() => {
     const compile = m => { quad.material = m; R.compile(qs, qc); };
     /* (for the test bench: the sun's and the moon's share showing, read back) */
     const readVis = () => { const b = new Uint16Array(8); R.readRenderTargetPixels(visRT, 0, 0, 2, 1, b); return [T.DataUtils.fromHalfFloat(b[0]), T.DataUtils.fromHalfFloat(b[4])]; };
-    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis, height: () => H || 720, width: () => W || 1280 };
+    return { resize, render, materials: [down, up, fin, dof, ssao, aob, fire, cloudM, cloudR, visM], compile, cloudMat: cloudM, visTex: visRT.texture, readVis, height: () => H || 720, width: () => W || 1280, shiftCam: d => { clCam.x += d; } };
   }
 
   /* small depth maps seen from the campfire and from the middle of the string-light canopy:
@@ -540,6 +541,31 @@ const Engine = (() => {
     if (orchard) orchard.reground();
   }
   Object.assign(api, { moveCamp, pitchStart, waveAt: (x, z) => waveAt(x, z) });
+  /* ── the beach's two ends joined: the page keeps its own frame within half a loop of the camp, and when the van, the
+     walker or the eye goes past that it carries them back a whole loop (d, m) and tells the engine, which carries back
+     what moves round the eye with them and keeps everything laid along the beach where it is on it (loopX: how far the
+     frame has been carried in all, the world's chunks, the coast's numbers, the waves' timing, the ground's and the
+     grass's patterns, the clouds), so nothing is seen to jump ── */
+  let loopX = 0;
+  function loopShift(d) {
+    if (Layout.isle || !d) return;
+    loopX -= d; Layout.loop.x = loopX; Mats.U.uLoopX.value = loopX;
+    if (world && world.setLoop) world.setLoop(loopX);
+    /* (the clouds are where they were over the beach; and their last frame with them, so they are not marched afresh) */
+    { const w = skyMat.uniforms.uWind.value, wn = Math.hypot(w.x, w.y) || 1; cloudMo.lx += d; cloudMo.ls += d * w.x / wn; cloudMotion(cloudMo.ct ?? 0, 1); if (post && post.shiftCam) post.shiftCam(d); }
+    /* (what is out round the eye goes round with it) */
+    const cx = camera.position.x, near = x => Math.abs(x - cx) < 600;
+    for (const r of surge.ripples) if (near(r.x)) r.x += d;
+    for (const w of surge.waves) if (w.px !== undefined && near(w.px)) w.px += d;
+    if (shallows && shallows.shift) shallows.shift(d, 0);
+    if (isFauna && isFauna.shift) isFauna.shift(d);
+    if (fauna && fauna.shift) fauna.shift(d, 0);
+    if (snowmen && snowmen.shift) snowmen.shift(d, near);
+    if (marks && marks.shift) marks.shift(d, near);
+    camera.position.x += d; camera.updateMatrixWorld();
+  }
+  Object.assign(api, { loopShift });
+  Object.defineProperty(api, 'loopX', { get: () => loopX });
   Object.defineProperty(api, 'pitching', { get: () => pitch.on });
   /* upcoming breakers (tide + click swells) for the soundscape: arrival times on the wave clock */
   function waveSchedule(wt0, wt1) {
@@ -557,6 +583,7 @@ const Engine = (() => {
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
   function swashFront(x, wt) {
+    x += loopX;   /* (timed where along the beach it is as it goes on: loopShift) */
     const WT = 9.0, k0 = Math.floor(wt / WT); let r = 0;
     for (let k = k0 - WV0; k <= k0 + 2; k++) {
       const h = n => hash(k * n + 0.37), amp = (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * roughNow), ph = h(2.71) * 6.283;
@@ -801,9 +828,16 @@ const Engine = (() => {
     FloraKit.Q.tex = opts.texQ ?? 0.5;
     /* (the round island: its beach and its forest; none of the rocky island's trails, streams, park or boulders) */
     /* (and its huts along the top of the beach: where they stand worked out first, so the forest keeps clear of them) */
-    const hutPlan = Layout.isle && typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.island()) : null;
+    /* the huts (huts.js): round the island from its own shore; along the beach from the beach's, either side of the camp
+       (Layout.Shore's shape: x, z of the water's edge, the way to the sea, the beach's width) */
+    const beachShore = { shore: u => { const x = Layout.camp.x + u, g = Layout.shoreDZ(x), k = 1 / Math.sqrt(1 + g * g), sz = Layout.shoreMeanZ(x); return { x, z: sz, nx: g * k, nz: -k, W: (Layout.vegZ(x) - sz) * k }; } };
+    const hutPlan = typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.isle ? Layout.island() : beachShore) : null;
+    Layout.hutSites = hutPlan ? hutPlan.map(p => [p.x, p.z]) : [];
     world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
-    if (hutPlan) { huts = IsleHuts.build(natG, Layout.island(), world, { plan: hutPlan }); world.addWalker(huts.walk); world.addObstacles(huts.obstacles); Object.assign(api, { huts });
+    /* (along the beach, each hut's clearing kept clear of the forest's trees: wherever it comes round in the loop, in the
+       chunks' own frame) */
+    if (hutPlan && !Layout.isle) world.place(ch => { const out = []; for (const p of hutPlan) { const k = Math.round((ch.x0 + world.CW / 2 - p.clear[0]) / Layout.P), cx = p.clear[0] + k * Layout.P; if (cx > ch.x0 - p.clear[2] && cx < ch.x1 + p.clear[2]) out.push([cx, p.clear[1], p.clear[2]]); } return out; });
+    if (hutPlan) { huts = IsleHuts.build(natG, Layout.isle ? Layout.island() : null, world, { plan: hutPlan }); if (world.addWalker) world.addWalker(huts.walk); if (world.addObstacles) world.addObstacles(huts.obstacles); Object.assign(api, { huts });
       for (const h of huts.huts) for (const s of ['hammock', 'bench', 'bed', 'chair']) { const P = huts.seatPose(h.p.i, s); if (P) SEATS.push({ id: P.id, name: P.name, kind: 'hut', hut: h.p.i, seat: s, near: 'hut' }); } }
     /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
     if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon === true) {
@@ -1053,7 +1087,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     skyMesh.position.copy(camera.position);
     groundMesh.position.x = Math.round(camera.position.x / 100) * 100;
     if (Layout.isle) groundMesh.position.z = Math.round(camera.position.z / 100) * 100;
-    coastFollow(camera.position.x);
+    coastFollow(camera.position.x + loopX);
     if (world) world.update(camera.position.x, o.buildMs ?? 4, camera.position.z, camera.position.y);
     /* the sun's (or moon's) shadow map covers the camp, or the van wherever it has been driven to */
     { const lk = (o.cam || Layout.cameras.wide).look, away = Math.hypot(lk[0] - Layout.camp.x, lk[2] - Layout.camp.z) > 30;

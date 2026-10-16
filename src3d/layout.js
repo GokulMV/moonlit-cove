@@ -171,6 +171,8 @@ const Layout = (() => {
      its reef runs out, how open it is to the swell). Along the coast that never ends, a is x and the sea lies down -z
      (more or less); round the island, a runs the whole way round, the camp's bay where it is x ── */
   const SQ = {};
+  /* how far the world's frame has been carried back round the beach's loop (engine.js loopShift) */
+  const loop = { x: 0 };
   const Shore = isle ? {
     at(x, z, o = {}) {
       const I = ISL(), n = I.normalAt(x, z), q = I.shore(I.uAt(x, z), SQ);
@@ -183,8 +185,10 @@ const Layout = (() => {
     /* how far round the coast is (the island's perimeter: a comes round again after it) */
     P: () => ISL().data.line.P
   } : {
-    at(x, z, o = {}) { const g = shoreDZ(x), k = 1 / Math.sqrt(1 + g * g); o.s = (shoreZ(x) - z) * k; o.a = x; o.nx = g * k; o.nz = -k; return o; },
-    pt(a, s, o = {}) { const g = shoreDZ(a), k = 1 / Math.sqrt(1 + g * g); o.x = a + g * k * s; o.z = shoreMeanZ(a) - k * s; o.nx = g * k; o.nz = -k; return o; },
+    /* (a: where along the beach as it goes on, the world's frame carried round its loop put back: loop.x, engine.js
+       loopShift; the coast's own numbers are the same every loop round) */
+    at(x, z, o = {}) { const g = shoreDZ(x), k = 1 / Math.sqrt(1 + g * g); o.s = (shoreZ(x) - z) * k; o.a = x + loop.x; o.nx = g * k; o.nz = -k; return o; },
+    pt(a, s, o = {}) { const g = shoreDZ(a), k = 1 / Math.sqrt(1 + g * g); o.x = a - loop.x + g * k * s; o.z = shoreMeanZ(a) - k * s; o.nx = g * k; o.nz = -k; return o; },
     info(a, o = {}) { Object.assign(o, { W: vegZ(a) - shoreMeanZ(a), sand: 1, rock: 0, cliff: 0, mangrove: 0, reef: 0, ex: 1, creek: -1, tide: 1 }); return o; },
     lag: () => 0,
     P: () => Infinity
@@ -262,6 +266,6 @@ const Layout = (() => {
 
   /* (the shortest way from one x to another along the beach, that comes round on itself every Coast.LOOP metres) */
   const P = Coast.LOOP, wrapD = d => d - P * Math.round(d / P);
-  return { P, wrapD, shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN, isle, Shore, island: () => isle ? ISL() : null,
+  return { P, wrapD, loop, shoreZ, shoreMeanZ, tide, shoreDZ, vegZ, head, heads, Coast, O, setOrigin, get coastVer() { return coastVer; }, SH: S, VG, WIN, isle, Shore, island: () => isle ? ISL() : null,
            camp, rug, table, poles, strands, POLE_H, fire, grate, chairs, driftwood, crate, van, lanterns, bottle, castle, palms, trees, bushes, fruit, wind, cameras, hotspots, board };
 })();

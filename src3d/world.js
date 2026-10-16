@@ -598,7 +598,7 @@ void main(){
   const DEEP = 1000;   /* how far inland the forest goes (over the mountains) */
   const DS = axis([[0, 50, 2], [50, 130, 4], [130, 420, 10], [420, DEEP, 16]]), DSc = axis([[0, 50, 4], [50, 130, 8], [130, 420, 20], [420, DEEP, 32]]);
   /* how far behind the forest edge the canopy begins (further by the camp) */
-  const D0 = (x, campX) => 13 + 7 * vnX(x, 0, 0.045, 1.5) + 0.9 * Co.head(x) + 8 * (1 - sm(22, 36, Math.abs(x - campX)));
+  const D0 = (x, campX) => 13 + 7 * vnX(x, 0, 0.045, 1.5) + 0.9 * Co.head(x) + 8 * (1 - sm(22, 36, Math.abs(Layout.wrapD(x - campX))));
   function* canopy(c, coarse, o, mat) {
     const DS_ = coarse ? DSc : DS, xs = coarse ? cols(c, 4, 4, 0) : cols(c, 2, 2, 0), nx = xs.length, nd = DS_.length, Pa = new Float32Array(nx * nd * 3), C = new Float32Array(nx * nd * 3);
     const campX = Layout.camp.x + o.x;
@@ -845,6 +845,11 @@ void main(){
     const farParts = { palm: [['bark', barkP], ['fA', frondT[0]]], tall: [['bark', barkP], ['fA', frondT[0]]], tree: leafParts };
 
     const worldG = new T.Group(); worldG.name = 'world'; worldG.matrixAutoUpdate = false; root.add(worldG);
+    /* how far round the loop the page's own frame has been carried back (a whole number of loops, m: engine.js loopShift):
+       the chunks stay where they were built, in the world as it was, drawn that much nearer; a point the page asks about is
+       that much further on in it */
+    let lx = 0;
+    const setLoop = v => { lx = v; worldG.position.x = -lx; worldG.updateMatrix(); };
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), tint = new T.Color();
     /* where the world sits on the coast (Layout.O), as it was when these chunks were built */
     const o = { x: Layout.O.x, z: Layout.O.z }; let ver = Layout.coastVer;
@@ -857,7 +862,7 @@ void main(){
     const reach = xw => D0(xw + Layout.O.x, Layout.camp.x + Layout.O.x);
     Mats.coastReach(reach);
     /* the forest's clearing round the camp, in the world's coordinates */
-    const clear = (x, z) => (Math.abs(x) < 17 && z < 30) || (Math.abs(x - Layout.camp.x) < 10 && z < Layout.vegZ(x) + 6);
+    const clear = (x, z) => { const dx = Layout.wrapD(x - Layout.camp.x); x = Layout.camp.x + dx; return (Math.abs(x) < 17 && z < 30) || (Math.abs(dx) < 10 && z < Layout.vegZ(x) + 6); };   /* (each time round the loop) */
     const claimed = (ch, x, z) => { for (const [cx, cz, r] of ch.claims) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return true; return false; };
 
     /* ── what the coast's hills, headlands, mountains and forest shade from the key light, the sun by day and the moon by
@@ -998,7 +1003,7 @@ void main(){
 
     /* a chunk: its groups for each level of detail, what it holds, what the van must drive round, the rocks in the water */
     function chunk(c) {
-      const x0 = X0 + c * CW - o.x, cw = cwOf(c), ch = { c, cw, X0: X0 + c * CW, x0, x1: x0 + CW, camp: Layout.camp.x >= x0 && Layout.camp.x < x0 + CW, seed: 1 + Math.floor(Co.hash(cw, 31) * 1e9),
+      const x0 = X0 + c * CW - o.x, cw = cwOf(c), ch = { c, cw, X0: X0 + c * CW, x0, x1: x0 + CW, camp: ((Layout.camp.x - x0) % P + P) % P < CW, seed: 1 + Math.floor(Co.hash(cw, 31) * 1e9),
         root: new T.Group(), g: {}, has: {}, jobs: {}, own: { base: [], baseFar: [], all: [] }, claims: [], rocks: [], trees: null, obs: Array.from({ length: CW / 8 }, () => []), wet: [], d: 0 };
       ch.rng = k => rng(ch.seed + 101 * (k || 0));
       /* something the van must drive round, [x, z, radius, kind] in world coordinates (kept in 8 m buckets along the chunk) */
@@ -1104,8 +1109,10 @@ void main(){
         for (const k of KINDS) for (const p of s[k]) if (p.x >= X0c && p.x < X1c && !claimed(ch, p.x, p.z)) T_[k].push(p);
       }
       ch.trees = T_;
-      for (const p of T_.palm) if (p.z < Co.vegZ(p.x) + 3) ch.obstacle(p.x - o.x, p.z - o.z, 0.35, 'tree');
-      for (const p of T_.tree) if (p.z < Co.vegZ(p.x) + 6) ch.obstacle(p.x - o.x, p.z - o.z, 0.45, 'tree');
+      /* (their trunks stand in the way, of the van along the sand and of a walker in among them, as far in as one can walk:
+         to where the canopy closes) */
+      for (const k of ['palm', 'tall']) for (const p of T_[k]) if (p.z < Co.vegZ(p.x) + 46) ch.obstacle(p.x - o.x, p.z - o.z, 0.35, 'tree');
+      for (const p of T_.tree) if (p.z < Co.vegZ(p.x) + 46) ch.obstacle(p.x - o.x, p.z - o.z, 0.45, 'tree');
       yield;
       const inst = (geo, mat, attr, n, col) => { const im = new T.InstancedMesh(geo, mat, 0); im.instanceMatrix = attr; if (col) im.instanceColor = col; im.count = n; im.computeBoundingSphere(); return im; };
       for (const kind of KINDS) {
@@ -1180,6 +1187,7 @@ void main(){
     /* every frame: lay out the chunks around the camera, draw each at its level of detail, and spend about `budget`
        milliseconds building what is missing, nearest first (more when the chunk under the camera is not there yet) */
     function update(camX, budget = 4) {
+      camX += lx;
       lastCam = camX;
       if (Layout.coastVer !== ver) reset();
       const cx = camX + o.x, c0 = Math.floor((cx - X0) / CW), span = Math.ceil(LOD.view / CW) + 1;
@@ -1216,22 +1224,27 @@ void main(){
     /* what the van must drive round near a world point: rocks, trunks, and whatever hooks added (the obstacles
        themselves, [x, z, radius, kind]; the list is reused by the next call) */
     const nearOut = [], wetOut = [];
+    /* (a thing of the chunks, where the page sees it: itself, unless the page's frame has been carried round the loop, then
+       a copy that much nearer, the same copy each time it is asked for) */
+    let seenL = 0, seen = new WeakMap();
+    const inPage = (a, mk) => { if (!lx) return a; if (seenL !== lx) { seenL = lx; seen = new WeakMap(); } let b = seen.get(a); if (!b) { b = mk(a); seen.set(a, b); } return b; };
+    const obPage = ob => { const b = ob.slice(); b[0] -= lx; return b; }, wetPage = p => Object.assign({}, p, { x: p.x - lx });
     function obstaclesNear(x, z) {
       nearOut.length = 0;
-      const cx = x + o.x, c = Math.floor((cx - X0) / CW), b = Math.floor((cx - X0 - c * CW) / 8), nb = CW / 8;
+      const cx = x + lx + o.x, c = Math.floor((cx - X0) / CW), b = Math.floor((cx - X0 - c * CW) / 8), nb = CW / 8;
       for (let k = b - 1; k <= b + 1; k++) {
         const ch = chunks.get(k < 0 ? c - 1 : k >= nb ? c + 1 : c); if (!ch) continue;
-        for (const ob of ch.obs[(k + nb) % nb]) nearOut.push(ob);
+        for (const ob of ch.obs[(k + nb) % nb]) nearOut.push(inPage(ob, obPage));
       }
       return nearOut;
     }
     /* rocks standing in the sea within r of a world point: { x, z, top, rad, id } (the list is reused by the next call) */
     function wetNear(x, z, r) {
       wetOut.length = 0;
-      const cx = x + o.x;
+      const cx = x + lx + o.x;
       for (let c = Math.floor((cx - r - X0) / CW), n = Math.floor((cx + r - X0) / CW); c <= n; c++) {
         const ch = chunks.get(c); if (!ch) continue;
-        for (const p of ch.wet) if ((p.x - x) ** 2 + (p.z - z) ** 2 < r * r) wetOut.push(p);
+        for (const p of ch.wet) if ((p.x - lx - x) ** 2 + (p.z - z) ** 2 < r * r) wetOut.push(inPage(p, wetPage));
       }
       return wetOut;
     }
@@ -1254,13 +1267,13 @@ void main(){
       return n;
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
-    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach,
+    return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, get loop() { return lx; },
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },
       /* the reefs near a world x, each as its line: [x, z, top height, half-width] every metre or so, out from the beach */
       reefLines: x => Co.reefsNear(x + o.x).map(R => reefLine(R).map(p => [p.x - o.x, p.z - o.z, p.h, p.w])),
-      get counts() { return counts(); }, get chunks() { return live.slice(); }, chunkAt: x => chunks.get(Math.floor((x + o.x - X0) / CW)) || null,
+      get counts() { return counts(); }, get chunks() { return live.slice(); }, chunkAt: x => chunks.get(Math.floor((x + lx + o.x - X0) / CW)) || null,
       resetWorst: () => { stat.worst = 0; } };
   }
   return { build, LOD, CW, X0, SURF: { FOAM_VS, FOAM_FS, SPRAY_VS, SPRAY_FS } };

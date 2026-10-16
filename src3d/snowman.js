@@ -111,7 +111,12 @@ const Snowmen = (() => {
     /* what stands in a walker's way (the van just knocks into them): [x, z, radius], all but the one being rolled */
     function obstacles(x, z, list) { for (const b of balls) if (b !== rolling && !b.under && Math.hypot(b.x - x, b.z - z) < 6) list.push([b.x, b.z, b.r * 0.95, 'snow']); return list; }
     const stats = () => ({ balls: balls.length, men: men.length, rolling: rolling ? +rolling.r.toFixed(2) : 0 });
-    return { start, roll, letGo, update, obstacles, stats, get rolling() { return rolling; }, balls, men };
+    /* (the world's frame carried round the beach's loop, d m: those near the eye go with it, engine.js loopShift) */
+    function shift(d, near) {
+      for (const b of balls) if (near(b.x)) { b.x += d; place(b); }
+      for (const M of men) { const m = M.man, x = m.userData.x ?? (m.userData.x = (() => { const bx = new T.Box3().setFromObject(m); return (bx.min.x + bx.max.x) / 2; })()); if (near(x)) { m.position.x += d; m.userData.x = x + d; m.updateMatrixWorld(true); } }
+    }
+    return { start, roll, letGo, update, obstacles, stats, shift, get rolling() { return rolling; }, balls, men };
   }
   return { build };
 })();

@@ -134,7 +134,10 @@ const IsleHuts = (() => {
         for (const D of h.use.doors) { D.k = (D.k ?? D.open) + (D.open - (D.k ?? D.open)) * a; D.pivot.rotation.y = D.k * 1.6; }
         for (const s of h.use.shutters) { s.k = (s.k ?? s.open) + (s.open - (s.k ?? s.open)) * a; Rx.setFromAxisAngle(AX, -s.k * s.max); s.pivot.quaternion.copy(s.q0).multiply(Rx);
           /* (the prop: from the sill out to the shutter's lower edge) */
-          if (s.prop) { s.prop.visible = s.k > 0.5; if (s.prop.visible) { const tip = s.pivot.localToWorld(new T.Vector3(0, -s.h * 0.92, 0)), sill = h.g.localToWorld(s.sill.clone()), L = tip.distanceTo(sill);
+          /* (worked out in the world, then put in the frame the prop hangs in: a prop set in world coordinates inside the hut
+             stood off somewhere else entirely, a stick in the air or out at sea) */
+          if (s.prop) { s.prop.visible = s.k > 0.5; if (s.prop.visible) { s.pivot.updateWorldMatrix(true, false); const par = s.prop.parent;
+            const tip = par.worldToLocal(s.pivot.localToWorld(new T.Vector3(0, -s.h * 0.92, 0))), sill = par.worldToLocal(h.g.localToWorld(s.sill.clone())), L = tip.distanceTo(sill);
             s.prop.position.copy(tip).lerp(sill, 0.5); s.prop.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), tip.clone().sub(sill).normalize()); s.prop.scale.set(1, L, 1); } } }
         for (const L of h.use.lamps) {
           /* (lit at dusk by themselves, unless put out by hand; put out at dawn) */

@@ -8,11 +8,13 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 
 ## In the cove
 
-- Walk the beach and out onto the reef, or let it walk itself
+- Walk the beach, wade out into the sea or wander up among the palms, or let it walk itself
+- Stay in the beach huts either side of the camp: open the doors and shutters, light the lamps, lie in the hammock, read the boards in the work hut
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands
 - Pick fruit round the camp (mango, rambutan, papaya, banana, coconuts): every tree flowers, sets fruit, ripens and drops it to rot on the ground, round after round, about every 15 minutes (faster with the time flow up); a fruit keeps ripening in your hand, and you can eat it when it's ripe
-- Drive the van down a coast that never repeats, and pitch camp anywhere
-- Let a sky lantern go with a wish, pinned to a board by the fire for everyone to read
+- Drive the van down the beach: two kilometres of it, its ends joined, so keep going and you come round to the camp again; pitch camp anywhere
+- Watch the night sky: thousands of stars and the Milky Way where they really are for you, shooting stars from the showers that are on (most of a second each, as real ones are, now and then a fireball or a slow earthgrazer), and a comet over the sea
+- Make a wish on a shooting star, or let a sky lantern go with one; either way it's pinned to a board by the fire for everyone to read
 - Draw on the sketchboard and leave it in the toolbox for others to open
 - Sit by the fire and play the radio: world radio, your own songs, or a Spotify link pasted in
 - Watch it full screen, nothing over it, for as long as you like (Esc to leave)

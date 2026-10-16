@@ -278,7 +278,9 @@ const IsleFauna = (() => {
       }
     }
     const stats = () => ({ kinds: Object.keys(made).filter(k => made[k]).length, out: out.length, spots: Object.fromEntries(Object.entries(spots).map(([k, v]) => [k, v.length])) });
-    return { update, stats, out, spots, make, flies, pickables };
+    /* (the world's frame carried round the beach's loop, d m: those out go with the eye, engine.js loopShift) */
+    function shift(d) { for (const a of out) { a.x += d; a.home[0] += d; a.cx += d; if (a.top) a.top.x += d; a.g.position.x += d; a.g.updateMatrixWorld(); } lastX += d; }
+    return { update, stats, out, spots, make, flies, pickables, shift };
   }
   return { build, KINDS, copyOf };
 })();

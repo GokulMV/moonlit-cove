@@ -183,7 +183,7 @@ void main(){
         for (const it of L.items) {
           if (it.gone || it.held) continue;
           const head = KINDS[it.k].head * it.s;
-          _v.set(it.x, it.y + head, it.z); const d = _v.distanceTo(camera.position); if (d > maxD) continue;
+          _v.set(it.x - ((world && world.loop) || 0), it.y + head, it.z); const d = _v.distanceTo(camera.position); if (d > maxD) continue;
           _v.project(camera); if (_v.z > 1) continue;
           const dx = ((_v.x * 0.5 + 0.5) - nx) * W, dy = ((-_v.y * 0.5 + 0.5) - ny) * H, d2 = dx * dx + dy * dy;
           if (d2 < bd) { bd = d2; best = it; }
@@ -197,7 +197,7 @@ void main(){
       if (!it || it.gone) return null;
       it.gone = true; it.held = false; picked.add(it.id); keep();
       if (!quiet) going.push({ it, t0: t });
-      return { kind: KINDS[it.k].id, name: KINDS[it.k].name, at: [it.x, it.y + KINDS[it.k].head * it.s, it.z] };
+      return { kind: KINDS[it.k].id, name: KINDS[it.k].name, at: [it.x - ((world && world.loop) || 0), it.y + KINDS[it.k].head * it.s, it.z] };
     }
     function update(t, camera) {
       grassM.uniforms.uCamF.value.copy(camera.position);
@@ -214,9 +214,9 @@ void main(){
     function pickables(list, cam) {
       for (const [, L] of live) for (const it of L.items) {
         if (it.gone || it.held) continue;
-        const dx = it.x - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 900) continue;
+        const lx = (world && world.loop) || 0, dx = it.x - lx - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 900) continue;
         const head = KINDS[it.k].head * it.s;
-        list.push({ kind: KIND_OF[it.k], x: it.x, y: it.y + head * 0.6, z: it.z, r: Math.max(0.06, head * 0.45), yaw: it.ry, size: it.s * KG[it.k] / 1.8, flower: it,
+        list.push({ kind: KIND_OF[it.k], x: it.x - lx, y: it.y + head * 0.6, z: it.z, r: Math.max(0.06, head * 0.45), yaw: it.ry, size: it.s * KG[it.k] / 1.8, flower: it,
           take() { it.held = true; setFlower(it, 0); },
           give(how) { it.held = false; if (how === 'back') setFlower(it, it.s); else { it.gone = true; picked.add(it.id); keep(); } } });
       }

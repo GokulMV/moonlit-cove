@@ -348,7 +348,7 @@ void main(){
       { g: starGeo(3), n: 0, tone: starTone, s: [0.11, 0.2], kind: 'star' }, { g: starGeo(11), n: 0, tone: starTone, s: [0.1, 0.17], kind: 'star' },
       { g: scallopGeo(5), n: 0, tone: shellTone, s: [0.06, 0.11] }, { g: cowrieGeo(7), n: 0, tone: shellTone, s: [0.05, 0.08] },
       { g: conchGeo(9), n: 0, tone: shellTone, s: [0.07, 0.12] }, { g: scallopGeo(13), n: 0, tone: shellTone, s: [0.045, 0.08] }];
-    const clearOf = (x, z) => Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 4.4 && Math.hypot(x - Layout.fire.x, z - Layout.fire.z) > 1.6 && Math.hypot(x - Layout.van.x, z - Layout.van.z) > 3.2 && Math.hypot(x - Layout.bottle.x, z - Layout.bottle.z) > 0.8;
+    const clearOf = (x, z) => (x = Layout.camp.x + Layout.wrapD(x - Layout.camp.x), true) && Math.hypot(x - Layout.camp.x, z - Layout.camp.z) > 4.4 && Math.hypot(x - Layout.fire.x, z - Layout.fire.z) > 1.6 && Math.hypot(x - Layout.van.x, z - Layout.van.z) > 3.2 && Math.hypot(x - Layout.bottle.x, z - Layout.bottle.z) > 0.8;
     const mat = Mats.lit({ vertexColors: true, roughness: 0.5 });
     const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), pos = new T.Vector3(), col = new T.Color();
     let count = 0, shellK = 1; const shellMeshes = [], shellLive = new Map();
@@ -356,7 +356,7 @@ void main(){
     function setShells(k) { k = Math.max(0, Math.min(1, k)); if (k === shellK) return; shellK = k; for (const im of shellMeshes) im.count = Math.round(im.userData.full * k); }
     /* laid along each chunk of the coast as it is built (and let go with it) */
     if (world) world.decorate(d => {
-      const di = d.c, rs = rng(6061 + di * 101), camp = d.camp, items = [], want = Math.round(420 * world.CW / 226 * (camp ? 1 : 0.7));
+      const di = d.c, rs = rng(6061 + (d.cw ?? di) * 101), camp = d.camp, items = [], want = Math.round(420 * world.CW / 226 * (camp ? 1 : 0.7));
       for (let i = 0, n = 0; i < want * 5 && n < want; i++) {
         const x = d.x0 + rs() * world.CW, sz = Layout.shoreMeanZ(x);
         /* most lie along the line the high water leaves, a few scattered up the beach */
@@ -383,9 +383,9 @@ void main(){
     function shellPickables(list, cam) {
       for (const [, items] of shellLive) for (const it of items) {
         if (it.gone || !it.im || it.ii >= it.im.count) continue;
-        const dx = it.x - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 1200) continue;
+        const lx = (world && world.loop) || 0, dx = it.x - lx - cam.x, dz = it.z - cam.z; if (dx * dx + dz * dz > 1200) continue;
         const kind = SH_KIND[it.k];
-        list.push({ kind, x: it.x, y: 0.02, z: it.z, r: it.s * 0.75, yaw: it.ry, size: it.s / SH_REAL[kind], opts: { tone: kind === 'star' ? it.c : null, seed: 1 + Math.floor(it.ry * 1000) },
+        list.push({ kind, x: it.x - lx, y: 0.02, z: it.z, r: it.s * 0.75, yaw: it.ry, size: it.s / SH_REAL[kind], opts: { tone: kind === 'star' ? it.c : null, seed: 1 + Math.floor(it.ry * 1000) },
           take() { it.gone = true; placeShell(it, 0); },
           /* (put back, it lies where it lay; thrown in the sea, it is the sea's) */
           give(how) { if (how === 'back') { it.gone = false; placeShell(it, it.s); } } });

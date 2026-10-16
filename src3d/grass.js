@@ -76,8 +76,9 @@ ${Layout.isle ? `float density(vec2 p){
 float density(vec2 p){
   vec4 c = coastAt4(p.x); float kq = inversesqrt(1.0 + c.y*c.y), s = (c.x - p.y)*kq, d = -s, W = (c.z - c.x)*kq;
   float band = vergeBand(d, W, c.w*kq);
-  float clump = smoothstep(0.32, 0.62, gN(p*0.33 + 3.1))*0.65 + 0.35*smoothstep(0.25, 0.75, gN(p*1.4 + 9.7));
-  float tus = smoothstep(max(W*0.55, W - 9.0), max(W*0.55, W - 9.0) + 2.5, d)*(1.0 - smoothstep(W - 2.5, W - 0.2, d))*smoothstep(0.7, 0.84, gN(p*0.55 + 1.3))*0.8;
+  vec2 pu = p + vec2(uLoopX, 0.0);   /* (its clumps where they are along the beach as it goes on: glsl.js uLoopX) */
+  float clump = smoothstep(0.32, 0.62, gN(pu*0.33 + 3.1))*0.65 + 0.35*smoothstep(0.25, 0.75, gN(pu*1.4 + 9.7));
+  float tus = smoothstep(max(W*0.55, W - 9.0), max(W*0.55, W - 9.0) + 2.5, d)*(1.0 - smoothstep(W - 2.5, W - 0.2, d))*smoothstep(0.7, 0.84, gN(pu*0.55 + 1.3))*0.8;
   /* (a sward: thinner in its hollows, never bare) */
   float bandG = band*(0.6 + 0.4*clump), g = max(bandG, tus);
   gTus = step(bandG, tus)*step(0.01, tus);
@@ -93,14 +94,17 @@ void main(){
      is; each blade's a little way out from the tuft's middle, leaning away from it, so a tuft is a fountain of blades.
      Whether a tuft grows at all is the ground's say, where its middle is) */
   float tuft = floor(bi*${NT}.0), tb = fract(bi*${NT}.0);
-  vec2 cell = floor(aPatch.xy/uPatch + 0.5), r0 = vec2(gH(cell*7.13 + tuft*1013.7), gH(cell.yx*3.71 + tuft*577.3 + 11.0));
-  vec2 tc = aPatch.xy + r0*uPatch;
+  /* (every blade's own numbers drawn from where it is along the beach as it goes on (LX: glsl.js uLoopX), so the grass
+     is the same blade for blade when the world's frame is carried round the loop) */
+  vec2 LX = vec2(uLoopX, 0.0);
+  vec2 cell = floor((aPatch.xy + LX)/uPatch + 0.5), r0 = vec2(gH(cell*7.13 + tuft*1013.7), gH(cell.yx*3.71 + tuft*577.3 + 11.0));
+  vec2 tc = aPatch.xy + r0*uPatch, tu = tc + LX;
   /* (where it grows thick the tufts spread and run into one another, a sward, its blades every way; where it is thin,
      on the sand, each is a tight tussock, a fountain of blades) */
-  float dens = density(tc), lawn = gLawn, tus = gTus, ts = gH(tc*2.7 + 4.4), ta = tb*6.2832*2.618 + gH(tc*1.3)*6.2832, tr0 = (0.03 + 0.11*sqrt(fract(tb*7.37 + ts)))*(0.6 + 0.7*ts);
+  float dens = density(tc), lawn = gLawn, tus = gTus, ts = gH(tu*2.7 + 4.4), ta = tb*6.2832*2.618 + gH(tu*1.3)*6.2832, tr0 = (0.03 + 0.11*sqrt(fract(tb*7.37 + ts)))*(0.6 + 0.7*ts);
   float spread = smoothstep(0.45, 0.9, dens)*(1.0 - tus), tr = tr0*mix(1.0, 2.7, spread);
-  vec2 xz = tc + vec2(cos(ta), sin(ta))*tr;
-  float h1 = gH(tc*3.17 + 0.5), h2 = gH(xz*5.31 + 1.7), h3 = gH(xz*2.13 + 7.1), h4 = gH(xz*7.77 + 3.3), h5 = gH(xz*1.91 + 9.9);
+  vec2 xz = tc + vec2(cos(ta), sin(ta))*tr, xu = xz + LX;
+  float h1 = gH(tu*3.17 + 0.5), h2 = gH(xu*5.31 + 1.7), h3 = gH(xu*2.13 + 7.1), h4 = gH(xu*7.77 + 3.3), h5 = gH(xu*1.91 + 9.9);
   /* (snow deep enough lies over the shorter blades; a lawn is kept short) */
   float hgt = mix(0.22, 0.66, h2)*(0.55 + 0.45*ts)*(0.6 + 0.4*dens)*mix(1.0, 0.5, lawn)*mix(1.0, 1.3, tus), snowD = uSnowG.y;
   if (h1 > dens || hgt < snowD*1.15 + 0.03){ gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
@@ -114,8 +118,8 @@ void main(){
   /* its curve: up from the ground, out along its lean, its tip drooping (a quadratic Bézier); the wind on it — gusts you
      can see crossing the grass, and each blade's own flutter — and a walker pushing it aside, and the snow's weight */
   vec2 wd = uGW.xy; float ws = uGW.z;
-  float gust = (0.25 + 1.0*gN(xz*0.09 - wd*uTime*1.1))*(0.55 + 0.45*gN(xz*0.031 - wd*uTime*0.35 + 5.0));
-  float flut = sin(uTime*(2.2 + 1.8*h3) + h1*6.2832 + dot(xz, wd)*0.9)*0.18;
+  float gust = (0.25 + 1.0*gN(xu*0.09 - wd*uTime*1.1))*(0.55 + 0.45*gN(xu*0.031 - wd*uTime*0.35 + 5.0));
+  float flut = sin(uTime*(2.2 + 1.8*h3) + h1*6.2832 + dot(xu, wd)*0.9)*0.18;
   vec2 bend = dir*lean + wd*(gust*(0.55 + 0.6*uGW.w) + flut*0.35)*ws*0.6;
   vec2 pd = xz - uPush.xz; float pl = length(pd), push = (1.0 - smoothstep(0.3, 1.25, pl))*uPush.w;
   bend += pd/max(pl, 1e-3)*push*0.9;
@@ -133,10 +137,10 @@ void main(){
   float far = smoothstep(8.0, REACHF, distance(p, cameraPosition)); vN = normalize(mix(vN, vec3(0.0, 1.0, 0.0), far*0.6));
   /* its colour, foot to tip: dark down among the stems, the green of the blade, paler at its tip; some blades gone to
      straw, some yellower, some bluer */
-  float dry = step(0.86, gH(xz*9.3 + 2.0)), hue = gH(xz*4.4 + 6.0);
+  float dry = step(0.86, gH(xu*9.3 + 2.0)), hue = gH(xu*4.4 + 6.0);
   vec3 cFoot = vec3(0.06, 0.08, 0.025), cMid = mix(vec3(0.16, 0.26, 0.055), vec3(0.22, 0.28, 0.07), hue), cTip = mix(vec3(0.34, 0.42, 0.11), vec3(0.45, 0.45, 0.16), hue);
   cMid = mix(cMid, vec3(0.27, 0.24, 0.11), dry); cTip = mix(cTip, vec3(0.46, 0.39, 0.2), dry);
-  vC = mix(mix(cFoot, cMid, smoothstep(0.0, 0.45, t)), cTip, smoothstep(0.45, 1.0, t))*(0.82 + 0.36*gH(xz*13.1));
+  vC = mix(mix(cFoot, cMid, smoothstep(0.0, 0.45, t)), cTip, smoothstep(0.45, 1.0, t))*(0.82 + 0.36*gH(xu*13.1));
   /* (in the thick of it the light is down among the stems) */
   vAO = mix(0.45 + 0.55*smoothstep(0.0, 0.6, t), 1.0, 0.35*(1.0 - dens));
   vSnow = uSnowG.x*smoothstep(0.3, 1.0, t)*smoothstep(0.1, 0.6, tg.y + 0.5);

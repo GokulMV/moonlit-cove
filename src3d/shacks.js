@@ -381,7 +381,7 @@ const Shacks = (() => {
         const kindR = h(1), kind = kindR < 0.45 ? 'shack' : kindR < 0.75 ? 'huts' : 'fishing';
         for (let tries = 0; tries < 6 && !out.length; tries++) {
           const x = ch.x0 + 18 + h(2 + tries) * (world.CW - 36);
-          const ok = s => Math.abs(s - Layout.camp.x) > CAMP_CLEAR && Layout.head(s) < 0.6 && Layout.vegZ(s) - Layout.shoreMeanZ(s) > (kind === 'huts' ? 6.5 : 8.6) && !(world.massif(s, Layout.vegZ(s) - 2) > 0.1);
+          const ok = s => Math.abs(Layout.wrapD(s - Layout.camp.x)) > CAMP_CLEAR && !(Layout.hutSites || []).some(([hx]) => Math.abs(Layout.wrapD(s - hx)) < 26) && Layout.head(s) < 0.6 && Layout.vegZ(s) - Layout.shoreMeanZ(s) > (kind === 'huts' ? 6.5 : 8.6) && !(world.massif(s, Layout.vegZ(s) - 2) > 0.1);
           const span = kind === 'huts' ? 12 : 6;
           if (!ok(x) || !ok(x - span) || !ok(x + span)) continue;
           out.push({ kind, x, seed: 1 + Math.floor(h(20) * 1e9) });
@@ -428,7 +428,7 @@ const Shacks = (() => {
       const sites = plan(ch);
       for (let i = 0; i < n; i++) for (let tries = 0; tries < 6; tries++) {
         const x = ch.x0 + 8 + h(2 + i * 9 + tries) * (world.CW - 16);
-        if (Math.abs(x - Layout.camp.x) < 45 || Layout.head(x) > 0.5 || sites.some(p => Math.abs(p.x - x) < 20) || out.some(p => Math.abs(p.x - x) < 12)) continue;
+        if (Math.abs(Layout.wrapD(x - Layout.camp.x)) < 45 || (Layout.hutSites || []).some(([hx]) => Math.abs(Layout.wrapD(x - hx)) < 14) || Layout.head(x) > 0.5 || sites.some(p => Math.abs(p.x - x) < 20) || out.some(p => Math.abs(p.x - x) < 12)) continue;
         const sz = Layout.shoreMeanZ(x), vz = Layout.vegZ(x); if (vz - sz < 8.5) continue;
         const up = 1.5 + h(30 + i * 3 + tries) * 2.7, z = sz + up;
         if (world.massif(x, z) > 0 || world.massif(x, z - 1.5) > 0) continue;
@@ -496,7 +496,7 @@ const Shacks = (() => {
         let over = -1e9;
         for (const f of [-0.7, 0, 0.7]) {
           const x = p.x + f * L.r, up = (p.z - Layout.shoreZ(x)) / nz;
-          over = Math.max(over, swash(x, wt) - (up - 0.8 * L.r * Math.sqrt(1 - f * f)));
+          over = Math.max(over, swash(x - (world.loop || 0), wt) - (up - 0.8 * L.r * Math.sqrt(1 - f * f)));   /* (the chunks' own frame, as the page's: world.js setLoop) */
         }
         let W = L.wash;
         if (over > 0) {

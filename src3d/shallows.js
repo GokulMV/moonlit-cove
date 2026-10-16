@@ -353,9 +353,9 @@ void main(){
       const t = Mats.U.uTime.value, day = U.uDay ? U.uDay.value : 1;
       if (day > 0.25) for (const [, R] of shrimpLive) R.list.forEach((q, i) => {
         if (R.iV.array[i] < 0.5) return;
-        const dx = q.x - cam.x, dz = q.z - cam.z; if (dx * dx + dz * dz > 600) return;
+        const lx = (world && world.loop) || 0, dx = q.x - lx - cam.x, dz = q.z - cam.z; if (dx * dx + dz * dz > 600) return;
         const ph = q.h * 7, flick = Math.pow(Math.max(0, Math.sin(t * 0.7 + ph)), 18), off = 0.06 * Math.sin(t * 0.5 + ph) - 0.25 * flick;
-        list.push({ kind: 'shrimp', x: q.x + Math.cos(q.h) * off, y: -q.y, z: q.z + Math.sin(q.h) * off, r: 0.07, yaw: -q.h, size: 1.6, reach: 24,
+        list.push({ kind: 'shrimp', x: q.x - lx + Math.cos(q.h) * off, y: -q.y, z: q.z + Math.sin(q.h) * off, r: 0.07, yaw: -q.h, size: 1.6, reach: 24,
           take() { R.iV.array[i] = 0; R.iV.needsUpdate = true; }, give() { R.iV.array[i] = 1; R.iV.needsUpdate = true; } });
       });
       for (const c of crabs) {

@@ -196,9 +196,16 @@ void main(){
     }
     /* (the camp moved under the world: what was pressed into the old beach goes) */
     function clear() { fAttr.array.fill(-1e9); fAttr.needsUpdate = true; MK.fill(-1e9); dirty.length = 0; tGeo.attributes.aMark.clearUpdateRanges(); tGeo.attributes.aMark.needsUpdate = true; fPos.fill(0); segPos.fill(0); }
+    /* (the world's frame carried round the beach's loop, d m: the marks near the eye go with it, engine.js loopShift) */
+    function shift(d, near) {
+      let fm = false;
+      for (let i = 0; i < NF; i++) { if (!fPos[i * 3 + 2] || !near(fPos[i * 3])) continue; fPos[i * 3] += d; feet.getMatrixAt(i, _m); _m.elements[12] += d; feet.setMatrixAt(i, _m); fm = true; }
+      if (fm) feet.instanceMatrix.needsUpdate = true;
+      for (let q = 0; q < NQ; q++) { if (!segPos[q * 3 + 2] || !near(segPos[q * 3])) continue; segPos[q * 3] += d; for (let j = 0; j < 4; j++) P[q * 12 + j * 3] += d; dirty.push(q); }
+    }
     /* how many are pressed in just now (for the tests) */
     const count = () => { let f = 0, s = 0; for (let i = 0; i < NF; i++) f += fPos[i * 3 + 2]; for (let q = 0; q < NQ; q++) s += segPos[q * 3 + 2]; return { feet: f, tyre: s }; };
-    return { foot, tyre, update, clear, count, feet, tracks };
+    return { foot, tyre, update, clear, count, shift, feet, tracks };
   }
   return { build };
 })();

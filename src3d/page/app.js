@@ -1027,6 +1027,8 @@
     const out = [], W = Engine.world;
     for (const o of campObs) if (Math.abs(x - o[0]) < 6) out.push([x - o[0], z - o[1], o[2], o]);
     if (W) for (const o of W.obstaclesNear(x, z)) out.push([x - o[0], z - o[1], o[2], o]);
+    /* (along the beach the huts are the engine's own, not the world's: the van drives round them) */
+    if (!ISLE && Engine.huts) for (const o of Engine.huts.obstacles(x, z, [])) out.push([x - o[0], z - o[1], o[2], o]);
     return out;
   }
   const DRIVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift'];
@@ -1308,17 +1310,36 @@
       else wk.blocked = 0;
     } else wk.blocked = 0;
   }
+  /* (along the beach: how far out a walker wades, m from the water's edge, where the sand under the water (glsl.js
+     shoreFloor, 6 in 100) is about 0.8 m down) */
+  const WADE_OUT = 13.5, hutQ = { ok: true, y: 0, kind: '', wade: 0 };
+  /* the ground a walker stands on along the beach: a hut's floor or its steps, the sand under the sea (glsl.js shoreFloor:
+     6 in 100 down from the water's edge), the land */
+  function groundAt(x, z) {
+    const W = Engine.world, H = Engine.huts;
+    if (H) { hutQ.ok = true; hutQ.y = -1e9; if (H.walk(x, z, hutQ, wk.foot ?? 0) && hutQ.ok && hutQ.y > -1e8) return hutQ.y; }
+    const g = Layout.shoreDZ(x), out = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g);
+    return out > 0 ? -0.06 * out : Math.max(0, W ? W.land(x, z) : 0);
+  }
   function walkCollide() {
     const W = Engine.world;
     if (Layout.isle && W && W.walk) return walkCollideIsle();
+    /* (the huts: their walls and railings stand in the way, and a floor too high to step up onto from where one stands;
+       their steps go up onto the verandah, the door in when it is open. A step that would go into one slides along it) */
+    if (Engine.huts && wk.ox !== undefined) {
+      const blocked = (x, z) => { hutQ.ok = true; hutQ.y = -1e9; return Engine.huts.walk(x, z, hutQ, wk.foot ?? 0) && !hutQ.ok; };
+      if (blocked(wk.x, wk.z)) { if (!blocked(wk.x, wk.oz)) wk.z = wk.oz; else if (!blocked(wk.ox, wk.z)) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; }
+    }
     for (let it = 0; it < 3; it++) {
       let moved = false;
       for (let j = 0; j < GO.n; j++) {
         const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
         if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
       }
-      /* (out on a reef the sea is no wall: walk along its top as far as it goes; step off its edge and you are kept on it) */
-      const zMin = Layout.shoreZ(wk.x) - 1.2, zMax = Layout.vegZ(wk.x) + 2, onReef = W && W.reefTop(wk.x, wk.z) > -9;
+      /* (out on a reef the sea is no wall: walk along its top as far as it goes; step off its edge and you are kept on it.
+         Into the sea a walker wades out till it is near waist deep; up the beach, in among the palms and the trees as far
+         as the open ground goes, till the canopy closes over: world.js reach) */
+      const zMin = Layout.shoreZ(wk.x) - WADE_OUT, zMax = Layout.vegZ(wk.x) + Math.max(6, (W && W.reach ? W.reach(wk.x) : 8) - 1), onReef = W && W.reefTop(wk.x, wk.z) > -9;
       if (wk.z < zMin && !onReef) {
         if (wk.reef && W.reefTop(wk.ox, wk.oz) > -9) { wk.x = wk.ox; wk.z = wk.oz; wk.v *= 0.5; }
         else wk.z = zMin;
@@ -1495,7 +1516,8 @@
     }
     /* the pace eases up and down as a body's does; wading slows it */
     const sz = Layout.shoreZ(wk.x), wade = Layout.isle && Engine.world && Engine.world.walk ? Engine.world.walk(wk.x, wk.z).wade : wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
-    want *= 1 - 0.45 * wade;
+    /* (and deeper in, the water's weight against the legs: slower still) */
+    want *= (1 - 0.45 * wade) * (Layout.isle ? 1 : 1 - 0.35 * sstep(sz - 2, sz - WADE_OUT, wk.z));
     if (Engine.snowmen && Engine.snowmen.rolling) want *= 1 - 0.5 * Math.min(1, Engine.snowmen.rolling.r / 0.55);
     wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
     wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
@@ -1540,12 +1562,15 @@
   function walkCamera() {
     const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
     const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch = clamp(wk.hp.v + wk.mp, -1.05, 0.95), cp = Math.cos(pitch);
-    const sway = 0.6 * bob * Math.sin(ph), g0 = Math.max(0, W ? (Layout.isle && W.walk ? W.walk(wk.x, wk.z).y : W.land(wk.x, wk.z)) : 0), p = wk.cam.pos, l = wk.cam.look;
+    const sway = 0.6 * bob * Math.sin(ph), g0 = Layout.isle ? Math.max(0, W ? (W.walk ? W.walk(wk.x, wk.z).y : W.land(wk.x, wk.z)) : 0) : groundAt(wk.x, wk.z), p = wk.cam.pos, l = wk.cam.look;
+    wk.foot = g0;
     /* (the ground underfoot, eased: stepping from one block of a groyne up or down onto the next lifts the eye or lowers it
        over a moment, as a step does, rather than all at once) */
     const now = performance.now(), gdt = Math.min(0.1, (now - (wk.gT || now)) / 1000); wk.gT = now;
     const g = wk.gs = wk.gs == null || Math.abs(g0 - wk.gs) > 1.2 ? g0 : wk.gs + (g0 - wk.gs) * Math.min(1, gdt * 10);
     p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)); p[2] = wk.z - Math.sin(wk.h) * sway;
+    /* (wading: the eyes kept up out of the swell that is passing, lifted by it as it goes by) */
+    if (!Layout.isle && g < 0 && Engine.waveAt) { const wv = Engine.waveAt(wk.x, wk.z), lift = Math.max(0, wv + 0.55 - p[1]); wk.lift = (wk.lift || 0) + (lift - (wk.lift || 0)) * Math.min(1, gdt * 6); p[1] += wk.lift; } else wk.lift = 0;
     l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
     wk.cam.fov = 60 + 4 * sstep(1.6, 2.8, v);
     /* focused where the eyes meet the sand (or far off, looking up), eased so it doesn't hunt */
@@ -1818,6 +1843,24 @@
     return { pos, look: [pos[0] + Math.sin(yaw) * cp * l, pos[1] + Math.sin(pitch) * l, pos[2] - Math.cos(yaw) * cp * l], fov: a.fov + (b.fov - a.fov) * t, focus: (a.focus || 25) + ((b.focus || 25) - (a.focus || 25)) * t };
   }
 
+  /* ── the beach's two ends joined (Layout.P, 2 km round): the page keeps everything within half a loop of the camp. When
+     the van, the walker or the explore camera goes on past that, they are carried back a whole loop, to the same place on
+     the beach coming the other way, and the engine carries the world's frame with them (Engine.loopShift), so nothing is
+     seen to jump: drive on and you come round to the camp again ── */
+  function loopWrap() {
+    if (ISLE || !Layout.P || !isFinite(Layout.P)) return;
+    const ax = car.on ? car.x : wk.on ? wk.x : orb.px, off = ax - Layout.camp.x;
+    if (Math.abs(off) <= Layout.P / 2) return;
+    const d = -Layout.P * Math.sign(off);
+    car.x += d; if (car.camP) car.camP[0] += d; if (car.camL) car.camL[0] += d; if (car.bumpAt) car.bumpAt[0] += d;
+    wk.x += d; if (wk.ox !== undefined) wk.ox += d; ai.progX += d;
+    orb.v[X] += d; orb.T[X] += d; orb.px += d; if (orb.fly) { orb.fly.from[X] += d; orb.fly.to[X] += d; }
+    /* (the cameras that move with them, once each; the fixed views of the camp stay where the camp is) */
+    const fixed = new Set(Object.values(V).filter(v => v !== orbCam)), done = new Set();
+    for (const v of [orbCam, wk.cam, rd.cam, st.from, st.to, st.cur, st.camFinal]) if (v && v.pos && v.look && !fixed.has(v) && !done.has(v)) { done.add(v); v.pos[0] += d; v.look[0] += d; }
+    Engine.loopShift(d);
+  }
+
   /* (filming: the film maker stops the page's own frames and steps the scene itself, one exact frame at a time) */
   const film = { on: false, dt: 0 };
   function filmStep(dt) { film.dt = dt; frame((st.last || performance.now()) + dt * 1000, true); film.dt = 0; }
@@ -1829,6 +1872,8 @@
     st.offset += dtR * 1000 * (st.flow - 1);
     const ms = nowMs();
 
+    /* the beach's two ends joined: past half the loop from the camp, round to the other end */
+    loopWrap();
     /* camera: the explore camera, or a flight to (and back from) whatever is open */
     const orbC = stepOrbit(dtR);
     st.camT = Math.min(1, st.camT + dtR / (st.camDur || 2.2));

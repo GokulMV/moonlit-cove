@@ -146,6 +146,13 @@ const Minimap = (() => {
       c.beginPath(); R.forEach((p, i) => { const [u, v] = toMap(V, p[0], p[1]); i ? c.lineTo(u, v) : c.moveTo(u, v); });
       c.strokeStyle = rgb(COL.rock); c.lineCap = 'round'; c.lineWidth = Math.max(1.5, 2 * (R[0][3] || 1.5) / V.mpp); c.stroke();
     }
+    /* the beach huts (huts.js), each a little roof, the work hut named */
+    const HU = Engine.huts;
+    if (HU) for (const h of HU.huts) {
+      const [u, v] = toMap(V, h.p.x, h.p.z), s = Math.max(1, 1.6 / Math.max(V.mpp, 0.4)) * V.dpr;
+      c.save(); c.translate(u, v); c.rotate(-h.p.ry); c.fillStyle = KEY.hut; c.strokeStyle = 'rgba(20, 20, 18, 0.85)'; c.lineWidth = V.dpr; c.fillRect(-3 * s, -2.4 * s, 6 * s, 4.8 * s); c.strokeRect(-3 * s, -2.4 * s, 6 * s, 4.8 * s); c.restore();
+      if (h.p.kind === 'work') { c.font = `600 ${11 * V.dpr}px 'Instrument Sans', Arial, sans-serif`; c.textAlign = 'center'; c.fillStyle = 'rgba(255, 246, 228, 0.92)'; c.strokeStyle = 'rgba(12, 14, 12, 0.7)'; c.lineWidth = 3 * V.dpr; c.strokeText('Work hut', u, v + 16 * V.dpr); c.fillText('Work hut', u, v + 16 * V.dpr); }
+    }
   }
 
   /* the island's picture under a map's view (the open sea round it) */
@@ -264,7 +271,7 @@ const Minimap = (() => {
     btn = document.getElementById('map'); cv = document.getElementById('mapC'); g = cv.getContext('2d');
     dlg = document.getElementById('mapBig'); bcv = document.getElementById('mapBC'); bg = bcv.getContext('2d');
     document.getElementById('mbTitle').textContent = isle ? 'The island' : 'The coast';
-    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Huts', KEY.hut, 'bar'], ['Beach', rgb(COL.sand), 'bar'], ['Forest', rgb(COL.forest), 'bar']] : [['Beach', rgb(COL.sand), 'bar']]);
+    const key = [['You', KEY.you, 'dot'], ['Camp', KEY.camp, 'dot'], ['Van', KEY.van, 'bar']].concat(isle ? [['Huts', KEY.hut, 'bar'], ['Beach', rgb(COL.sand), 'bar'], ['Forest', rgb(COL.forest), 'bar']] : [['Huts', KEY.hut, 'bar'], ['Beach', rgb(COL.sand), 'bar']]);
     document.getElementById('mbKey').innerHTML = key.map(([t, c, s]) => `<li><i class="${s}" style="--c:${c}"></i>${t}</li>`).join('');
     btn.addEventListener('click', () => setOpen(!open));
     document.getElementById('mbClose').addEventListener('click', () => setOpen(false));

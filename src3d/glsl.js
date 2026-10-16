@@ -157,7 +157,12 @@ float shoreFloor(vec2 p, float s){ return isF(p).w; }
 uniform highp sampler2D uCoastT;   /* (x step: 0.5 m in row 0, 4 m in row 1) z of the shore · its slope · z of the forest edge · how far in behind that the open ground goes */
 uniform vec4 uCoastW;              /* the x the fine row holds (from, to), and the coarse */
 uniform float uTideZ;
+/* how far round the beach's loop the world's own frame has been carried back (m, a whole number of loops: engine.js
+   loopShift): the coast's numbers are kept along the beach as it goes on (where it is, not where the frame puts it), and
+   the patterns laid along it the same, so nothing jumps when the frame does */
+uniform float uLoopX;
 vec4 coastAt4(float x){
+  x += uLoopX;
   float row = 0.0, st = 0.5;
   if (x < uCoastW.x || x > uCoastW.y){ row = 1.0; st = 4.0; x = clamp(x, uCoastW.z, uCoastW.w); }
   float u = x/st, i0 = floor(u), f = u - i0;
@@ -181,7 +186,7 @@ ${Layout.isle ? ISLE_GL : `
 float shoreS(vec2 p){ vec3 c = coastAt(p.x); return (c.x + uTideZ - p.y)*inversesqrt(1.0 + c.y*c.y); }
 float shoreMeanS(vec2 p){ vec3 c = coastAt(p.x); return (c.x - p.y)*inversesqrt(1.0 + c.y*c.y); }
 vec2 shoreN(vec2 p){ float g = coastDZ(p.x); return vec2(g, -1.0)*inversesqrt(1.0 + g*g); }
-float shoreA(vec2 p){ return p.x; }
+float shoreA(vec2 p){ return p.x + uLoopX; }
 float shoreVeg(vec2 p){ return p.y - coastVeg(p.x); }
 vec4 shoreK1(vec2 p){ vec3 c = coastAt(p.x); return vec4(1.0, c.z - c.x, 1.0, 1.0); }
 vec4 shoreK2(vec2 p){ return vec4(0.0); }
@@ -190,7 +195,7 @@ float shoreFloor(vec2 p, float s){ return -0.06*max(s, 0.0); }
 struct ShoreQ { float s; float sm; float a; vec2 n; vec4 k1; vec4 k2; float h; float lg; };
 ShoreQ shoreQ(vec2 p){
   vec3 c = coastAt(p.x); float k = inversesqrt(1.0 + c.y*c.y); ShoreQ q;
-  q.sm = (c.x - p.y)*k; q.s = (c.x + uTideZ - p.y)*k; q.a = p.x; q.n = vec2(c.y, -1.0)*k; q.k1 = vec4(1.0, c.z - c.x, 1.0, 1.0); q.k2 = vec4(0.0); q.h = -0.06*max(q.s, 0.0); q.lg = 0.0;
+  q.sm = (c.x - p.y)*k; q.s = (c.x + uTideZ - p.y)*k; q.a = p.x + uLoopX; q.n = vec2(c.y, -1.0)*k; q.k1 = vec4(1.0, c.z - c.x, 1.0, 1.0); q.k2 = vec4(0.0); q.h = -0.06*max(q.s, 0.0); q.lg = 0.0;
   return q;
 }
 float shoreLag(vec2 p){ return 0.0; }
@@ -868,7 +873,7 @@ uniform float uMist, uWet, uRough, uPud;
 uniform float uTideHi;       /* how far up the beach the last high water reached (m, as uTideZ is now) */
 uniform vec3 uShC;          /* where the key light's shadow map is centred (x, z) and how far it reaches */
 uniform int uDbgG;
-${Layout.isle ? 'uniform vec4 uLawn[6];      /* the huts\' lawns (huts.js): x, z, how far out, how thick */' : ''}
+uniform vec4 uLawn[6];      /* the huts' lawns (huts.js): x, z, how far out, how thick */
 /* rain on water: rings from drops landing on a jittered grid */
 vec2 rainRings(vec2 p, float t){
   vec2 g = p*3.2, gi = floor(g), acc = vec2(0.0);
@@ -1098,7 +1103,8 @@ void main(){
   #ifdef FAR
     { vec2 nq = nearQ(vW.xz); if (nq.x > uNearRect.x + 0.3 && nq.x < uNearRect.z - 0.3 && nq.y > uNearRect.y + 0.3 && nq.y < uNearRect.w - 0.3) discard; }
   #endif
-  vec3 wp = vW; vec2 p = wp.xz;
+  /* (p: where along the beach as it goes on, for its patterns; pw: where in the world's frame, for what is in it) */
+  vec3 wp = vW; vec2 pw = wp.xz, p = pw + vec2(uLoopX, 0.0);
   gDx = dFdx(p); gDy = dFdy(p);
   vec3 V = normalize(cameraPosition - wp);
   float dist = length(cameraPosition - wp);
@@ -1106,7 +1112,7 @@ void main(){
   /* the shore here: how far out from the water's edge (s), where along the coast (a), the way to the sea (sn), what kind
      of shore; and the frame the surf's patterns are laid in, along the shore and out from it (on the coast that never
      ends, the world's own) */
-  ShoreQ sq = shoreQ(p);
+  ShoreQ sq = shoreQ(pw);
   float s = sq.s, a = sq.a;
   vec2 sn = sq.n;
   ${Layout.isle ? 'vec2 wq = vec2(a, -sq.sm);' : 'vec2 wq = p;'}
@@ -1114,16 +1120,16 @@ void main(){
   vec3 Lk = normalize(uKeyDir);
   /* the clouds' shadow here, and how much of the sun and the moon the camera sees past the clouds: their glitter on the
      sea goes as they do (it shone on under a cloud that hid the sun) */
-  float cs = cloudShadow(p)*isleSh(p);
+  float cs = cloudShadow(pw)*isleSh(pw);
   vec3 keyC = uKeyCol*cs;
   /* (the glitter is so bright that even a tenth of it still shines: a thin cloud lets some through, a thick one none) */
   float visS = vVis.x, visM = vVis.y;
   gSunK = visS;
   vec3 sunG = uSunGlit*visS*(0.35 + 0.65*cs), moonG = uMoonGlit*visM*(0.35 + 0.65*cs);
   /* artificial light only where there is any: round the camp, round the van, and in its headlights' reach */
-  bool camp = (uDbgG & 32) == 0 && (length(p - CAMP) < 24.0 || length(p - uVanPos.xz) < 14.0 || (uHead.w > 0.001 && length(p - uHead.xz) < 36.0) || torchNear(wp));
+  bool camp = (uDbgG & 32) == 0 && (length(pw - CAMP) < 24.0 || length(pw - uVanPos.xz) < 14.0 || (uHead.w > 0.001 && length(pw - uHead.xz) < 36.0) || torchNear(wp));
   vec3 art = vec3(0.0);
-  float shK = length(p - uShC.xy) < uShC.z ? mix(1.0, shadowAt(wp), uShadowK) : 1.0;
+  float shK = length(pw - uShC.xy) < uShC.z ? mix(1.0, shadowAt(wp), uShadowK) : 1.0;
   bool glit = dot(moonG + sunG, vec3(1.0)) > 1e-6;
 
   Wv w = Wv(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -1166,7 +1172,7 @@ void main(){
       if (i >= uNRip) break;
       vec4 R4 = texelFetch(uSurgeT, ivec2(i, 1), 0); float age = t - R4.z;
       if (R4.w <= 0.0 || age < 0.0 || age > 4.0) continue;
-      vec2 dv = p - R4.xy; float g = R4.w*exp(-dot(dv, dv)/(0.8 + age*4.5))*exp(-age/1.1);
+      vec2 dv = pw - R4.xy; float g = R4.w*exp(-dot(dv, dv)/(0.8 + age*4.5))*exp(-age/1.1);
       if (g < 0.004) continue;
       ripF = max(ripF, g*(0.6 + 0.4*smoothstep(0.35, 0.65, tN(p*0.9 + R4.xy, 3.0).r)));
     }
@@ -1195,15 +1201,15 @@ void main(){
     vec4 gs = gk > 0.0 ? tS(p + 1.7, 0.9) : vec4(0.5);
     vec4 dec = vec4(0.0), rel = vec4(0.5, 0.0, 0.0, 0.0);
     vec2 rg = vec2(0.0);
-    vec2 duv = (p - uDecalRect.xy)/uDecalRect.zw;
+    vec2 duv = (pw - uDecalRect.xy)/uDecalRect.zw;
     if (duv.x > 0.0 && duv.y > 0.0 && duv.x < 1.0 && duv.y < 1.0){
       dec = texture2D(uDecal, duv); rel = texture2D(uRelief, duv);
       vec2 e = vec2(0.02/uDecalRect.z, 0.02/uDecalRect.w);
       rg += vec2(texture2D(uRelief, duv + vec2(e.x, 0.0)).r - rel.r, texture2D(uRelief, duv + vec2(0.0, e.y)).r - rel.r)*4.5;
     }
-    float veg = smoothstep(-0.4, 1.4, shoreVeg(p) + (nm.r - 0.5)*1.6 + (nb.g - 0.5)*2.4);${Layout.isle ? `
+    float veg = smoothstep(-0.4, 1.4, shoreVeg(pw) + (nm.r - 0.5)*1.6 + (nb.g - 0.5)*2.4), lawnK = 0.0;
     /* (a hut's lawn: the grass's own ground under its blades, the sand coming back at its ragged edge) */
-    for (int i = 0; i < 6; i++){ vec4 L = uLawn[i]; if (L.z > 0.0) veg = max(veg, L.w*smoothstep(L.z*0.98, L.z*0.6, length(p - L.xy) + (nm.g - 0.5)*2.4)); }` : ''}
+    for (int i = 0; i < 6; i++){ vec4 L = uLawn[i]; if (L.z > 0.0){ float l = L.w*smoothstep(L.z*0.98, L.z*0.6, length(pw - L.xy) + (nm.g - 0.5)*2.4); lawnK = max(lawnK, l); veg = max(veg, l); } }
     float trample = rel.g;
     float dryness = smoothstep(-0.2, -3.5, s);
     /* the sand the falling tide has left since the last high water: still damp, darkest by the water, drying toward the
@@ -1269,7 +1275,7 @@ void main(){
       swd = mix(nearC, farC, smoothstep(10.0, 32.0, dist));${Layout.isle ? '' : `
       /* (along the beach the grass grows only on the open ground at its top (vergeBand, as grass.js's): further in, under
          the canopy, the forest's floor, dead leaves on dark earth) */
-      vec4 c4 = coastAt4(p.x); float kq = inversesqrt(1.0 + c4.y*c4.y), vb = vergeBand((p.y - c4.x)*kq, (c4.z - c4.x)*kq, c4.w*kq);
+      vec4 c4 = coastAt4(pw.x); float kq = inversesqrt(1.0 + c4.y*c4.y), vb = max(vergeBand((p.y - c4.x)*kq, (c4.z - c4.x)*kq, c4.w*kq), lawnK);
       vec3 litter = mix(vec3(0.07, 0.056, 0.038), vec3(0.11, 0.085, 0.052), g2.g)*(0.7 + 0.5*nb.g)*(0.85 + 0.3*g4.b);
       swd = mix(litter, swd, vb);`} }
     alb = mix(alb, ${Layout.isle ? `mix(swd, vec3(0.095, 0.083, 0.063)*(0.82 + 0.3*nb.r), mudK)` : `swd`}, veg);   /* (round the island, in the mangroves, their mud, not a green verge) */
