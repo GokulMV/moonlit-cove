@@ -241,7 +241,7 @@ body.walking #hud .dock, body.walking #hud #spots, body.walking #hud .hint { opa
 input[type="range"] { width: 140px; accent-color: var(--amber); }
 input[type="range"]:disabled { opacity: 0.35; }
 
-/* the door. While the cove is built: a ball bouncing on a floor of dots (loader.js), all of it transform and opacity
+/* the door. While the cove is built: coloured snakes gliding along a grid of dots (loader.js), all of it transform and opacity
    so the compositor can play it while the page is busy. Then a card over the live cove, which shows through softly
    blurred and dimmed until you step in; stepping in fades the veil, and the blur with it */
 .intro { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--gut); overflow: hidden; background: radial-gradient(ellipse 85% 75% at 50% 46%, rgba(7, 10, 16, 0.18), rgba(7, 10, 16, 0.64)); transition: opacity 1.2s cubic-bezier(.4, 0, .2, 1); }
@@ -249,34 +249,37 @@ input[type="range"]:disabled { opacity: 0.35; }
 .intro.ready { -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1); }
 #hud .intro.gone { opacity: 0; pointer-events: none; }
 
-.loader { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(130% 95% at 50% 30%, #121a29 0%, #0b0f18 50%, #06080d 100%); transition: opacity .9s cubic-bezier(.4, 0, .2, 1); }
+.loader { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(120% 90% at 50% 42%, #171615 0%, #0e0d0c 55%, #070706 100%); transition: opacity .9s cubic-bezier(.4, 0, .2, 1); }
 .intro.ready .loader { opacity: 0; }
 .ld-stage { position: absolute; inset: 0; }
 .ld-stage i { position: absolute; left: 0; top: 0; display: block; }
-.ld-pool { border-radius: 50%; background: radial-gradient(closest-side, rgba(150, 172, 214, 0.13), rgba(150, 172, 214, 0.05) 55%, rgba(150, 172, 214, 0)); }
-.ld-dot { border-radius: 50%; background: #dfe7f6; }
-.ld-ring { border-radius: 50%; border: 1.5px solid; opacity: 0; }
-.ld-ball { transform-origin: 0 0; }
-.ld-squash { transform-origin: 50% 100%; }
-.ld-shadow { border-radius: 50%; background: radial-gradient(closest-side, rgba(1, 2, 5, 0.95), rgba(1, 2, 5, 0.5) 55%, rgba(1, 2, 5, 0)); opacity: 0; }
-.ld-squash .ld-disc { inset: 0; width: auto; height: auto; border-radius: 50%; opacity: 0; }
-.ld-halo { border-radius: 50%; opacity: 0; }
-/* moonlight, amber, sea-teal, coral, lilac */
-.ld-disc.c0 { background: radial-gradient(circle at 34% 30%, #ffffff 0%, #e6ecf7 24%, #aebcd7 68%, #7c8cad 100%); }
-.ld-disc.c1 { background: radial-gradient(circle at 34% 30%, #fff3dc 0%, #f7c784 26%, #e39a46 68%, #a9662a 100%); }
-.ld-disc.c2 { background: radial-gradient(circle at 34% 30%, #e6fffb 0%, #8ae3d6 26%, #3aa99c 68%, #1d6b65 100%); }
-.ld-disc.c3 { background: radial-gradient(circle at 34% 30%, #ffece5 0%, #f8a68a 26%, #e0694c 68%, #a2412d 100%); }
-.ld-disc.c4 { background: radial-gradient(circle at 34% 30%, #f6f2ff 0%, #cdbcf6 26%, #9b83e1 68%, #6650a8 100%); }
-.ld-halo.c0 { background: radial-gradient(closest-side, rgba(205, 220, 248, 0.34), rgba(205, 220, 248, 0.1) 42%, rgba(205, 220, 248, 0)); }
-.ld-halo.c1 { background: radial-gradient(closest-side, rgba(244, 186, 108, 0.36), rgba(244, 186, 108, 0.1) 42%, rgba(244, 186, 108, 0)); }
-.ld-halo.c2 { background: radial-gradient(closest-side, rgba(76, 200, 184, 0.36), rgba(76, 200, 184, 0.1) 42%, rgba(76, 200, 184, 0)); }
-.ld-halo.c3 { background: radial-gradient(closest-side, rgba(242, 134, 104, 0.36), rgba(242, 134, 104, 0.1) 42%, rgba(242, 134, 104, 0)); }
-.ld-halo.c4 { background: radial-gradient(closest-side, rgba(184, 160, 242, 0.38), rgba(184, 160, 242, 0.1) 42%, rgba(184, 160, 242, 0)); }
-.ld-ring.c0 { border-color: rgba(214, 226, 248, 0.85); }
-.ld-ring.c1 { border-color: rgba(246, 192, 120, 0.9); }
-.ld-ring.c2 { border-color: rgba(98, 214, 198, 0.9); }
-.ld-ring.c3 { border-color: rgba(246, 146, 116, 0.9); }
-.ld-ring.c4 { border-color: rgba(196, 176, 246, 0.9); }
+/* the grid of dots standing up in front of you (the background's own pattern), brightest in the middle */
+.ld-stage .ld-grid { right: 0; bottom: 0; background-image: radial-gradient(circle, rgba(236, 230, 218, 0.22) 0 1.3px, rgba(236, 230, 218, 0) 1.9px);
+  -webkit-mask-image: radial-gradient(ellipse 60% 58% at 50% 45%, #000 38%, transparent 100%); mask-image: radial-gradient(ellipse 60% 58% at 50% 45%, #000 38%, transparent 100%); }
+.ld-stage .ld-vig { right: 0; bottom: 0; background: radial-gradient(ellipse 72% 68% at 50% 45%, rgba(7, 7, 6, 0) 58%, rgba(7, 7, 6, 0.88) 100%); }
+/* the snakes (loader.js): the trace each draws between the dots it joins, the dots it lights, its beads, its glow */
+.ld-trace { border-radius: 1px; opacity: 0; }
+.ld-node { width: 10px; height: 10px; border-radius: 50%; opacity: 0; }
+.ld-bead { border-radius: 50%; }
+.ld-glow { border-radius: 50%; }
+/* amber, sea-teal, coral, lilac, leaf */
+.ld-trace.s0 { background: rgb(242, 169, 72); } .ld-trace.s1 { background: rgb(63, 201, 181); } .ld-trace.s2 { background: rgb(242, 122, 94); } .ld-trace.s3 { background: rgb(169, 143, 242); } .ld-trace.s4 { background: rgb(147, 207, 98); }
+.ld-node.s0 { background: radial-gradient(closest-side, #ffe3b4 0 34%, rgba(242, 169, 72, 0.45) 56%, rgba(242, 169, 72, 0)); }
+.ld-node.s1 { background: radial-gradient(closest-side, #d2fff6 0 34%, rgba(63, 201, 181, 0.45) 56%, rgba(63, 201, 181, 0)); }
+.ld-node.s2 { background: radial-gradient(closest-side, #ffdcd2 0 34%, rgba(242, 122, 94, 0.45) 56%, rgba(242, 122, 94, 0)); }
+.ld-node.s3 { background: radial-gradient(closest-side, #efe8ff 0 34%, rgba(169, 143, 242, 0.45) 56%, rgba(169, 143, 242, 0)); }
+.ld-node.s4 { background: radial-gradient(closest-side, #e6ffd2 0 34%, rgba(147, 207, 98, 0.45) 56%, rgba(147, 207, 98, 0)); }
+.ld-bead.s0 { background: radial-gradient(circle at 35% 30%, #ffe2ae 0%, #f2a948 50%, #b9701f 100%); }
+.ld-bead.s1 { background: radial-gradient(circle at 35% 30%, #c9fff4 0%, #3fc9b5 50%, #1d7f73 100%); }
+.ld-bead.s2 { background: radial-gradient(circle at 35% 30%, #ffd8cc 0%, #f27a5e 50%, #b0442d 100%); }
+.ld-bead.s3 { background: radial-gradient(circle at 35% 30%, #ece4ff 0%, #a98ff2 50%, #6650b0 100%); }
+.ld-bead.s4 { background: radial-gradient(circle at 35% 30%, #e2ffc9 0%, #93cf62 50%, #4f8a2c 100%); }
+.ld-bead.head { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.ld-glow.s0 { background: radial-gradient(closest-side, rgba(242, 169, 72, 0.3), rgba(242, 169, 72, 0.08) 45%, rgba(242, 169, 72, 0)); }
+.ld-glow.s1 { background: radial-gradient(closest-side, rgba(63, 201, 181, 0.3), rgba(63, 201, 181, 0.08) 45%, rgba(63, 201, 181, 0)); }
+.ld-glow.s2 { background: radial-gradient(closest-side, rgba(242, 122, 94, 0.3), rgba(242, 122, 94, 0.08) 45%, rgba(242, 122, 94, 0)); }
+.ld-glow.s3 { background: radial-gradient(closest-side, rgba(169, 143, 242, 0.32), rgba(169, 143, 242, 0.08) 45%, rgba(169, 143, 242, 0)); }
+.ld-glow.s4 { background: radial-gradient(closest-side, rgba(147, 207, 98, 0.3), rgba(147, 207, 98, 0.08) 45%, rgba(147, 207, 98, 0)); }
 .intro-note { position: absolute; left: var(--gut); right: var(--gut); bottom: calc(env(safe-area-inset-bottom, 0px) + 7vh); margin: 0; text-align: center; font: 400 12px/1.5 var(--mono); letter-spacing: 0.04em; color: var(--dim); transition: opacity .5s, visibility 0s .5s; }
 .intro.ready .intro-note { opacity: 0; visibility: hidden; }
 

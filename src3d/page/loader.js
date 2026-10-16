@@ -1,12 +1,14 @@
 /* ─────────────────────────────────────────────────────────────
-   loader.js — what shows while the cove is being built: a ball
-   bouncing on a floor of dots, changing colour as it lands, every
-   landing sending a ripple out through the dots; after a few
-   bounces it hops off somewhere else and starts again. It runs
-   first, before three.js, and it is nothing but transform and
-   opacity keyframes (Web Animations), worked out once here: the
-   compositor plays them by itself, so they stay smooth while the
-   page is busy for a few seconds building the scene.
+   loader.js — what shows while the cove is being built: a grid of
+   dots standing up in front of you, and coloured snakes gliding
+   along its lines from dot to dot, each round its own wandering
+   loop, the dots they pass lighting up in their colour and a trace
+   of it drawn behind them, joining the dots, that fades as they go
+   on. It runs first, before three.js, and it is nothing but
+   transform and opacity keyframes (Web Animations), worked out once
+   here: the compositor plays them by itself, so they stay smooth
+   while the page is busy for a few seconds building the scene. The
+   grid itself is the background's own pattern, drawn once.
    ───────────────────────────────────────────────────────────── */
 const Loader = (() => {
   const stage = document.getElementById('ldStage');
@@ -14,157 +16,133 @@ const Loader = (() => {
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches || !stage.animate;
   let anims = [], live = true, resizeT = 0;
 
-  /* moonlight, amber, sea-teal, coral, lilac (classes c0…c4), and the order the ball wears them in, one per landing:
-     shuffled by hand to look random, never the same twice running, round the loop too */
-  const ORDER = [1, 2, 4, 3, 0, 2, 1, 4, 0, 3, 2, 4];
-  /* where it lands, as fractions of the floor's half-width and half-depth: three landings at each, then on to the next */
-  const SPOTS = [[-0.5, 0.2], [0.52, -0.38], [0.18, 0.66], [-0.32, -0.46]];
-  /* the bounces (heights as fractions of the big hop between spots), how long the ball stays down, gravity */
-  const BOUNCES = [0.7, 0.45], CONTACT = 0.09, G = 6.6;
-  const air = h => 2 * Math.sqrt(2 * h / G);
-  /* ripples run across the floor at v floor units a second and die out by `reach`; the coloured ring at the landing
-     spot keeps pace with them for its first RING units */
-  const RIP = { v: 1.35, reach: 2.2, rise: 0.09, fall: 0.62 }, RING = 0.75;
-  /* a thrown ball rises easing out and falls easing in */
-  const UP = 'cubic-bezier(0.5, 1, 0.89, 1)', DOWN = 'cubic-bezier(0.11, 0, 0.5, 0)';
+  /* the snakes' colours: amber, sea-teal, coral, lilac, leaf (classes s0…s4) */
+  const NS = 5;
+  /* how fast they go (grid steps a second), how long each is (steps), how many beads make up its body, how long the
+     trace it draws stays lit after its tail has passed (s) and how long it takes to fade */
+  const V = 2.3, LEN = 3.4, BEADS = 44, HOLD = 1.1, FADE = 3.2;
 
-  /* the choreography, in seconds: each step starts as the ball touches down, stays down for CONTACT, and is aloft
-     for air(h); the third step at each spot is the hop to the next one. `hit` is how hard it landed */
-  const seq = []; let LOOP = 0;
-  SPOTS.forEach((_, k) => [...BOUNCES, 1].forEach((h, j) => {
-    seq.push({ t: LOOP, h, at: k, to: j === BOUNCES.length ? (k + 1) % SPOTS.length : k, hit: j ? Math.sqrt(BOUNCES[j - 1]) : 1 });
-    LOOP += CONTACT + air(h);
-  }));
-  /* it starts high in the air, halfway along the hop from the first spot to the second */
-  const PHASE = seq[2].t + CONTACT + air(1) / 2;
-  const off = t => Math.min(1, Math.max(0, t / LOOP));
+  /* numbers of our own, the same each time (a loader that looked different every load would be no worse, but this way
+     what was tuned is what shows) */
+  let seed = 0x5eed1e;
+  const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
   const el = (cls, css) => { const e = document.createElement('i'); e.className = cls; if (css) Object.assign(e.style, css); stage.appendChild(e); return e; };
   const px = v => v.toFixed(1) + 'px';
-  function play(e, frames) {
+  function play(e, frames, T, delay) {
     if (still) return;
-    const a = e.animate(frames, { duration: LOOP * 1000, iterations: Infinity, fill: 'both', delay: -PHASE * 1000 });
-    anims.push(a);
+    anims.push(e.animate(frames, { duration: T * 1000, iterations: Infinity, fill: 'both', delay: delay * 1000 }));
+  }
+  /* a signal over one loop of T seconds from points [t, value] that may run past either end: wrapped into the loop,
+     its value at the loop's ends worked out, so it runs on round the loop without a seam */
+  function cyc(pts, T) {
+    const all = [];
+    for (const k of [-1, 0, 1]) for (const [t, v] of pts) all.push([t + k * T, v]);
+    all.sort((a, b) => a[0] - b[0]);
+    const at = t => { for (let i = 0; i < all.length - 1; i++) if (all[i][0] <= t && all[i + 1][0] >= t) { const [t0, v0] = all[i], [t1, v1] = all[i + 1]; return t1 > t0 ? v0 + (v1 - v0) * (t - t0) / (t1 - t0) : v1; } return 0; };
+    const out = [[0, at(0)]]; for (const [t, v] of all) if (t > 0 && t < T) out.push([t, v]); out.push([T, at(T)]);
+    return out;
+  }
+
+  const DIR = { R: [1, 0], L: [-1, 0], D: [0, 1], U: [0, -1] }, BACK = { R: 'L', L: 'R', D: 'U', U: 'D' };
+  /* a snake's round: through a few places in its own part of the grid, in turn round its middle, and back to the first,
+     along the grid's lines one step at a time — mostly straight on, turning now and then, never doubling back */
+  function round(c, ri, rj, IR, JR) {
+    const n = 5 + Math.floor(rnd() * 3), pts = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k + 0.35 * rnd()) / n * Math.PI * 2, r = 0.45 + 0.55 * rnd();
+      let i = Math.round(c[0] + Math.cos(a) * ri * r), j = Math.round(c[1] + Math.sin(a) * rj * r);
+      /* (kept inside the grid's bright middle) */
+      const q = Math.hypot(i / IR, j / JR); if (q > 1) { i = Math.round(i / q); j = Math.round(j / q); }
+      pts.push([i, j]);
+    }
+    const steps = []; let cur = pts[0].slice(), prev = null;
+    for (let w = 1; w <= n; w++) {
+      const tg = pts[w % n];
+      for (let g = 0; g < 400 && (cur[0] !== tg[0] || cur[1] !== tg[1]); g++) {
+        const dx = tg[0] - cur[0], dy = tg[1] - cur[1], ok = [];
+        if (dx > 0) ok.push('R'); if (dx < 0) ok.push('L'); if (dy > 0) ok.push('D'); if (dy < 0) ok.push('U');
+        const fw = ok.filter(d => d !== BACK[prev]);
+        let d;
+        if (!fw.length) d = prev === 'L' || prev === 'R' ? (rnd() < 0.5 ? 'U' : 'D') : (rnd() < 0.5 ? 'L' : 'R');
+        else if (fw.includes(prev) && rnd() < 0.72) d = prev;
+        else d = fw[Math.floor(rnd() * fw.length)];
+        steps.push(d); cur = [cur[0] + DIR[d][0], cur[1] + DIR[d][1]]; prev = d;
+      }
+    }
+    /* (no doubling back anywhere, round the join too) */
+    let start = pts[0].slice();
+    for (let changed = true; changed && steps.length > 4;) {
+      changed = false;
+      for (let i = 0; i < steps.length - 1; i++) if (steps[i + 1] === BACK[steps[i]]) { steps.splice(i, 2); changed = true; break; }
+      if (!changed && steps.length > 4 && steps[0] === BACK[steps[steps.length - 1]]) { const d = steps.pop(); steps.shift(); start = [start[0] - DIR[d][0], start[1] - DIR[d][1]]; changed = true; }
+    }
+    /* its points, one a step */
+    const P = [start]; for (const d of steps) { const p = P[P.length - 1]; P.push([p[0] + DIR[d][0], p[1] + DIR[d][1]]); }
+    return { steps, P };
   }
 
   function build() {
-    const W = innerWidth, H = innerHeight, tall = W < H;
-    /* the floor, seen from above and in front: x across, z away from you, the eye `cam` above it. A point on it lands
-       on screen at (cx + f·x/z, hy + f·cam/z), so the rows crowd towards the horizon and everything shrinks with
-       distance. Sized so the floor is about a third of the screen wide and deep, its near edge low on the screen */
-    const Z0 = 2.2, Rx = tall ? 1.3 : 2.3, Rz = tall ? 1.3 : 1.2, z1 = Z0 - Rz, z2 = Z0 + Rz;
-    const f = (tall ? 0.42 * W : Math.min(0.3 * W, 0.5 * H)) * Z0 / Rx, cx = W / 2;
-    const cam = Math.max(0.9, Math.min(1.6, (tall ? 0.3 : 0.39) * H / (f * (1 / z1 - 1 / z2)))), hy = (tall ? 0.8 : 0.86) * H - f * cam / z1;
-    const at = (x, z) => [cx + f * x / z, hy + f * cam / z, Z0 / z];
-    const spot = SPOTS.map(([u, v]) => { const x = u * Rx * 0.62, z = Z0 + v * Rz * 0.62, p = at(x, z); return { x, z, X: p[0], Y: p[1], s: p[2] }; });
-    const ball = 0.12 * f / Z0, hop = 0.95 * f / Z0;
+    const W = innerWidth, H = innerHeight;
+    /* the grid: a dot every S pixels, standing up in front of you, its middle a little above the screen's */
+    const S = Math.round(Math.max(22, Math.min(38, Math.min(W, H) / 19))), cx = Math.round(W / 2), cy = Math.round(H * 0.45);
+    const X = i => cx + i * S, Y = j => cy + j * S;
+    el('ld-grid', { backgroundSize: `${S}px ${S}px`, backgroundPosition: `${px(cx - S / 2)} ${px(cy - S / 2)}` });
+    /* where the snakes go: the grid's bright middle, an ellipse; each its own part of it, round its own middle */
+    const IR = Math.max(4, Math.floor(W * 0.38 / S)), JR = Math.max(4, Math.floor(H * 0.3 / S));
+    const n = W < 520 ? 4 : NS;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n + 0.08) * Math.PI * 2, c = [Math.round(Math.cos(a) * IR * 0.42), Math.round(Math.sin(a) * JR * 0.42)];
+      const R = round(c, IR * 0.6, JR * 0.6, IR, JR), N = R.steps.length; if (N < 6) continue;
+      const T = N / V, lag = LEN / V, phase = lag + rnd() * T;
+      /* (its corners, where its straight runs meet: the head goes straight between them, at a steady pace) */
+      const corners = [0]; for (let s = 1; s < N; s++) if (R.steps[s] !== R.steps[s - 1]) corners.push(s); corners.push(N);
+      const tf = s => `translate(${px(X(R.P[s][0]))}, ${px(Y(R.P[s][1]))})`;
+      const path = corners.map(s => ({ offset: s / N, transform: tf(s), easing: 'linear' }));
 
-    /* a faint pool of light on the floor, so the ball's shadow has something to fall on */
-    const pw = 2.4 * Rx * f / Z0, y1 = at(0, z1)[1], y2 = at(0, z2)[1], ph = (y1 - y2) * 1.3;
-    el('ld-pool', { width: px(pw), height: px(ph), left: px(cx - pw / 2), top: px((y1 + y2) / 2 - ph / 2) });
-
-    /* the dots, in offset rows; each brightens and swells as a ripple passes */
-    const S = 0.2;
-    for (let r = 0, z = Z0 - Rz; z <= Z0 + Rz + 1e-6; r++, z += S) {
-      for (let x = -Rx - (r % 2 ? S / 2 : 0); x <= Rx + 1e-6; x += S) {
-        const q = (x / Rx) ** 2 + ((z - Z0) / Rz) ** 2; if (q > 1) continue;
-        const [X, Y, s] = at(x, z), edge = 1 - Math.max(0, (Math.sqrt(q) - 0.55) / 0.45) ** 2, rad = Math.max(0.8, 0.011 * f / z);
-        const base = (0.14 + 0.2 * Math.min(1, s - 0.6)) * edge, peak = Math.min(1, 0.55 + 0.45 * edge);
-        const d = el('ld-dot', { width: px(rad * 2), height: px(rad * 2), left: px(X - rad), top: px(Y - rad), opacity: base.toFixed(3) });
-        const pulses = [];
-        seq.forEach((g, i) => {
-          const p = spot[g.at], dist = Math.hypot(x - p.x, z - p.z); if (dist >= RIP.reach) return;
-          const a = g.hit * (1 - dist / RIP.reach) ** 1.6; if (a < 0.04) return;
-          for (const sh of [-LOOP, 0, LOOP]) { const s0 = g.t + sh + dist / RIP.v; if (s0 + RIP.rise + RIP.fall > 0 && s0 < LOOP) pulses.push({ s: s0, a }); }
-        });
-        if (!pulses.length) continue;
-        pulses.sort((a, b) => a.s - b.s);
-        play(d, track(pulses).map(k => ({ offset: off(k.t), opacity: (base + (peak - base) * k.v).toFixed(3), transform: `scale(${(1 + 1.4 * k.v).toFixed(3)})`, easing: k.e })));
+      /* the trace it draws behind it, a stroke between each pair of dots it joins: drawn out as the head runs along it,
+         lit while the body lies on it, then fading */
+      R.steps.forEach((d, s) => {
+        const [i, j] = R.P[s], [i2, j2] = R.P[s + 1], hz = d === 'L' || d === 'R';
+        const x0 = Math.min(X(i), X(i2)), y0 = Math.min(Y(j), Y(j2));
+        const bar = el(`ld-trace s${k}`, hz ? { width: px(S), height: '2px', left: px(x0), top: px(y0 - 1) } : { width: '2px', height: px(S), left: px(x0 - 1), top: px(y0) });
+        bar.style.transformOrigin = { R: 'left center', L: 'right center', D: 'center top', U: 'center bottom' }[d];
+        const t0 = s / V, t1 = (s + 1) / V, t2 = t1 + LEN / V + HOLD, t3 = t2 + FADE;
+        const op = cyc([[t0 - 0.001, 0], [t0, 0.85], [t2, 0.55], [t3, 0]], T), sc = cyc([[t0 - 0.001, 0], [t0, 0], [t1, 1], [t3, 1], [t3 + 0.001, 0]], T);
+        const times = [...new Set([...op, ...sc].map(p => p[0]))].sort((a, b) => a - b);
+        const val = (L, t) => { for (let q = 0; q < L.length - 1; q++) if (L[q][0] <= t && L[q + 1][0] >= t) return L[q + 1][0] > L[q][0] ? L[q][1] + (L[q + 1][1] - L[q][1]) * (t - L[q][0]) / (L[q + 1][0] - L[q][0]) : L[q + 1][1]; return L[L.length - 1][1]; };
+        if (still) { const age = ((phase - t0) % T + T) % T; bar.style.opacity = age < LEN / V + HOLD ? 0.7 : 0; return; }
+        play(bar, times.map(t => ({ offset: t / T, opacity: val(op, t).toFixed(3), transform: `${hz ? 'scaleX' : 'scaleY'}(${val(sc, t).toFixed(3)})` })), T, -phase);
+      });
+      /* the dots it passes: lit in its colour as its head comes over them, swelling a little, then dimming */
+      const lit = new Map();
+      for (let s = 0; s <= N; s++) { const key = R.P[s % N].join(','); if (!lit.has(key)) lit.set(key, []); lit.get(key).push(s / V); }
+      for (const [key, ts] of lit) {
+        const [i, j] = key.split(',').map(Number), dot = el(`ld-node s${k}`, { left: px(X(i) - 5), top: px(Y(j) - 5) });
+        if (still) continue;
+        const pts = []; for (const t of [...new Set(ts.map(t => +(t % T).toFixed(4)))]) pts.push([t - 0.001, 0], [t + 0.06, 1], [t + 0.45, 0.6], [t + 1.6, 0]);
+        pts.sort((a, b) => a[0] - b[0]);
+        const sig = cyc(pts, T);
+        play(dot, sig.map(([t, v]) => ({ offset: t / T, opacity: v.toFixed(3), transform: `scale(${(0.5 + 0.7 * v).toFixed(3)})` })), T, -phase);
+      }
+      /* the snake: a soft glow round its head, under it; beads along its path, each a little behind the one before (so it
+         bends round the corners as the head did), thinning and fading to the tail */
+      const hd = Math.max(9, S * 0.34);
+      const glow = el(`ld-glow s${k}`, { width: px(hd * 7), height: px(hd * 7), marginLeft: px(-hd * 3.5), marginTop: px(-hd * 3.5) });
+      if (still) glow.style.transform = tf(Math.floor((phase * V) % N)); else play(glow, path, T, -phase);
+      for (let b = BEADS - 1; b >= 0; b--) {
+        const f = b / (BEADS - 1), d = hd * (1 - 0.6 * Math.pow(f, 1.3)), bead = el(`ld-bead s${k}${b === 0 ? ' head' : ''}`, { width: px(d), height: px(d), marginLeft: px(-d / 2), marginTop: px(-d / 2), opacity: (1 - 0.45 * f * f).toFixed(3) });
+        const back = f * LEN / V;
+        if (still) { const s = Math.floor(((phase - back) * V % N + N) % N); bead.style.transform = tf(s); continue; }
+        play(bead, path, T, -(phase - back));
       }
     }
-
-    /* a coloured ring at each landing, in the colour the ball has just turned, keeping pace with the ripple */
-    seq.forEach((g, i) => {
-      const p = spot[g.at], w = 2 * RING * f / p.z, h = w * cam / p.z, T = RING / RIP.v, L = g.t;
-      const ring = el('ld-ring c' + ORDER[i], { width: px(w), height: px(h), left: px(p.X - w / 2), top: px(p.Y - h / 2) });
-      const s0 = 'scale(0.08)', fr = [];
-      if (L > 0) fr.push({ offset: 0, opacity: 0, transform: s0 }, { offset: off(L), opacity: 0, transform: s0 });
-      fr.push({ offset: off(L), opacity: 0.9, transform: s0 }, { offset: off(L + T * 0.35), opacity: 0.5, transform: 'scale(0.4)' }, { offset: off(L + T), opacity: 0, transform: 'scale(1)' }, { offset: 1, opacity: 0, transform: s0 });
-      play(ring, fr);
-    });
-
-    /* the ball: where it is on the floor (and how near), how high it is, and how squashed; its shadow stays on the floor */
-    const b = el('ld-ball'), sd = document.createElement('i'), hp = document.createElement('i'), sq = document.createElement('i');
-    sd.className = 'ld-shadow'; hp.className = 'ld-hop'; sq.className = 'ld-squash';
-    const sw = ball * 2.8, shh = sw * cam / Z0;
-    Object.assign(sd.style, { width: px(sw), height: px(shh), left: px(-sw / 2), top: px(-shh / 2) });
-    Object.assign(sq.style, { width: px(ball * 2), height: px(ball * 2), left: px(-ball), top: px(-ball * 2) });
-    b.append(sd, hp); hp.appendChild(sq);
-    const halos = [], discs = [];
-    for (let c = 0; c < 5; c++) {
-      const h = document.createElement('i'); h.className = 'ld-halo c' + c;
-      Object.assign(h.style, { width: px(ball * 9), height: px(ball * 9), left: px(-ball * 4.5), top: px(-ball * 5.5) });
-      hp.insertBefore(h, sq); halos.push(h);
-      const d = document.createElement('i'); d.className = 'ld-disc c' + c; sq.appendChild(d); discs.push(d);
-    }
-    const tf = p => `translate(${px(p.X)}, ${px(p.Y)}) scale(${p.s.toFixed(4)})`;
-    if (still) {
-      /* standing still: at rest on the first spot, in moonlight */
-      b.style.transform = tf(spot[0]); halos[0].style.opacity = 1; discs[0].style.opacity = 1; sd.style.opacity = 0.85;
-      return;
-    }
-    const pos = [], hgt = [], sqz = [], shd = [];
-    const sc = (x, y) => `scale(${x.toFixed(3)}, ${y.toFixed(3)})`;
-    seq.forEach((g, i) => {
-      const L = g.t, up = L + CONTACT, top = up + air(g.h) / 2, next = i + 1 < seq.length ? seq[i + 1].t : LOOP, e = g.hit, n = Math.sqrt(g.h);
-      pos.push({ offset: off(L), transform: tf(spot[g.at]), easing: 'linear' });
-      if (g.to !== g.at) pos.push({ offset: off(up), transform: tf(spot[g.at]), easing: 'linear' });
-      hgt.push({ offset: off(L), transform: 'translateY(0px)', easing: 'linear' }, { offset: off(up), transform: 'translateY(0px)', easing: UP }, { offset: off(top), transform: `translateY(${px(-g.h * hop)})`, easing: DOWN });
-      sqz.push({ offset: off(L), transform: sc(1 + 0.08 * e, 1 - 0.07 * e), easing: 'cubic-bezier(.2, .8, .3, 1)' },
-        { offset: off(L + 0.045), transform: sc(1 + 0.3 * e, 1 - 0.28 * e), easing: 'ease-in-out' },
-        { offset: off(up), transform: sc(1 - 0.12 * e, 1 + 0.14 * e), easing: 'ease-out' },
-        { offset: off(up + 0.24), transform: sc(1, 1), easing: 'linear' },
-        { offset: off(next - 0.09), transform: sc(1, 1), easing: 'ease-in' },
-        { offset: off(next - 0.006), transform: sc(1 - 0.07 * n, 1 + 0.09 * n), easing: 'linear' });
-      shd.push({ offset: off(L), transform: 'scale(1)', opacity: 0.85, easing: 'linear' }, { offset: off(up), transform: 'scale(1)', opacity: 0.85, easing: UP }, { offset: off(top), transform: `scale(${(1 - 0.5 * g.h).toFixed(3)})`, opacity: (0.85 * (1 - 0.7 * g.h)).toFixed(3), easing: DOWN });
-    });
-    pos.push({ offset: 1, transform: tf(spot[0]) }); hgt.push({ offset: 1, transform: 'translateY(0px)' });
-    sqz.push(Object.assign({}, sqz[0], { offset: 1 })); shd.push({ offset: 1, transform: 'scale(1)', opacity: 0.85 });
-    play(b, pos); play(hp, hgt); play(sq, sqz); play(sd, shd);
-
-    /* colour: one layer per colour, since colour itself is not composited. The discs change over with the upper one
-       fading while the lower one switches under it, so the ball is never see-through; the soft glows just cross-fade */
-    const FD = 0.16, FH = 0.3, disc = [0, 1, 2, 3, 4].map(() => []), halo = [0, 1, 2, 3, 4].map(() => []);
-    const last = ORDER[ORDER.length - 1];
-    for (let c = 0; c < 5; c++) { const v = c === last ? 1 : 0; disc[c].push([0, v]); halo[c].push([0, v]); }
-    ORDER.forEach((n, i) => {
-      const L = seq[i].t, p = ORDER[(i + ORDER.length - 1) % ORDER.length];
-      if (n > p) { disc[n].push([L, 0], [L + FD, 1]); disc[p].push([L + FD, 1], [L + FD, 0]); }
-      else { disc[n].push([L, 0], [L, 1]); disc[p].push([L, 1], [L + FD, 0]); }
-      halo[n].push([L, 0], [L + FH, 1]); halo[p].push([L, 1], [L + FH, 0]);
-    });
-    const fade = pts => { const end = pts[pts.length - 1][1]; return pts.concat([[LOOP, end]]).map(([t, v]) => ({ offset: off(t), opacity: v, easing: 'ease-in-out' })); };
-    for (let c = 0; c < 5; c++) { play(discs[c], fade(disc[c])); play(halos[c], fade(halo[c])); }
-  }
-
-  /* one dot's brightness over the loop (0 at rest, up to 1), from the ripples that reach it: each rises quickly and
-     ebbs; one arriving before the last has ebbed carries on from where that one had got to. Worked out across three
-     loops' worth of landings, then cut to one, so it runs on round the loop without a seam */
-  function track(pulses) {
-    const k = [];
-    const valueAt = t => { for (let j = k.length - 1; j >= 0; j--) if (k[j].t <= t) { const n = k[j + 1]; return n ? k[j].v + (n.v - k[j].v) * (t - k[j].t) / Math.max(1e-6, n.t - k[j].t) : k[j].v; } return 0; };
-    for (const p of pulses) {
-      let v0 = 0;
-      if (k.length && k[k.length - 1].t > p.s) { v0 = valueAt(p.s); while (k.length && k[k.length - 1].t > p.s) k.pop(); }
-      k.push({ t: p.s, v: v0, e: 'cubic-bezier(.3, .7, .4, 1)' }, { t: p.s + RIP.rise, v: Math.max(p.a, v0), e: 'cubic-bezier(.45, 0, .55, 1)' }, { t: p.s + RIP.rise + RIP.fall, v: 0, e: 'linear' });
-    }
-    const v0 = valueAt(0); let e0 = 'linear';
-    for (const q of k) { if (q.t <= 0) e0 = q.e; else break; }
-    return [{ t: 0, v: v0, e: e0 }, ...k.filter(q => q.t > 0 && q.t < LOOP), { t: LOOP, v: v0, e: 'linear' }];
+    /* (the grid fading out into the dark toward the screen's edges) */
+    el('ld-vig');
   }
 
   function clear() { anims.forEach(a => a.cancel()); anims = []; stage.textContent = ''; }
-  function onResize() { clearTimeout(resizeT); resizeT = setTimeout(() => { if (live) { clear(); build(); } }, 200); }
+  function onResize() { clearTimeout(resizeT); resizeT = setTimeout(() => { if (live) { clear(); seed = 0x5eed1e; build(); } }, 200); }
   /* the cove is up and the loader has faded: let the compositor go */
   function stop() { if (!live) return; live = false; clearTimeout(resizeT); removeEventListener('resize', onResize); clear(); }
 
