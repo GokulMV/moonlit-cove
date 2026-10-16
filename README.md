@@ -1,6 +1,6 @@
 # Moonlit Cove
 
-GK’s Hideaway: GokulMV's portfolio, built as a beach camp on a small round island to explore under a live sky.
+GK’s Hideaway: GokulMV's portfolio, built as a beach camp to explore under a live night sky.
 
 The résumé is part of the camp. The basket holds blueprints of the architecture, the clipboard on the van lists what it's built with, the journal by the fire has stories from the build, and contact is a letter in a bottle. The sky follows the visitor's local time with the real moon, stars and planets, and the tide follows the moon.
 
@@ -8,19 +8,15 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 
 ## In the cove
 
-- Walk the beach all the way round the island (1.76 km of it, no rocks), wade out into the sea, or let it walk itself
-- Walk into the rainforest anywhere: it is dense, and only the trunks stand in your way; wild pigs and macaques along its edge
-- Five beach huts at the forest's edge: open the doors and shutters, light the lamps (they come on by themselves at dusk), lie in the hammock; the work hut keeps the résumé on boards on its walls
-- Snow, when the weather turns to it (Settings → Weather, or now and then by itself): it lies on the sand, the roofs and the leaves and melts in the sun; roll a snowball (B) and stack three for a snowman
+- Walk the beach and out onto the reef, or let it walk itself
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands
 - Pick fruit round the camp (mango, rambutan, papaya, banana, coconuts): every tree flowers, sets fruit, ripens and drops it to rot on the ground, round after round, about every 15 minutes (faster with the time flow up); a fruit keeps ripening in your hand, and you can eat it when it's ripe
-- Drive the van round the island, and pitch camp anywhere
+- Drive the van down a coast that never repeats, and pitch camp anywhere
 - Let a sky lantern go with a wish, pinned to a board by the fire for everyone to read
 - Draw on the sketchboard and leave it in the toolbox for others to open
 - Sit by the fire and play the radio: world radio, your own songs, or a Spotify link pasted in
 - Watch it full screen, nothing over it, for as long as you like (Esc to leave)
 - Choose where the sun and moon go (Settings → Sky): on the true compass, rising out of the sea ahead and setting behind the camp, or across the sky in front of it
-- The endless coast the cove used to be is still there at `?classic`
 
 ## Run it locally
 
@@ -50,7 +46,7 @@ The `Dockerfile` builds the page and runs `server.js`. Railway deploys it from G
 ## Project layout
 
 ```
-src3d/          the engine: sky, sea, the island and its forest, grass, huts, snow, camp, wildlife, sound and the render loop
+src3d/          the engine: sky, sea, coast, camp, wildlife, sound and the render loop
 src3d/models/   the hand-built models: camp gear, beach finds and creatures
 src3d/page/     the page: markup, styles and the résumé text (content.js)
 assets/         the sounds
@@ -67,7 +63,6 @@ The full list is in the cove itself, under **Credits and licences**.
 - [three.js](https://github.com/mrdoob/three.js) (MIT)
 - Sun and moon positions: formulas from [SunCalc](https://github.com/mourner/suncalc) (BSD-2-Clause)
 - Stars and the Milky Way: data from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD-3-Clause)
-- Grass: after SimonDev's [Quick_Grass](https://github.com/simondevyoutube/Quick_Grass) (MIT) and Ghost of Tsushima's grass (Sucker Punch, GDC 2021); written afresh
 - Clouds: after takram's [three-clouds](https://github.com/takram-design-engineering/three-geospatial), Sébastien Hillaire's [TileableVolumeNoise](https://github.com/sebh/TileableVolumeNoise) and MJP's Catmull-Rom sampling (all MIT)
 - Fonts: Fraunces, Instrument Sans, Caveat and JetBrains Mono (SIL OFL 1.1), via [Fontsource](https://github.com/fontsource/fontsource)
 - Sounds: the [Moodist](https://github.com/remvze/moodist) library (Pixabay Content License and CC0) and Kenney's [Starter Kit Racing](https://github.com/KenneyNL/Starter-Kit-Racing) (CC0)

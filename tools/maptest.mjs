@@ -3,7 +3,7 @@
 import { open } from './lib.mjs';
 import path from 'path';
 const isle = (process.argv[2] || 'island') === 'island', tag = isle ? 'isle' : 'coast';
-const { browser, page, logs } = await open({ w: 1280, h: 800, rs: 0.3, hour: 10, dtCap: 0.25, query: isle ? '' : '?classic', tz: 'Asia/Kolkata' });
+const { browser, page, logs } = await open({ w: 1280, h: 800, rs: 0.3, hour: 10, dtCap: 0.25, query: isle ? '?island' : '', tz: 'Asia/Kolkata' });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const shot = (name, el) => el ? page.locator(el).screenshot({ path: path.join('shots', `map_${tag}_${name}.png`), timeout: 180000 }) : page.screenshot({ path: path.join('shots', `map_${tag}_${name}.png`), timeout: 180000 });
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fails++; };
