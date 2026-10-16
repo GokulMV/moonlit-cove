@@ -11,7 +11,7 @@ import { open } from './lib.mjs';
 import fs from 'fs'; import path from 'path';
 const [file, prefix = 'tour', where = 'island', W = '1280', H = '720', RS = '1', MSAA = '0'] = process.argv.slice(2);
 const stops = JSON.parse(fs.readFileSync(file, 'utf8')), isle = where === 'island';
-const { browser, page, logs } = await open({ w: +W, h: +H, rs: +RS, msaa: +MSAA, hour: stops[0].hour ?? 10, dtCap: 0.25, query: isle ? '?island' : '', tz: 'Asia/Kolkata' });
+const { browser, page, logs } = await open({ w: +W, h: +H, rs: +RS, msaa: +MSAA, hour: stops[0].hour ?? 10, dtCap: 0.25, query: isle ? '?island' : '', tz: process.env.TOUR_TZ || 'Asia/Kolkata' });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 const D = Math.PI / 180, t0 = Date.now();
 const dir = (h, p) => [-Math.cos(h * D) * Math.cos(p * D), Math.sin(p * D), -Math.sin(h * D) * Math.cos(p * D)];   /* (heading 0 north (−x), 90 east (−z)) */

@@ -697,7 +697,7 @@ vec3 artLight(vec3 wp, vec3 n){
 
   /* shared wave height field: tide swells (6) and the swells raised by clicks (any number of them) */
   const WAVEH = `
-#define NWV 8
+#define NWV ${Layout.isle ? 8 : 6}
 uniform float uWaveT; uniform vec4 uWv[NWV];
 /* the clicked swells, row 0 of uSurgeT (when each comes ashore, how big, where along the beach, how far out it was sent
    from), uNUw of them; row 1 holds the splash rings */
@@ -747,7 +747,7 @@ float tideLag(float rk, float R){ return rk*max(R - 6.0, 0.0)/WC; }
 /* when tide swell W reaches a along the shore: its own time, sooner or later along the beach as it comes in a little
    aslant and bends over the bottom, in long sweeps and shorter ones, so that it peels along a beach rather than coming
    in all along it at once (engine.js swPhJS has the same) */
-float swPh(float a, vec4 W){ return W.x + 0.9*sin(a*0.11 + W.z) + 1.7*sin(a*0.023 + 2.3*W.z) + 1.0*sin(a*0.052 + 4.1*W.z) + a*0.03*W.w; }
+float swPh(float a, vec4 W){ return ${Layout.isle ? 'W.x + 0.9*sin(a*0.11 + W.z) + 1.7*sin(a*0.023 + 2.3*W.z) + 1.0*sin(a*0.052 + 4.1*W.z) + a*0.03*W.w' : 'W.x + 0.9*sin(a*0.11 + W.z) + a*0.03*W.w'}; }
 /* the sea's height at p, and (lean) how far its crests there are thrown toward the beach as they break */
 float waveHL(vec2 p, out float lean){
   lean = 0.0;
@@ -761,7 +761,7 @@ float waveHL(vec2 p, out float lean){
   for (int j = 0; j < NWV; j++){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float tau = t - swPh(a, W) - tideLag(rk, q.k2.w) - q.lg/WC, x = s + tau*WC;
-    if (x < -8.0 - 0.12*max(s, 0.0) || x > 18.0 + 0.1*max(s, 0.0)) continue;
+    ${Layout.isle ? 'if (x < -8.0 - 0.12*max(s, 0.0) || x > 18.0 + 0.1*max(s, 0.0)) continue;' : ''}
     h += swellL(s, tau, W.y*ex, WC, tideSb(W.y, nA, rk, q.k2.w), lean);
   }
   for (int k = 0; k < ${MAXUW}; k++){
@@ -937,8 +937,9 @@ void wave1(inout Wv w, float s, float a, float t, vec2 p, float tau, float amp, 
     w.slope += -2.0*x/(lam*lam)*g*0.42;
     /* a crest breaks harder in some stretches than others: peaks and quieter shoulders along it */
     /* (two sizes of it, so the stretches it breaks harder in come at no one spacing) */
-    float patchy = smoothstep(0.15, 0.75, 0.65*tNq(vec2(p.x*0.16, p.y*0.05) + vec2(k3*2.3, 0.0), 6.0).r + 0.35*tNq(vec2(p.x*0.057, p.y*0.02) + vec2(k3*0.7, 3.1), 6.0).g);
-    w.foam = max(w.foam, smoothstep(sb + 4.0, sb - 0.2, s)*exp(-x*x/0.09)*amp*0.85*(0.3 + 0.7*patchy));
+    ${Layout.isle ? `float patchy = smoothstep(0.15, 0.75, 0.65*tNq(vec2(p.x*0.16, p.y*0.05) + vec2(k3*2.3, 0.0), 6.0).r + 0.35*tNq(vec2(p.x*0.057, p.y*0.02) + vec2(k3*0.7, 3.1), 6.0).g);
+    w.foam = max(w.foam, smoothstep(sb + 4.0, sb - 0.2, s)*exp(-x*x/0.09)*amp*0.85*(0.3 + 0.7*patchy));` : `float patchy = smoothstep(0.18, 0.72, tNq(vec2(p.x*0.16, p.y*0.05) + vec2(k3*2.3, 0.0), 6.0).r);
+    w.foam = max(w.foam, smoothstep(sb + 4.0, sb - 0.2, s)*exp(-x*x/0.09)*amp*0.85*(0.2 + 0.8*patchy));`}
     /* going over: the whole front of the wave turns white as its crest pitches down it and crashes (a big swell plunges
        right across; a small one only spills at its top) */
     float over = smoothstep(sb + 1.8, sb + 0.1, s)*(1.0 - smoothstep(sb - 0.6, sb - 2.2, s));
@@ -1022,7 +1023,7 @@ Wv waves(float s, float a, float t, vec2 p, vec4 k1, vec4 k2, float lg){
     vec4 W = uWv[j]; if (W.y <= 0.0) continue;
     float tau = t - swPh(a, W) - tideLag(rk, k2.w) - lg/WC, x = s + tau*WC;
     /* (a swell not yet near, or long gone by and its wash dried: nothing of it here) */
-    if (x < -8.0 - 0.15*max(s, 0.0) || (x > 20.0 + 0.3*max(s, 0.0) && tau > TS*1.3 + 16.0)) continue;
+    ${Layout.isle ? 'if (x < -8.0 - 0.15*max(s, 0.0) || (x > 20.0 + 0.3*max(s, 0.0) && tau > TS*1.3 + 16.0)) continue;' : ''}
     wave1(w, s, a, t, p, tau, W.y*ex, WC, tideSb(W.y, nA, rk, k2.w), W.z*3.7, nB, uint(W.z*4096.0), rv);
   }
   for (int k = 0; k < ${MAXUW}; k++){
@@ -1407,7 +1408,7 @@ void main(){
     col = mix(col, faceLit*(0.88 + 0.18*nf), clamp(w.face, 0.0, 1.0)*0.85);
   }
   /* air between here and the horizon: far water fades toward the sky just over it, but never all the way */
-  col = mix(col, uHor*0.95, (1.0 - exp(-max(dist - 60.0, 0.0)/(2600.0/max(uMist, 0.05))))*0.88);
+  col = mix(col, uHor*0.95, (1.0 - exp(-max(dist - 60.0, 0.0)/(2600.0/max(uMist, ${Layout.isle ? '0.05' : '0.3'}))))*0.88);
   col = mix(col, uHor*0.9, (1.0 - exp(-dist/400.0))*0.07*uMist);
   gl_FragColor = vec4(max(col, 0.0), 1.0);
 }`;

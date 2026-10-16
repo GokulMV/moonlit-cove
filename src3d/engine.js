@@ -401,7 +401,11 @@ const Engine = (() => {
     return amp * k * shoal * (1 + (bore - 1) * broken) * prof * smJ(-0.3, 1.4, s);
   }
   /* when tide swell (x0 its time, ph its phase, ob how aslant) reaches a along the shore: as glsl.js swPh */
-  const swPhJS = (a, x0, ph, ob) => x0 + 0.9 * Math.sin(a * 0.11 + ph) + 1.7 * Math.sin(a * 0.023 + 2.3 * ph) + 1.0 * Math.sin(a * 0.052 + 4.1 * ph) + a * 0.03 * ob;
+  const swPhJS = Layout.isle ? (a, x0, ph, ob) => x0 + 0.9 * Math.sin(a * 0.11 + ph) + 1.7 * Math.sin(a * 0.023 + 2.3 * ph) + 1.0 * Math.sin(a * 0.052 + 4.1 * ph) + a * 0.03 * ob
+    : (a, x0, ph, ob) => x0 + 0.9 * Math.sin(a * 0.11 + ph) + a * 0.03 * ob;
+  /* (how many tide swells are kept about: on the beach six, the ones arriving round now; round the island eight, those come
+     long enough before to be arriving now at the back of a cove as well) */
+  const NWV = Layout.isle ? 8 : 6, WV0 = Layout.isle ? 5 : 3;
   function waveAt(x0, z, wt = waveNow) {
     const q = shAt(x0, z), s = q.s, x = q.a; if (s < -0.5 || !gU) return 0;
     /* (into a cove, up a creek, the swell comes that much later) */
@@ -554,7 +558,7 @@ const Engine = (() => {
      that chase the water's edge and the crabs that keep out of it */
   function swashFront(x, wt) {
     const WT = 9.0, k0 = Math.floor(wt / WT); let r = 0;
-    for (let k = k0 - 5; k <= k0 + 2; k++) {
+    for (let k = k0 - WV0; k <= k0 + 2; k++) {
       const h = n => hash(k * n + 0.37), amp = (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * roughNow), ph = h(2.71) * 6.283;
       const tau = wt - swPhJS(x, k * WT + (h(1.37) - 0.5) * 2.0, ph, h(0.93) - 0.5), T_ = tsOf(amp);
       if (tau <= 0 || tau > T_ + 1) continue;
@@ -770,7 +774,7 @@ const Engine = (() => {
       uDecalRect: { value: new T.Vector4(drect.x, drect.z, drect.w, drect.d) },
       uShadowMap: { value: null }, uShadowMatrix: { value: new T.Matrix4() }, uShadowSize: { value: new T.Vector2(sm, sm) }, uShadowOn: { value: 0 }, uShadowK: { value: 1 },
       uAmb: { value: V3() }, uKeyDir: { value: V3() }, uKeyCol: { value: V3() }, uMoonGlit: { value: V3() }, uSunGlit: { value: V3() },
-      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: [0, 1, 2, 3, 4, 5, 6, 7].map(() => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uNearT: { value: new T.Vector4(0, 0, 1, 0) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
+      uDay: { value: 0 }, uWaveT: { value: 0 }, uPud: { value: 0 }, uWv: { value: Array.from({ length: NWV }, () => new T.Vector4()) }, uSurgeT: { value: surgeTex }, uNUw: { value: 0 }, uNRip: { value: 0 }, uUwMax: { value: 0 }, uNearRect: { value: new T.Vector4(-96, -98, 96, 2) }, uNearT: { value: new T.Vector4(0, 0, 1, 0) }, uDbgG: { value: 0 }, uTideHi: { value: 0 }, uMist: { value: 1 }, uWet: { value: 0 }, uRough: { value: 0 }, uShC: { value: new T.Vector3(Layout.camp.x, Layout.camp.z, 24) },
       uSunVis: { value: null }
     });
     /* (the clouds' own uniforms, the very same, for their shadows on the sand and the sea) */
@@ -796,7 +800,7 @@ const Engine = (() => {
     /* (the round island: its beach and its forest; none of the rocky island's trails, streams, park or boulders) */
     /* (and its huts along the top of the beach: where they stand worked out first, so the forest keeps clear of them) */
     const hutPlan = Layout.isle && typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.island()) : null;
-    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R });
+    world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
     if (hutPlan) { huts = IsleHuts.build(natG, Layout.island(), world, { plan: hutPlan }); world.addWalker(huts.walk); world.addObstacles(huts.obstacles); Object.assign(api, { huts });
       for (const h of huts.huts) for (const s of ['hammock', 'bench', 'bed', 'chair']) { const P = huts.seatPose(h.p.i, s); if (P) SEATS.push({ id: P.id, name: P.name, kind: 'hut', hut: h.p.i, seat: s, near: 'hut' }); } }
     /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
@@ -1073,8 +1077,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     gU.uWet.value = o.wet || 0; gU.uRough.value = o.rough || 0; gU.uPud.value = o.pud || 0; Mats.U.uFlood.value = o.flood || 0;
     const wt = o.waveT ?? t;
     { const WT = 9.0, kb = Math.floor(wt / WT);
-      /* (eight: the ones arriving round now, and those come long enough before to be arriving now at the back of a cove) */
-      for (let j = 0; j < 8; j++) { const k = kb - 5 + j, h = n => hash(k * n + 0.37);
+      for (let j = 0; j < NWV; j++) { const k = kb - WV0 + j, h = n => hash(k * n + 0.37);
         gU.uWv.value[j].set(k * WT + (h(1.37) - 0.5) * 2.0, (0.55 + 0.6 * h(3.33)) * (1 + 0.55 * (o.rough || 0)), h(2.71) * 6.283, h(0.93) - 0.5); }
       surgeUpload(wt); }
     updateSurge(wt);
