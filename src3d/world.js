@@ -996,6 +996,49 @@ void main(){
       if (VIEW) VIEW.off = [lx + o.x, 0, o.z];
       IF.nearUpdate(cx, camY, cz, fTiles, VIEW);
     }
+    /* ── the forest's crowns, for the explore camera to keep out of: each tree's crown a dome over the circle its leaves
+       span, from its lowest leaves up to its top (its model's box), in a grid of 8 m cells made once for each stretch of
+       the loop from its trees by the beach (its first band, every storey: where the camera goes) ── */
+    const CRC = 8, CRM = 4;
+    let crownOf = null;
+    function crownGrid(col) {
+      if (col.crowns) return col.crowns;
+      if (!crownOf) crownOf = IF.protos.map(p => {
+        const full = new T.Box3(), leaf = new T.Box3(), b = new T.Box3();
+        for (const pt of p.parts) { if (!pt.geo.boundingBox) pt.geo.computeBoundingBox(); b.copy(pt.geo.boundingBox).applyMatrix4(pt.M); full.union(b); if (pt.leaf) leaf.union(b); }
+        const L = leaf.isEmpty() ? full : leaf;
+        return [(L.min.x + L.max.x) / 2, (L.min.z + L.max.z) / 2, Math.max(L.max.x - L.min.x, L.max.z - L.min.z) / 2, Math.max(0, L.min.y), full.max.y];
+      });
+      const M = new Map(), A = [];
+      for (const t of col.bands[0].trees) {
+        const c = crownOf[t.p], s = t.s; if (c[4] * s < 1.2) continue;
+        /* (the crown's middle where the tree's turn puts it: a leaning palm's out over the sand) */
+        const cs = Math.cos(t.yaw), sn = Math.sin(t.yaw), cx = t.x + s * (c[0] * cs + c[1] * sn), cz = t.z + s * (c[1] * cs - c[0] * sn), R = c[2] * s, i = A.length;
+        A.push(cx, cz, R, t.y + c[3] * s, t.y + c[4] * s);
+        for (let gz = Math.floor((cz - R - CRM) / CRC); gz <= Math.floor((cz + R + CRM) / CRC); gz++) for (let gx = Math.floor((cx - R - CRM) / CRC); gx <= Math.floor((cx + R + CRM) / CRC); gx++) { const k = gx * 4096 + gz; let a = M.get(k); if (!a) M.set(k, (a = [])); a.push(i); }
+      }
+      return (col.crowns = { M, A: new Float32Array(A) });
+    }
+    /* how far the world point (x, y, z) stands clear of the nearest crown (m, as far as CRM: out from its rim, up from its
+       dome, or down from its lowest leaves; less than nothing in among them). The stretches either side too, near their
+       edges; one not yet worked out has no trees drawn either */
+    function crownClear(xw, y, zw) {
+      if (!IF) return CRM;
+      const x = xw + lx + o.x, z = zw + o.z, c0 = Math.floor((x - X0) / CW), e0 = x - (X0 + c0 * CW);
+      let best = CRM;
+      for (let c = c0 - 1; c <= c0 + 1; c++) {
+        if ((c < c0 && e0 > 36) || (c > c0 && CW - e0 > 36)) continue;
+        const cw = cwOf(c), col = FCOL.get(cw); if (!col || !col.done) continue;
+        const G = crownGrid(col), xq = x - (c - cw) * CW, a = G.M.get(Math.floor(xq / CRC) * 4096 + Math.floor(z / CRC)); if (!a) continue;
+        const A = G.A;
+        for (let j = 0; j < a.length; j++) {
+          const i = a[j], R = A[i + 2], d = Math.hypot(xq - A[i], z - A[i + 1]); if (d - R >= best) continue;
+          const lo = A[i + 3], hi = A[i + 4], u = Math.min(1, d / R), top = lo + (hi - lo) * Math.sqrt(1 - u * u);
+          const g = Math.max(d - R, y - top, lo - y); if (g < best) best = g;
+        }
+      }
+      return best;
+    }
     /* (the camera, and the key light's shadow camera when it casts: the trees near the eye that neither sees are not drawn) */
     let VIEW = null;
     const setView = (cam, sh) => { VIEW = cam ? { cam, sh: sh || null, off: [0, 0, 0] } : null; };
@@ -1411,6 +1454,8 @@ void main(){
     };
     const W = (f, x, z) => f(x + o.x, z + o.z);
     return { update, prime, reset, obstaclesNear, wetNear, place, decorate, LOD, CW, X0, shade, reach, setLoop, setView, get loop() { return lx; }, forest: IF, walkIn: IF ? 60 : 0,
+      /* how far a world point stands clear of the forest's crowns (m, at most 4; less than nothing in among them) */
+      crownClear,
       land: (x, z) => W(land, x, z), hill: (x, z) => W(hill, x, z), massif: (x, z) => W(massif, x, z),
       /* the top of a reef under a world point, where it can be walked on (−9 off it) */
       reefTop: (x, z) => { const h = reefH(x + o.x, z + o.z); return reefOn ? h : -9; },

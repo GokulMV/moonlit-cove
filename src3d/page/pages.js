@@ -230,7 +230,7 @@ const Pages = (() => {
       d.box(86, 652, 580, 150, 'REFLECTIONS', ['the sky, prefiltered into a cube map,', 'rebuilt only when the sky changes'], { dash: true });
       d.box(714, 652, 600, 150, 'ADAPTIVE SIZE', ['the render scale drops when frames run', 'slow, and climbs back when they’re quick'], { dash: true });
     }, ['everything renders in half float, then tone-maps', 'the fire is ray-marched, not a sprite', 'occlusion fades out far away (no shimmer)', 'phones get fewer pixels, not fewer effects']],
-    ['The beach, from above', 'Two kilometres of beach, its two ends joined: go on along it and you come round to the camp again.', d => {
+    ['The beach, from above', 'Two kilometres of beach, its two ends joined, so it runs on out of sight both ways from the camp.', d => {
       /* drawn from the coast itself (Layout.Coast): the whole loop, the camp in the middle, its bends drawn deeper so
          they show, the beach many times wider */
       const a = d.a, C = Layout.Coast, X0 = 86, X1 = 1314, SPAN = Layout.P, Y0 = 404, K = 2.2, KB = 4.2, base = Layout.SH.base, PXM = (X1 - X0) / SPAN, cx0 = Layout.camp.x + Layout.O.x;

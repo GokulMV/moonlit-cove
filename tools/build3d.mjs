@@ -51,10 +51,12 @@ function sounds(outDir) {
   }
   return 'const SND = ' + JSON.stringify(o) + ';';
 }
+/* (the loader draws tonight's sky while the rest loads: the sky's numbers and the stars come before it, not with the engine) */
+const EARLY = ['astro.js', 'stardata.js'];
 function page(three, snd, head = '') {
   return src('page/index.html').replace('<meta charset="utf-8">', () => '<meta charset="utf-8">' + head)
-    .replace('/*@FONTS*/', () => fonts()).replace('/*@CSS*/', () => src('page/styles.css')).replace('/*@LOADER*/', () => src('page/loader.js'))
-    .replace('/*@ENGINE*/', () => ENGINE.map(src).join('\n;\n'))
+    .replace('/*@FONTS*/', () => fonts()).replace('/*@CSS*/', () => src('page/styles.css')).replace('/*@LOADER*/', () => [...EARLY, 'page/loader.js'].map(src).join('\n;\n'))
+    .replace('/*@ENGINE*/', () => ENGINE.filter(f => !EARLY.includes(f)).map(src).join('\n;\n'))
     .replace('/*@APP*/', () => snd + '\n;\n' + src('page/content.js') + '\n;\n' + src('page/pages.js') + '\n;\n' + src('page/app.js'))
     .replace('/*@THREE*/', three);
 }

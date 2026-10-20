@@ -210,45 +210,26 @@ body.inspecting.insp-grab #scene { cursor: grabbing; }
 input[type="range"] { width: 140px; accent-color: var(--amber); }
 input[type="range"]:disabled { opacity: 0.35; }
 
-/* the door. While the cove is built: coloured snakes gliding along a grid of dots (loader.js), all of it transform and opacity
-   so the compositor can play it while the page is busy. Then a card over the live cove, which shows through softly
-   blurred and dimmed until you step in; stepping in fades the veil, and the blur with it */
-.intro { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--gut); overflow: hidden; background: radial-gradient(ellipse 85% 75% at 50% 46%, rgba(7, 10, 16, 0.18), rgba(7, 10, 16, 0.64)); transition: opacity 1.2s cubic-bezier(.4, 0, .2, 1); }
-/* (the blur comes on under the loader, as it starts to fade, so it never pops) */
-.intro.ready { -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1); }
-#hud .intro.gone { opacity: 0; pointer-events: none; }
+/* the door. While the cove is built: tonight's sky over the visitor (loader.js), its stars coming out and a few of them
+   joining up into GK, all of it transform and opacity so the compositor can play it while the page is busy. Then the
+   card comes up under that sky; stepping in, the veil fades and the cove's own sky is there behind it, star for star,
+   as the camera tilts down to the camp */
+.intro { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--gut); overflow: hidden; background: #05080f; transition: opacity 1.2s cubic-bezier(.4, 0, .2, 1); }
+/* (on a screen tall enough, the card low down, the sky over it) */
+@media (min-height: 640px) { .intro { align-items: end; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + max(var(--gut), 9vh)); } }
+#hud .intro.gone { opacity: 0; pointer-events: none; transition-delay: .12s; }
 
-.loader { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(120% 90% at 50% 42%, #171615 0%, #0e0d0c 55%, #070706 100%); transition: opacity .9s cubic-bezier(.4, 0, .2, 1); }
-.intro.ready .loader { opacity: 0; }
+.loader { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(150% 95% at 50% 125%, #13213a 0%, #0b1527 34%, #070d1a 62%, #04070e 100%); }
 .ld-stage { position: absolute; inset: 0; }
 .ld-stage i { position: absolute; left: 0; top: 0; display: block; }
-/* the grid of dots standing up in front of you (the background's own pattern), brightest in the middle */
-.ld-stage .ld-grid { right: 0; bottom: 0; background-image: radial-gradient(circle, rgba(236, 230, 218, 0.22) 0 1.3px, rgba(236, 230, 218, 0) 1.9px);
-  -webkit-mask-image: radial-gradient(ellipse 60% 58% at 50% 45%, #000 38%, transparent 100%); mask-image: radial-gradient(ellipse 60% 58% at 50% 45%, #000 38%, transparent 100%); }
-.ld-stage .ld-vig { right: 0; bottom: 0; background: radial-gradient(ellipse 72% 68% at 50% 45%, rgba(7, 7, 6, 0) 58%, rgba(7, 7, 6, 0.88) 100%); }
-/* the snakes (loader.js): the trace each draws between the dots it joins, the dots it lights, its beads, its glow */
-.ld-trace { border-radius: 1px; opacity: 0; }
-.ld-node { width: 10px; height: 10px; border-radius: 50%; opacity: 0; }
-.ld-bead { border-radius: 50%; }
-.ld-glow { border-radius: 50%; }
-/* amber, sea-teal, coral, lilac, leaf */
-.ld-trace.s0 { background: rgb(242, 169, 72); } .ld-trace.s1 { background: rgb(63, 201, 181); } .ld-trace.s2 { background: rgb(242, 122, 94); } .ld-trace.s3 { background: rgb(169, 143, 242); } .ld-trace.s4 { background: rgb(147, 207, 98); }
-.ld-node.s0 { background: radial-gradient(closest-side, #ffe3b4 0 34%, rgba(242, 169, 72, 0.45) 56%, rgba(242, 169, 72, 0)); }
-.ld-node.s1 { background: radial-gradient(closest-side, #d2fff6 0 34%, rgba(63, 201, 181, 0.45) 56%, rgba(63, 201, 181, 0)); }
-.ld-node.s2 { background: radial-gradient(closest-side, #ffdcd2 0 34%, rgba(242, 122, 94, 0.45) 56%, rgba(242, 122, 94, 0)); }
-.ld-node.s3 { background: radial-gradient(closest-side, #efe8ff 0 34%, rgba(169, 143, 242, 0.45) 56%, rgba(169, 143, 242, 0)); }
-.ld-node.s4 { background: radial-gradient(closest-side, #e6ffd2 0 34%, rgba(147, 207, 98, 0.45) 56%, rgba(147, 207, 98, 0)); }
-.ld-bead.s0 { background: radial-gradient(circle at 35% 30%, #ffe2ae 0%, #f2a948 50%, #b9701f 100%); }
-.ld-bead.s1 { background: radial-gradient(circle at 35% 30%, #c9fff4 0%, #3fc9b5 50%, #1d7f73 100%); }
-.ld-bead.s2 { background: radial-gradient(circle at 35% 30%, #ffd8cc 0%, #f27a5e 50%, #b0442d 100%); }
-.ld-bead.s3 { background: radial-gradient(circle at 35% 30%, #ece4ff 0%, #a98ff2 50%, #6650b0 100%); }
-.ld-bead.s4 { background: radial-gradient(circle at 35% 30%, #e2ffc9 0%, #93cf62 50%, #4f8a2c 100%); }
-.ld-bead.head { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); }
-.ld-glow.s0 { background: radial-gradient(closest-side, rgba(242, 169, 72, 0.3), rgba(242, 169, 72, 0.08) 45%, rgba(242, 169, 72, 0)); }
-.ld-glow.s1 { background: radial-gradient(closest-side, rgba(63, 201, 181, 0.3), rgba(63, 201, 181, 0.08) 45%, rgba(63, 201, 181, 0)); }
-.ld-glow.s2 { background: radial-gradient(closest-side, rgba(242, 122, 94, 0.3), rgba(242, 122, 94, 0.08) 45%, rgba(242, 122, 94, 0)); }
-.ld-glow.s3 { background: radial-gradient(closest-side, rgba(169, 143, 242, 0.32), rgba(169, 143, 242, 0.08) 45%, rgba(169, 143, 242, 0)); }
-.ld-glow.s4 { background: radial-gradient(closest-side, rgba(147, 207, 98, 0.3), rgba(147, 207, 98, 0.08) 45%, rgba(147, 207, 98, 0)); }
+/* a star: its holder, where the sky has it, and its dot; the faint ones painted on two canvases */
+.ld-stage .ld-s, .ld-stage .ld-l { width: 0; height: 0; }
+.ld-d, .ld-h { border-radius: 50%; }
+.ld-h { background: radial-gradient(closest-side, rgba(206, 220, 255, 0.5), rgba(170, 196, 255, 0.14) 46%, rgba(170, 196, 255, 0)); opacity: 0; }
+.ld-c { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+/* GK's lines, star to star: drawn out from the first */
+.ld-stage .ld-ln { height: 1.4px; margin-top: -0.7px; transform-origin: 0 50%; transform: scaleX(0);
+  background: linear-gradient(90deg, rgba(190, 210, 255, 0), rgba(190, 210, 255, 0.6) 14%, rgba(190, 210, 255, 0.6) 86%, rgba(190, 210, 255, 0)); box-shadow: 0 0 7px rgba(150, 182, 255, 0.22); }
 .intro-note { position: absolute; left: var(--gut); right: var(--gut); bottom: calc(env(safe-area-inset-bottom, 0px) + 7vh); margin: 0; text-align: center; font: 400 12px/1.5 var(--mono); letter-spacing: 0.04em; color: var(--dim); transition: opacity .5s, visibility 0s .5s; }
 .intro.ready .intro-note { opacity: 0; visibility: hidden; }
 

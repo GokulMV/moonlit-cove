@@ -1,8 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
    app.js — the live page: render loop, chapters on objects,
    hotspots, live sky and time controls, the sound mixer and the
-   click-the-sea waves. The camera looks round the camp and goes
-   along the beach as a map turns under the hand.
+   click-the-sea waves. The camera looks round the camp, turning
+   round it as a map turns under the hand.
    ───────────────────────────────────────────────────────────── */
 (() => {
   const $ = id => document.getElementById(id);
@@ -577,11 +577,11 @@
   cv.addEventListener('pointerup', unpinch); cv.addEventListener('pointercancel', unpinch);
   addEventListener('pointermove', e => { if (zoomable() && !(rd.drag && rd.drag.live)) rd.panT = [Math.max(-1, Math.min(1, ((e.clientX - view.x) / view.w) * 2 - 1)) * 1.15, Math.max(-1, Math.min(1, ((e.clientY - view.y) / view.h) * 2 - 1)) * 1.15]; }, { passive: true });
 
-  /* ── exploring: the camera turns round a point on the sand, the way a map turns under your hand. Drag to turn round
-     it (up and down tilts), right-drag or Shift-drag to move it along the beach, scroll or pinch to come closer; on a
-     phone one finger turns, two move, pinch and twist. One swipe is gentle; swipes that follow each other quickly build
-     speed, and everything glides to a stop when you let go. With the point on the camp and nothing touched, it is
-     exactly the composed home view ── */
+  /* ── exploring: the camera turns round a point on the sand, the camp, the way a map turns under your hand. Drag to
+     turn round it (up and down tilts), scroll or pinch to come closer; on a phone one finger turns, two pinch and twist.
+     (Round the island the point goes anywhere too: right-drag or Shift-drag, or two fingers, move it.) One swipe is
+     gentle; swipes that follow each other quickly build speed, and everything glides to a stop when you let go. Nothing
+     touched, it is exactly the composed home view ── */
   const TAU = Math.PI * 2, wrapA = a => a - TAU * Math.round(a / TAU);
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   /* the home view taken apart: where it stands and where it looks, from the camp on the sand */
@@ -614,7 +614,9 @@
   /* (how far the point may go round the island: the island's own grid, and a few hundred metres of sea round it) */
   const IB = (() => { if (!ISLE) return null; const G = Layout.island().data.grid; return [G.X0 + 60, G.X0 + G.nx * G.cell - 60, G.Z0 + 60, G.Z0 + G.nz * G.cell - 60]; })();
   const orb = { v: Float64Array.from(HOME), dv: new Float64Array(5), T: Float64Array.from(HOME), g: new Float64Array(5),
-                el: EL0, Fs: ORB.elMin, px: P0[0], pz: P0[2], py: 0, boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
+                el: EL0, Fs: ORB.elMin, Ks: 9, px: P0[0], pz: P0[2], py: 0, boost: 1, lastEnd: -1e9, fly: null, keys: new Set() };
+  /* (the zoom the camera stands at: the one asked for, or nearer, where farther off it would stand among the trees: Ks) */
+  const zEff = () => Math.min(orb.v[Z], orb.Ks);
   /* round the island, the height the point is held at: the top of whatever is round it (the sand, the rock, the forest's
      canopy, the sea), looked at a little way about so that it rises and falls smoothly as the point crosses the forest's
      edge; round the camp less the camp's own sand, so that at home it is nothing, as the home view has it */
@@ -647,13 +649,16 @@
   }
   /* the treetops, generously: palm crowns lean out over the sand a little before the forest edge and stand up to eleven
      metres, the tall palms further in up to fifteen; scrub and palms on a headland's flatter top. None in the clearing the
-     camp sits in, where its own few trees are part of the view */
+     camp sits in, where its own few trees are part of the view. Where the island's forest grows along the beach, none:
+     the camera keeps out of its crowns by drawing in toward the point instead (zoomCap) */
   function canopy(x, z) {
-    const W = Engine.world, d = z - Layout.vegZ(x), open = (1 - sstep(15, 21, Math.abs(x))) * (1 - sstep(27, 33, z)), m = W ? W.massif(x, z) : 0;
-    return Math.max((11 * sstep(-2.5, 1, d) + 4 * sstep(5, 8, d)) * (1 - open), 11 * sstep(1.5, 3, m));
+    const W = Engine.world, m = W ? W.massif(x, z) : 0, rock = 11 * sstep(1.5, 3, m);
+    if (W && W.forest) return rock;
+    const d = z - Layout.vegZ(x), open = (1 - sstep(15, 21, Math.abs(x))) * (1 - sstep(27, 33, z));
+    return Math.max((11 * sstep(-2.5, 1, d) + 4 * sstep(5, 8, d)) * (1 - open), rock);
   }
   /* the lowest tilt at which the camera, and its line of sight down to the point, clear the sand, the rock and the trees
-     (worked out again only when the camera has moved) */
+     (worked out again only when the camera has moved; at the zoom asked for, whether or not the trees draw it in) */
   const flr = { y: NaN, z: NaN, x: NaN, pz: NaN, py: NaN, el: 0 };
   function elFloor() {
     const v = orb.v; if (v[Y] === flr.y && v[Z] === flr.z && v[X] === flr.x && orb.pz === flr.pz && orb.py === flr.py) return flr.el;
@@ -681,6 +686,57 @@
     flr.y = v[Y]; flr.z = v[Z]; flr.x = v[X]; flr.pz = orb.pz; flr.py = orb.py;
     return (flr.el = Math.min(el, ORB.elMax + 0.25));
   }
+  /* the forest's crowns and the camera (where there is the island's forest along the beach; round the island the view
+     has its own ways). Out from the point along the line the camera looks down, how far it may stand: where it is clear
+     of the crowns by a margin (world.js crownClear: how far a place is from the nearest), and has been for the last few
+     metres before it, short of any crown the line goes deep into. Where the point itself is in under a crown the line
+     counts from where it comes out; nowhere clear to stand, −1 */
+  const CROWN = { cam: 1.5, run: 3, deep: -1, step: 0.6, near: 14 };
+  const crowned = () => { const W = Engine.world; return !ISLE && W && W.forest && W.crownClear; };
+  /* (the line from the point to the camera, as orbPose sets it: a zoom of 1 that far, and that way) */
+  const RC = Math.hypot(OP[0], RYZ);
+  function crownRun(el, D) {
+    const W = Engine.world, C = window.__coveCrown || CROWN, yw = orbYaw(), ce = Math.cos(el), sy = Math.sin(yw), cy = Math.cos(yw);
+    const ux = (OP[0] * cy + RYZ * ce * sy) / RC, uy = RYZ * Math.sin(el) / RC, uz = (RYZ * ce * cy - OP[0] * sy) / RC;
+    let good = 0, from = 1, under = true;
+    for (let t = 1; ; t = Math.min(t + C.step, D)) {
+      const g = W.crownClear(orb.px + ux * t, orb.py + uy * t, orb.pz + uz * t);
+      if (under && g < C.cam) from = -1;
+      else {
+        under = false;
+        if (g < C.deep) break;
+        if (g < C.cam) from = -1;
+        else { if (from < 0) from = t; if (from === 1 || t - from >= C.run) good = t; }
+      }
+      if (t >= D) break;
+    }
+    return good >= D ? D : good || -1;
+  }
+  /* the farthest the camera may stand from the point (as a zoom), at the tilt it has: as asked, or nearer, clear of the
+     crowns (none: as asked) */
+  const zcap = { y: NaN, z: NaN, x: NaN, pz: NaN, py: NaN, el: NaN, k: 9 };
+  function zoomCap(el) {
+    if (!crowned()) return 9;
+    const v = orb.v; if (v[Y] === zcap.y && v[Z] === zcap.z && orb.px === zcap.x && orb.pz === zcap.pz && orb.py === zcap.py && el === zcap.el) return zcap.k;
+    const D = Math.exp(v[Z]) * RC, r = crownRun(el, D);
+    zcap.y = v[Y]; zcap.z = v[Z]; zcap.x = orb.px; zcap.pz = orb.pz; zcap.py = orb.py; zcap.el = el;
+    return (zcap.k = r >= D || r < 0 ? 9 : Math.log(Math.max(r, 1.5) / RC));
+  }
+  /* the tilt the crowns ask for, from the tilt e0 (as asked, or over the sand): none, where the camera can stand clear of
+     them by drawing in toward the point; where it would have to come nearer than a dozen metres or so to be clear, it
+     rises over them instead, as far as it must to stand clear that far off (as the forest round the camp, low under the
+     home view, makes the camera rise over it when it is tilted down behind the camp) */
+  const fit = { y: NaN, z: NaN, x: NaN, pz: NaN, py: NaN, e0: NaN, el: 0 };
+  function crownTilt(e0) {
+    if (!crowned()) return 0;
+    const v = orb.v; if (v[Y] === fit.y && v[Z] === fit.z && orb.px === fit.x && orb.pz === fit.pz && orb.py === fit.py && e0 === fit.e0) return fit.el;
+    const C = window.__coveCrown || CROWN, D = Math.exp(v[Z]) * RC, need = Math.min(D, C.near);
+    let e = e0;
+    for (let r = crownRun(e, D); r >= 0 && r < need && e < ORB.elMax; r = crownRun(e, D)) e = Math.min(e + 0.1, ORB.elMax);
+    if (e > e0) { let lo = Math.max(e0, e - 0.1); for (let i = 0; i < 3; i++) { const m = (lo + e) / 2, r = crownRun(m, D); if (r >= need || r < 0) e = m; else lo = m; } }
+    fit.y = v[Y]; fit.z = v[Z]; fit.x = orb.px; fit.pz = orb.pz; fit.py = orb.py; fit.e0 = e0;
+    return (fit.el = e > e0 ? e : 0);
+  }
   function stepOrbit(dt) {
     const T = orb.T, v = orb.v, g = orb.g;
     /* a glide home: the targets travel there, easing in and out, the camera rising a little on a long way */
@@ -696,6 +752,8 @@
       if (i === Y && kr) { g[Y] += (kr * 0.9 - g[Y]) * (1 - Math.exp(-dt / 0.25)); T[Y] += g[Y] * dt; continue; }
       if (g[i]) { const d = Math.exp(-dt / ORB.glide); T[i] += g[i] * ORB.glide * (1 - d); g[i] *= d; if (Math.abs(g[i]) < 1e-4) g[i] = 0; }
     }
+    /* (a zoom gliding out stops where the forest holds the camera in) */
+    if (g[Z] > 0 && orb.Ks < v[Z] - 0.004) { T[Z] = Math.min(T[Z], orb.Ks + 0.004); g[Z] = 0; }
     /* the limits (a long glide may rise past the farthest zoom for a moment) */
     const zHi = orb.fly ? ORB.zMax + 0.6 : ORB.zMax;
     if (T[E] < ORB.elMin || T[E] > ORB.elMax) { T[E] = clamp(T[E], ORB.elMin, ORB.elMax); g[E] = 0; }
@@ -710,14 +768,20 @@
     /* (whole turns are taken off now and then, only to keep the numbers small; a glide home takes them off first) */
     if (!orb.fly && Math.abs(T[Y]) > 40 * Math.PI) { const k = Math.round(T[Y] / TAU) * TAU; T[Y] -= k; v[Y] -= k; }
     orbPoint(dt);
-    /* never into the sand, the rock or the trees: the camera rises over them at once, and settles back slowly */
-    const F = elFloor(); orb.Fs += (F - orb.Fs) * (1 - Math.exp(-dt / (F > orb.Fs ? 0.12 : 0.6)));
+    /* never into the sand, the rock or the trees: the camera rises over them at once, and settles back slowly; where it
+       would stand among the forest's crowns, it comes in toward the point at once, out of them (or rises over them, where
+       it would have to come too near), and goes back out slowly once they are behind it */
+    const F0 = elFloor(), F = Math.max(F0, crownTilt(Math.max(v[E], F0))); orb.Fs += (F - orb.Fs) * (1 - Math.exp(-dt / (F > orb.Fs ? 0.12 : 0.6)));
     orb.el = Math.max(v[E], orb.Fs);
+    const Kt = zoomCap(orb.el);
+    if (Kt < orb.Ks) orb.Ks += (Kt - orb.Ks) * (1 - Math.exp(-dt / 0.1));
+    else if (orb.Ks < v[Z]) orb.Ks = Math.min(Kt, orb.Ks + (v[Z] + 0.02 - orb.Ks) * (1 - Math.exp(-dt / 0.5)));
+    else orb.Ks = Kt;
     orbPose();
     return orbCam;
   }
   function orbPose() {
-    const v = orb.v, k = Math.exp(v[Z]), a = orb.el - EL0, ca = Math.cos(a), sa = Math.sin(a), yw = orbYaw(), cy = Math.cos(yw), sy = Math.sin(yw);
+    const k = Math.exp(zEff()), a = orb.el - EL0, ca = Math.cos(a), sa = Math.sin(a), yw = orbYaw(), cy = Math.cos(yw), sy = Math.sin(yw);
     /* tilted about the point and scaled: where the camera stands and looks, from the point */
     const cx = OP[0] * k, ch = (OP[1] * ca + OP[2] * sa) * k, cz = (OP[2] * ca - OP[1] * sa) * k;
     const lx = OL[0] * k; let ly = (OL[1] * ca + OL[2] * sa) * k, lz = (OL[2] * ca - OL[1] * sa) * k;
@@ -748,7 +812,8 @@
     if (ISLE) s = [wrapA(yaw), EL0, zoom, clamp(x, IB[0], IB[1]), clamp(z, IB[2], IB[3])];
     else { const C = sandAt(x, pvC), lo = pvLo(C), hi = pvHi(C); s = [wrapA(yaw), EL0, zoom, x, clamp((z - lo) / (hi - lo), 0, 1)]; }
     for (let i = 0; i < 5; i++) { orb.T[i] = orb.v[i] = s[i]; orb.dv[i] = orb.g[i] = 0; }
-    orb.fly = null; orb.keys.clear(); orb.el = s[E]; orbPoint(); orb.Fs = elFloor(); orb.el = Math.max(s[E], orb.Fs); orbPoint(); orb.Fs = elFloor();
+    orb.fly = null; orb.keys.clear(); orb.el = s[E]; orb.Ks = 9; orbPoint(); orb.Fs = elFloor(); orb.el = Math.max(s[E], orb.Fs); orbPoint(); orb.Fs = elFloor();
+    orb.Fs = Math.max(orb.Fs, crownTilt(Math.max(s[E], orb.Fs))); orb.el = Math.max(s[E], orb.Fs); orb.Ks = Math.min(9, zoomCap(orb.el));
   }
   const orbNearCamp = () => Math.hypot(orb.px - P0[0], orb.pz - P0[2]) < 40;
   /* a pin on a thing shows when the camera is round the camp */
@@ -760,7 +825,7 @@
   const insp = { on: false, info: null, c: null, drag: null, seen: new Set(store.get('seenLife', [])) };
   const canExplore = () => st.entered && !rd.on && !st.chapter && !seat.on && !sketch.on && !tbox.on && !insp.on;
   const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
-  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = ISLE ? 'Tap a glowing dot to open it. Tap the sea to send a wave, or an animal, a shell or a flower to look at it close. Drag to look around, two fingers to move over the island and zoom.' : 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
+  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = ISLE ? 'Tap a glowing dot to open it. Tap the sea to send a wave, or an animal, a shell or a flower to look at it close. Drag to look around, two fingers to move over the island and zoom.' : 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, pinch to zoom.';
   else if (ISLE) $('hint').textContent = 'Click a glowing dot to open it. Click the sea to send a wave, or an animal, a shell, a flower or a fruit to look at it close. Drag to look around, right-drag to move over the island, scroll to zoom.';
   /* a new swipe (or pinch, or burst of scrolling): straight after the last one it goes further, each time up to four
      and a half times as far; after a pause it is gentle again */
@@ -797,11 +862,14 @@
     for (let i = 0; i < 5; i++) { const c = GCAP[i] * b * (i >= X ? kz : 1); orb.g[i] = clamp(v[i], -c, c); }
   }
   /* a step of a gesture, in each axis's own units, at time t: onto the targets, and into the record of its speed */
+  /* zooming: out as far as where the forest draws the camera in (Ks), and in again from there at once */
+  function zoomBy(dz) { const T = orb.T, hi = orb.Ks < 9 ? clamp(orb.Ks + 0.004, ORB.zMin, ORB.zMax) : ORB.zMax; T[Z] = clamp(Math.min(T[Z], hi) + dz, ORB.zMin, hi); }
   function orbNudge(dy, de, dz, dx, du, t) {
     const T = orb.T;
     /* tilting down stops at the ground (or the treetops), and tilting up answers at once */
     if (de) { const lo = Math.max(ORB.elMin, orb.Fs - 0.004); T[E] = clamp(Math.max(T[E], lo) + de, lo, ORB.elMax); }
-    T[Y] += dy; T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); T[X] += dx; T[U] = ISLE ? T[U] + du : clamp(T[U] + du, 0, 1);
+    if (dz) zoomBy(dz);
+    T[Y] += dy; T[X] += dx; T[U] = ISLE ? T[U] + du : clamp(T[U] + du, 0, 1);
     cum[Y] += dy; cum[E] += de; cum[Z] += dz; cum[X] += dx; cum[U] += du; velMark(t);
   }
   /* one finger (or the left button): across turns round the point, up and down tilts. Whatever is under the hand
@@ -811,12 +879,12 @@
     const s = ex.ax + ex.ay + 1e-6, b = orb.boost;
     orbNudge(dx * 2.3 / Math.max(320, view.w) * b * sstep(0.2, 0.45, ex.ax / s), -dy * 1.05 / Math.max(320, view.h) * b * sstep(0.2, 0.45, ex.ay / s), 0, 0, 0, t);
   }
-  /* moving the point: the sand under the hand stays under it, along the beach and a little across (round the island,
-     the ground under it, whichever way) */
+  /* moving the point (round the island; along the beach it stays on the camp): the ground under the hand stays under
+     it, whichever way */
   const PD = [0, 0];
   function panDelta(dx, dy) {
     const aspect = view.w / view.h, fov = V0.fov * (aspect < 1.2 ? Math.min(1.6, 1 + (1.2 - aspect) * 0.75) : 1);
-    const s = 2 * Math.exp(orb.v[Z]) * RYZ * Math.tan(fov * Math.PI / 360) / Math.max(320, view.h) * orb.boost, sz = s / Math.max(0.3, Math.sin(orb.el));
+    const s = 2 * Math.exp(zEff()) * RYZ * Math.tan(fov * Math.PI / 360) / Math.max(320, view.h) * orb.boost, sz = s / Math.max(0.3, Math.sin(orb.el));
     const yw = orbYaw(), cy = Math.cos(yw), sy = Math.sin(yw), wx = -dx * s * cy - dy * sz * sy, wz = dx * s * sy - dy * sz * cy;
     if (ISLE) { PD[0] = wx; PD[1] = wz; return PD; }
     const C = sandAt(orb.v[X], pvC);
@@ -824,8 +892,8 @@
     return PD;
   }
   function orbPanBy(dx, dy, t) { const d = panDelta(dx, dy); orbNudge(0, 0, 0, d[0], d[1], t); }
-  /* the wheel zooms (a pinch on a trackpad comes as a wheel with Ctrl held: gently); a sideways swipe on a trackpad
-     moves along the beach. A burst of scrolling counts as one swipe, and brings its own momentum */
+  /* the wheel zooms (a pinch on a trackpad comes as a wheel with Ctrl held: gently); round the island a sideways swipe
+     on a trackpad moves the point. A burst of scrolling counts as one swipe, and brings its own momentum */
   /* (a trackpad's two-finger scroll, not a mouse wheel's notches: in pixels, sideways too, or in small or fractional
      steps. Round the island it moves the map under the fingers, as a map's does; a pinch still zooms) */
   const looksPad = e => e.deltaMode === 0 && (Math.abs(e.deltaX) > 0.01 || Math.abs(e.deltaY) % 1 > 0.01 || Math.abs(e.deltaY) < 30);
@@ -836,11 +904,12 @@
     ex.wheelT = now; orb.lastEnd = now / 1000;
     if (ISLE && !e.ctrlKey && ex.pad) { const d = panDelta(-clamp(e.deltaX * k, -150, 150), -clamp(e.deltaY * k, -150, 150)); orbNudge(0, 0, 0, d[0], d[1], e.timeStamp); return; }
     let dx = clamp(e.deltaX * k, -150, 150), dy = clamp(e.deltaY * k, -150, 150);
-    if (e.shiftKey && !dx) { dx = dy; dy = 0; }
-    const d = panDelta(-dx, 0);
-    orbNudge(0, 0, dy * (e.ctrlKey ? 0.006 : 0.0011) * orb.boost, dx ? d[0] : 0, dx ? d[1] : 0, e.timeStamp);
+    if (!ISLE) dx = 0; else if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+    const d = dx ? panDelta(-dx, 0) : null;
+    orbNudge(0, 0, dy * (e.ctrlKey ? 0.006 : 0.0011) * orb.boost, d ? d[0] : 0, d ? d[1] : 0, e.timeStamp);
   }
-  /* two fingers: they move the point, pinch to zoom, and twist to turn once the twist is clearly meant */
+  /* two fingers: pinch to zoom, and twist to turn once the twist is clearly meant (round the island they move the point
+     too) */
   function twoState(o) {
     let i = 0, ax = 0, ay = 0, bx = 0, by = 0;
     for (const p of ex.ptrs.values()) { if (i === 0) { ax = p.x; ay = p.y; } else if (i === 1) { bx = p.x; by = p.y; } i++; }
@@ -852,8 +921,8 @@
   function twoMove(ts) {
     const t = ex.two, n = twoState(TW), da = wrapA(n.a - t.a), b = orb.boost;
     t.tw += da;
-    const d = panDelta(n.mx - t.mx, n.my - t.my);
-    orbNudge(Math.abs(t.tw) > 0.14 ? da * 0.9 * b : 0, 0, -Math.log(n.d / t.d) * 0.7 * b, d[0], d[1], ts);
+    const d = ISLE ? panDelta(n.mx - t.mx, n.my - t.my) : null;
+    orbNudge(Math.abs(t.tw) > 0.14 ? da * 0.9 * b : 0, 0, -Math.log(n.d / t.d) * 0.7 * b, d ? d[0] : 0, d ? d[1] : 0, ts);
     t.mx = n.mx; t.my = n.my; t.d = n.d; t.a = n.a;
   }
   cv.addEventListener('contextmenu', e => { if (st.entered && !rd.on) e.preventDefault(); });
@@ -861,7 +930,7 @@
     if (!st.entered || rd.on || insp.on) return;
     if (!ex.ptrs.size) { ex.dragged = ex.multi = false; ex.two = null; }
     ex.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
-    if (ex.ptrs.size === 1) ex.kind = e.pointerType === 'mouse' && (e.button > 0 || e.shiftKey || e.ctrlKey || e.metaKey) ? 'pan' : 'turn';
+    if (ex.ptrs.size === 1) ex.kind = ISLE && e.pointerType === 'mouse' && (e.button > 0 || e.shiftKey || e.ctrlKey || e.metaKey) ? 'pan' : 'turn';
     else { const going = ex.dragged; ex.multi = ex.dragged = true; if (ex.ptrs.size === 2 && canExplore()) twoStart(going, e.timeStamp); }
   });
   cv.addEventListener('pointermove', e => {
@@ -895,7 +964,7 @@
   addEventListener('keydown', e => {
     if (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
     if (!canExplore() || e.metaKey || e.ctrlKey || e.altKey) return;
-    const k = e.key.toLowerCase(), T = orb.T, nudge = (de, dz) => { orb.fly = null; T[E] = clamp(T[E] + de, Math.max(ORB.elMin, orb.Fs), ORB.elMax); T[Z] = clamp(T[Z] + dz, ORB.zMin, ORB.zMax); };
+    const k = e.key.toLowerCase(), T = orb.T, nudge = (de, dz) => { orb.fly = null; T[E] = clamp(T[E] + de, Math.max(ORB.elMin, orb.Fs), ORB.elMax); if (dz) zoomBy(dz); };
     if (k === 'arrowleft' || k === 'q') orb.keys.add('l');
     else if (k === 'arrowright' || k === 'e') orb.keys.add('r');
     else if (k === '+' || k === '=') nudge(0, -0.22);
@@ -1052,23 +1121,35 @@
     /* (nothing may keep the door shut: a warm-up that never finishes, or frames that fail to draw, give way in time) */
     Promise.race([Engine.warm(), new Promise(r => setTimeout(r, 20000))]).catch(() => {}).then(() => { requestAnimationFrame(frame); setTimeout(() => { if (!st.shown) introReady(); }, 30000); });
   });
-  /* the first frames are on screen: the loader gives way to the card, over the live cove; once it has faded, its
-     animations stop (typeof, as the loader is a page-level const, not a property of window) */
-  const loaderOff = () => setTimeout(() => { if (typeof Loader !== 'undefined') Loader.stop(); }, 1400);
+  /* the first frames are on screen: the card comes up under tonight's sky (loader.js), the cove ready behind it. Once
+     it has faded, stepping in, the loader's animations stop (typeof, as the loader is a page-level const, not a property
+     of window) */
+  const loaderOff = () => { if (typeof Loader !== 'undefined') Loader.stop(); };
   function introReady() {
     st.shown = true; skyTick = 0;
     try { syncBouquet(false); } catch (e) { /* (the bouquet waits for the next pick) */ }
     $('enterSound').disabled = false; $('enterQuiet').disabled = false;
-    $('intro').classList.add('ready'); loaderOff();
+    $('intro').classList.add('ready');
   }
-  function introFailed() { $('intro').classList.add('ready', 'failed'); loaderOff(); }
+  function introFailed() { $('intro').classList.add('ready', 'failed'); }
+  /* stepping in: the cove's camera starts where the loader's sky was seen from, its stars where the loader's were, and
+     as that sky fades in under them it tilts down out of it to the camp (not for those who would rather nothing moved;
+     nor on the test bench, unless asked for, whose pictures are of the camp) */
+  const skyStart = () => {
+    const sky = !reduced && !(navigator.webdriver && !window.__coveTilt) && typeof Loader !== 'undefined' && Loader.sky && Loader.sky();
+    if (!sky) return;
+    const p = V0.pos, L = 30;
+    st.from = { pos: p.slice(), look: [p[0] + sky.dir[0] * L, p[1] + sky.dir[1] * L, p[2] + sky.dir[2] * L], fov: sky.fov, focus: V0.focus || 25 };
+    st.to = orbCam; st.camT = 0; st.camDur = 3.8;
+  };
   function enter(withSound) {
     if (st.entered) return;
     st.entered = true; document.body.classList.add('entered', 'entering'); $('intro').classList.add('gone');
+    skyStart();
     if (withSound) startSound();
-    /* once it has faded, the veil goes altogether (its blur is a full-screen pass every frame) */
-    setTimeout(() => { $('intro').hidden = true; document.body.classList.remove('entering'); }, 1700);
-    setTimeout(() => { if (!st.hintGone) $('hint').style.opacity = 1; }, 2500);
+    /* once it has faded, the veil goes altogether, and the loader with it */
+    setTimeout(() => { $('intro').hidden = true; document.body.classList.remove('entering'); loaderOff(); }, 1700);
+    setTimeout(() => { if (!st.hintGone) $('hint').style.opacity = 1; }, 4400);
   }
   $('enterSound').addEventListener('click', () => enter(true));
   $('enterQuiet').addEventListener('click', () => enter(false));
@@ -1339,7 +1420,6 @@
     if (r.what === 'board') { openHutBoard(r.id); return; }
     const say = { door: r.open ? 'The door swings open.' : 'You pull the door to.', shutter: r.open ? 'You prop the shutter open.' : 'The shutter drops shut.', lamp: r.on ? 'You light the lamp.' : 'You put the lamp out.' }[r.what];
     if (say) toast(say, false, 1700);
-    if (sound.amb && sound.amb.thud) sound.amb.thud(r.what === 'lamp' ? 0.05 : 0.18);
   }
   const escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   function openHutBoard(id) {

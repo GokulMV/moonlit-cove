@@ -768,17 +768,12 @@ const Engine = (() => {
     FloraKit.Q.tex = opts.texQ ?? 0.5;
     /* (the round island: its beach and its forest; none of the rocky island's trails, streams, park or boulders) */
     /* (and its huts along the top of the beach: where they stand worked out first, so the forest keeps clear of them) */
-    /* the huts (huts.js): round the island from its own shore; along the beach from the beach's, either side of the camp
-       (Layout.Shore's shape: x, z of the water's edge, the way to the sea, the beach's width) */
-    const beachShore = { shore: u => { const x = Layout.camp.x + u, g = Layout.shoreDZ(x), k = 1 / Math.sqrt(1 + g * g), sz = Layout.shoreMeanZ(x); return { x, z: sz, nx: g * k, nz: -k, W: (Layout.vegZ(x) - sz) * k }; } };
-    const hutPlan = typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.isle ? Layout.island() : beachShore) : null;
+    /* the huts (huts.js): round the island, from its own shore; none along the beach, where there is only the camp */
+    const hutPlan = Layout.isle && typeof IsleHuts !== 'undefined' && opts.huts !== false ? IsleHuts.plan(Layout.island()) : null;
     Layout.hutSites = hutPlan ? hutPlan.map(p => [p.x, p.z]) : [];
     world = Layout.isle ? IsleWorld.build(natG, gU, { R, forest: opts.forest, trails: false, streams: false, park: false, stones: false, keep: hutPlan ? hutPlan.map(p => p.clear) : [] }) : World.build(natG, gU, noiseTex, { R: opts.coastShade ? R : null, forestR: opts.forest !== false ? R : null });   /* (the beach lit as it was before the island: no shade of the hills over the sand and the sea, unless asked for) */
     if (world.setView) world.setView(camera, () => R.shadowMap.enabled && keyLight.castShadow ? keyLight.shadow.camera : null);
-    /* (along the beach, each hut's clearing kept clear of the forest's trees: wherever it comes round in the loop, in the
-       chunks' own frame) */
-    if (hutPlan && !Layout.isle) world.place(ch => { const out = []; for (const p of hutPlan) { const k = Math.round((ch.x0 + world.CW / 2 - p.clear[0]) / Layout.P), cx = p.clear[0] + k * Layout.P; if (cx > ch.x0 - p.clear[2] && cx < ch.x1 + p.clear[2]) out.push([cx, p.clear[1], p.clear[2]]); } return out; });
-    if (hutPlan) { huts = IsleHuts.build(natG, Layout.isle ? Layout.island() : null, world, { plan: hutPlan }); if (world.addWalker) world.addWalker(huts.walk); if (world.addObstacles) world.addObstacles(huts.obstacles); Object.assign(api, { huts });
+    if (hutPlan) { huts = IsleHuts.build(natG, Layout.island(), world, { plan: hutPlan }); if (world.addWalker) world.addWalker(huts.walk); if (world.addObstacles) world.addObstacles(huts.obstacles); Object.assign(api, { huts });
       for (const h of huts.huts) for (const s of ['hammock', 'bench', 'bed', 'chair']) { const P = huts.seatPose(h.p.i, s); if (P) SEATS.push({ id: P.id, name: P.name, kind: 'hut', hut: h.p.i, seat: s, near: 'hut' }); } }
     /* (round the island, what is seen across the sea: Borneo's coast and its ranges, Kinabalu, the park's other islands) */
     if (Layout.isle && typeof IsleHorizon !== 'undefined' && opts.horizon === true) {

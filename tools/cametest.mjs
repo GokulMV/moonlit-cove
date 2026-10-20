@@ -78,18 +78,18 @@ if (!only || only === 'orbit') {
   check(zo > 0.1 && zi < zo && zi >= Math.log(0.35) - 1e-6, 'wheel zooms away and back, within its range');
   await shot(page, 'cam_zoomed');
 
-  /* right-drag moves the point along the beach (the sand follows the hand: dragged right, the point goes left) */
+  /* the view stays on the camp: a right-drag turns as a drag does, and moves nothing along the beach */
   await reset(page); await settle(page);
   await swipe(page, 480, 400, 240, 0, 8, 'right'); await settle(page);
   const pan = await orbState(page);
   console.log('right-drag 240 px →', { px: r3(pan.px), pz: r3(pan.pz), yaw: r3(pan.yaw) });
-  check(pan.px < HOME[3] - 2 && Math.abs(pan.yaw) < 1e-6, 'right-drag moves the point, without turning');
-  await shot(page, 'cam_panned');
-  /* trackpad: a sideways swipe arrives as wheel deltaX */
+  check(Math.abs(pan.px - HOME[3]) < 1e-6 && Math.abs(pan.yaw) > 0.05, 'right-drag turns, and the point stays on the camp');
+  await shot(page, 'cam_rightdrag');
+  /* trackpad: a sideways swipe (wheel deltaX) moves nothing along the beach either */
   const px0 = pan.px; await page.mouse.wheel(200, 0); await settle(page);
   const px1 = (await orbState(page)).px;
   console.log('wheel deltaX 200 → px', r3(px0), '→', r3(px1));
-  check(px1 > px0 + 1, 'sideways trackpad swipe moves along the beach');
+  check(Math.abs(px1 - px0) < 1e-6, 'a sideways trackpad swipe leaves the point on the camp');
 
   /* back to camp glides home exactly */
   await page.evaluate(() => window.__cove.orbHome()); await settle(page);

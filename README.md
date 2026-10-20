@@ -8,11 +8,10 @@ Everything is drawn in the browser with three.js and hand-written shaders. A sma
 
 ## In the cove
 
-- Look round the camp and along the beach: drag to turn, right-drag to move along the sand (two kilometres of it, its ends joined, so keep going and you come round to the camp again), scroll to come closer; the rainforest is packed close behind the beach, grass all through it
-- Stay in the beach huts either side of the camp: open the doors and shutters, light the lamps, lie in the hammock, read the boards in the work hut
+- Arrive under tonight's sky: while the cove is built, your own stars come out where they really are for you, a few of them join up into GK, and stepping in the view tilts down from them to the camp
+- Look round the camp: drag to turn and tilt, scroll or pinch to come closer; the beach runs on out of sight both ways (two kilometres of it, its ends joined), the rainforest packed close behind it, grass all through it
 - Pick up a crab, a shell, a flower or a butterfly and turn it over in your hands
 - Pick fruit round the camp (mango, rambutan, papaya, banana, coconuts): every tree flowers, sets fruit, ripens and drops it to rot on the ground, round after round, about every 15 minutes (faster with the time flow up); a fruit keeps ripening in your hand, and you can eat it when it's ripe
-- Find the fishermen's outrigger canoes pulled up the sand, each painted and named, a net heaped in it
 - Watch the night sky: thousands of stars and the Milky Way where they really are for you, shooting stars from the showers that are on (most of a second each, as real ones are, now and then a fireball or a slow earthgrazer), and a comet over the sea
 - Make a wish on a shooting star, or let a sky lantern go with one; either way it's pinned to a board by the fire for everyone to read
 - Draw on the sketchboard and leave it in the toolbox for others to open
@@ -67,6 +66,6 @@ The full list is in the cove itself, under **Credits and licences**.
 - Stars and the Milky Way: data from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (BSD-3-Clause)
 - Clouds: after takram's [three-clouds](https://github.com/takram-design-engineering/three-geospatial), Sébastien Hillaire's [TileableVolumeNoise](https://github.com/sebh/TileableVolumeNoise) and MJP's Catmull-Rom sampling (all MIT)
 - Fonts: Fraunces, Instrument Sans, Caveat and JetBrains Mono (SIL OFL 1.1), via [Fontsource](https://github.com/fontsource/fontsource)
-- Sounds: the [Moodist](https://github.com/remvze/moodist) library (Pixabay Content License and CC0) and Kenney's [Starter Kit Racing](https://github.com/KenneyNL/Starter-Kit-Racing) (CC0)
+- Sounds: the [Moodist](https://github.com/remvze/moodist) library (Pixabay Content License and CC0)
 - Radio: stations from the [Radio Browser](https://www.radio-browser.info) directory, streamed straight from their broadcasters
 - Spotify links play in Spotify’s own [embedded player](https://developer.spotify.com/documentation/embeds), through its iFrame API

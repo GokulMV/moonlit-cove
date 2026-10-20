@@ -15,8 +15,7 @@
    you move, each fades with its distance, dulls as the air takes
    its highs, and pans to the side it is on. The same graph renders
    offline for the film's soundtrack.
-   Recordings: Moodist sound library (Pixabay licence / CC0); the
-   knocks: Kenney (CC0).
+   Recordings: Moodist sound library (Pixabay licence / CC0).
    ───────────────────────────────────────────────────────────── */
 const Ambience = (() => {
   function rngOf(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -139,14 +138,7 @@ const Ambience = (() => {
     }
     function fadeIn(t0, dur = 2.5, level = opts.level ?? 0.9) { opts.level = level; master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(0, t0); master.gain.linearRampToValueAtTime(level, t0 + dur); on = true; }
     function fadeOut(t0, dur = 1.5) { master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(master.gain.value, t0); master.gain.linearRampToValueAtTime(0, t0 + dur); }
-
-    /* a knock: the recorded impact, a little lower for harder hits */
-    function thud(k) {
-      const buf = B.impact; if (!buf) return;
-      const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = 0.9 + 0.15 * (1 - k);
-      chain(s, G(Math.min(0.9, 0.15 + 0.7 * k) * 0.06 / Math.max(SNDS.impact.rms, 1e-3)), master); s.start(ctx.currentTime);
-    }
-    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, page, thud,
+    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, page,
       setLevel: v => { opts.level = v; if (on) master.gain.setTargetAtTime(v, ctx.currentTime, 0.2); },
       get enabled() { return enabled; }, get on() { return on; }, master, channels: ch };
   }
