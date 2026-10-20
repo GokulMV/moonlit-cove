@@ -10,7 +10,7 @@ const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = (
 try {
   /* (the hand's and the falls' clock stepped a fifth of a second a frame, however slow the frames are here) */
   await page.evaluate(() => { const st = window.__cove.st; st.rsI = 5; st.rs = 1; st.rsAt = 1e15; window.__coveInspStep = 1 / 5; });
-  await page.addStyleTag({ content: '#walkHud, #ctrl, #walkBar, #hint { display: none !important; }' });
+  await page.addStyleTag({ content: '#ctrl, #homeBar, #hint { display: none !important; }' });
   await frames(3);
   const C = await page.evaluate(() => ({ ms: Math.round(Engine.orchard.ms), sets: Engine.orchard.count() }));
   console.log(`  built in ${C.ms} ms:`); for (const s of C.sets) console.log('   ', JSON.stringify(s));

@@ -23,17 +23,6 @@
     <span class="sky-text"><b id="skyPhase">Moon</b><span id="skyTime">--:--</span></span>
   </button>
 
-  <!-- the map: where you are, in the corner; the whole of it in a dialog (minimap.js) -->
-  <button class="minimap glass" id="map" type="button" aria-label="Map of where you are: open the whole map" aria-haspopup="dialog" aria-expanded="false"><canvas id="mapC" aria-hidden="true"></canvas><span class="mm-n" aria-hidden="true">N</span></button>
-  <div class="mapbig" id="mapBig" hidden role="dialog" aria-modal="true" aria-labelledby="mbTitle">
-    <div class="mb-card glass">
-      <div class="mb-head"><div><p class="eyebrow">Where you are</p><h2 id="mbTitle">The island</h2></div><button class="icon" id="mbClose" type="button" aria-label="Close the map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <canvas id="mapBC" role="img" aria-label="Map, north up"></canvas>
-      <p class="mb-note" id="mbNote" aria-live="polite"></p>
-      <ul class="mb-key" id="mbKey" aria-label="Key"></ul>
-    </div>
-  </div>
-
   <div id="spots" aria-label="Places in the scene"></div>
 
   <nav class="dock glass" id="dock" aria-label="Chapters"></nav>
@@ -48,7 +37,7 @@
   </aside>
 
   <p class="hint" id="hint">Click a glowing dot to open it. Click the sea to send a wave, or a crab, a shell, a flower or a fruit to pick it up. Drag to look around, right-drag to move, scroll to zoom.</p>
-  <div class="walkbar" id="walkBar"><button type="button" class="glass" id="bWalkCamp" hidden>Back to camp</button><button type="button" class="glass" id="bWalkVan" hidden>Go to the van</button><button type="button" class="glass pitch" id="bPitch" hidden>Pitch camp here</button></div>
+  <div class="homebar" id="homeBar"><button type="button" class="glass" id="bHome" hidden>Back to camp</button></div>
   <div class="toast glass" id="toast" hidden><span id="toastText"></span><button type="button" id="toastBtn" hidden>Rebuild camp</button></div>
   <!-- the bouquet: wild flowers picked at the forest's edge -->
   <button type="button" class="bouquet glass" id="bouquet" hidden aria-label="Your bouquet" aria-expanded="false"><canvas id="bqIcon" width="72" height="72" aria-hidden="true"></canvas><span id="bqN">0</span></button>
@@ -69,21 +58,6 @@
     <p class="ihint" id="iHint">Drag to turn it over · scroll to look closer · flick it up and away to throw it</p>
   </aside>
 
-  <div class="drivehud glass" id="driveHud" hidden>
-    <span class="dh-keys"><kbd>W A S D</kbd> or arrows to drive · <kbd>Shift</kbd> boost · <kbd>Space</kbd> brake · <kbd>H</kbd> horn · <kbd>R</kbd> unstick</span>
-    <button type="button" id="bPark">Park here <kbd>E</kbd></button>
-  </div>
-  <div class="drivehud walkhud glass" id="walkHud" hidden>
-    <span class="dh-keys"><kbd>W A S D</kbd> walk · drag to look · <kbd>Shift</kbd> jog</span>
-    <button type="button" class="wh-auto" id="bWalkAuto" aria-pressed="false" title="Walk on, looking about, on your own">Auto</button>
-    <button type="button" class="wh-auto wh-torch" id="bTorch" aria-pressed="false" title="A torch, for after dark">Torch <kbd>F</kbd></button>
-    <button type="button" class="wh-auto wh-snow" id="bSnowball" aria-pressed="false" hidden title="Roll a snowball: walk to make it bigger; let it go against a bigger one to stack it">Snowball <kbd>B</kbd></button>
-    <button type="button" class="wh-auto wh-castle" id="bCastle" hidden title="Kneel and build a sand castle in front of you">Sand castle <kbd>C</kbd></button>
-    <div class="seg wh-pace" role="radiogroup" aria-label="Pace"><button type="button" role="radio" data-pace="stroll" aria-checked="false">Stroll</button><button type="button" role="radio" data-pace="walk" aria-checked="true">Walk</button><button type="button" role="radio" data-pace="jog" aria-checked="false">Jog</button></div>
-    <button type="button" id="bWalkExit">Exit <kbd>E</kbd></button>
-  </div>
-  <div class="pad" id="pad" hidden aria-hidden="true"><i id="padKnob"></i></div>
-
   <div class="reader" id="reader" hidden>
     <button class="r-close glass" id="rClose" type="button">Back to the cove <kbd>Esc</kbd></button>
     <div class="r-bar glass" role="group" aria-label="Turn the menu's pages">
@@ -97,12 +71,6 @@
   </div>
 
   <div class="ctrl glass" id="ctrl">
-    <button class="icon" id="bDrive" type="button" aria-pressed="false" title="Drive the van">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 14.2v6.3M9.9 11.4 4.1 9.8M14.1 11.4l5.8-1.6"/></svg>
-    </button>
-    <button class="icon" id="bWalk" type="button" aria-pressed="false" title="Walk the beach" aria-label="Walk the beach">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.4" cy="4.3" r="1.9"/><path d="M12.9 7.9 11.3 13.2M11.3 13.2l-2.1 3.5-2.5 3.1M11.3 13.2l2.6 2.9.9 4.4M12.6 9.1l2.8 2.5 2.4.6M12.6 9.1 9.5 10.8 8.5 13.6"/></svg>
-    </button>
     <button class="icon" id="bLantern" type="button" title="Let a sky lantern go" aria-label="Let a sky lantern go">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l1.6 11.5a2 2 0 0 1-2 2.3H8.4a2 2 0 0 1-2-2.3L8 4z"/><path d="M10 21h4M12 17.8V21"/></svg>
     </button>
@@ -156,7 +124,7 @@
       <p class="snote">Fireflies all along the forest edge after dark, moths at the lamps, midges at dusk, butterflies and dragonflies by day; fish leaping and shoaling in the shallows; gulls over the surf, sandpipers chasing the waves, bats and ghost crabs at night, now and then dolphins offshore; what the tide leaves on the sand.</p>
     </div>
     <div class="sgroup">
-      <div class="shead"><h3>Finds</h3><span class="snote" id="fCount">0 of 13</span></div>
+      <div class="shead"><h3>Finds</h3><span class="snote" id="fCount">0 of 12</span></div>
       <ul class="finds" id="finds"></ul>
     </div>
     <div class="sgroup">
@@ -165,7 +133,6 @@
       <label class="srow" for="lMotion"><span>Motion</span><input id="lMotion" type="range" min="0.3" max="1.2" step="0.01" value="0.7"></label>
       <div class="srow"><span>Lights</span><div class="seg" role="radiogroup" aria-label="Lights"><button type="button" role="radio" data-lights="auto" aria-checked="true">Auto</button><button type="button" role="radio" data-lights="on" aria-checked="false">On</button><button type="button" role="radio" data-lights="off" aria-checked="false">Off</button></div></div>
       <div class="srow"><span>Name in the corner</span><button class="sw" id="lBrand" type="button" role="switch" aria-checked="true" aria-label="Show the name in the corner"><i></i></button></div>
-      <div class="srow"><span>Map in the corner</span><button class="sw" id="lMap" type="button" role="switch" aria-checked="true" aria-label="Show the map in the corner"><i></i></button></div>
     </div>
     <div class="sgroup">
       <button type="button" class="srow linkrow" data-open-credits><span>Credits and licences</span><span aria-hidden="true">→</span></button>

@@ -1,7 +1,7 @@
 /* Wildlife check: node tools/faunatest.mjs [night|dusk|day]. Night: fireflies along the treeline away from the camp,
-   a ghost crab, the van 150 m down the coast. Dusk: a midge swarm, bats overhead. Day: sandpipers at the swash, gulls
-   standing (then lifting off before the van), a dolphin pod, the Animals and Insects sliders at 0 and 1. Shots go to
-   shots/fauna_*.png, with the live counts printed beside each. */
+   a ghost crab, the beach 150 m down the coast. Dusk: a midge swarm, bats overhead. Day: sandpipers at the swash, gulls
+   standing, a dolphin pod, the Animals and Insects sliders at 0 and 1. Shots go to shots/fauna_*.png, with the live
+   counts printed beside each. */
 import { open, shot, until } from './lib.mjs';
 const which = process.argv[2] || 'night', hour = { night: 23, dusk: 17, day: 13 }[which];
 const { browser, page } = await open({ w: 960, h: 600, rs: 0.6, hour });
@@ -21,8 +21,8 @@ if (which === 'night') {
   await view('night_treeline', { pos: [40, 1.8, s40 + 4], look: [90, 1.0, v90 - 1], fov: 55, focus: 25 }, 6);
   const c = await F(() => { const C = Engine.fauna.debug.crabs.C.find(c => c.st === 'still' || c.st === 'run'); return C ? [C.x, C.z] : null; });
   if (c) await view('night_crab', { pos: [c[0] - 3.5, 3.4, c[1] + 3.5], look: [c[0], 0.03, c[1]], fov: 14, focus: 5 }, 1);
-  await page.evaluate(() => { window.__cam = null; const c = window.__cove; c.startDrive(); Object.assign(c.car, { x: 150, z: Layout.shoreZ(150) + 3.2, h: 0, v: 0 }); });
-  await frames(8); await shot(page, 'fauna_night_van150'); console.log('night_van150'.padEnd(16), await counts());
+  const [s150] = await coast(150);
+  await view('night_far150', { pos: [142, 3.3, s150 + 3.2], look: [170, 1.2, s150 + 4], fov: 54, focus: 7.4 }, 8);
 }
 if (which === 'dusk') {
   const s = await F(() => { const S = Engine.fauna.debug.gnats.S; for (let j = 0; j < 14; j++) if (S[j * 160]) return [S[j * 160], S[j * 160 + 1], S[j * 160 + 2]]; return null; });
@@ -45,12 +45,10 @@ if (which === 'day') {
   await frames(6);
   const d = await F(() => { const p = Engine.fauna.debug.dolphins.pod; return [p.x, Layout.shoreZ(p.x) - p.off]; });
   await view('day_dolphins', { pos: [d[0] + 2, 4, d[1] + 22], look: [d[0] - 3, 0.2, d[1]], fov: 30, focus: 22 }, 2);
-  /* last, as the van may knock the camp about on its way: a group of standing gulls, and the van driving at them */
+  /* a group of standing gulls */
   const g = await F(() => { const G = Engine.fauna.debug.gulls.L.find(g => g.mode === 'stand'); return G ? [G.x, G.z] : null; });
   if (g) {
     await view('day_gulls', { pos: [g[0] + 3, 3.4, g[1] + 7], look: [g[0], 0.3, g[1]], fov: 26, focus: 7 });
-    await page.evaluate(g => { const c = window.__cove; c.startDrive(); Object.assign(c.car, { x: g[0] - 30, z: Layout.shoreZ(g[0] - 30) + 3.5, h: 0, v: 8 }); c.keys.add('w'); }, g);
-    await view('day_gulls_lift', { pos: [g[0] + 8, 4.5, g[1] + 12], look: [g[0] - 3, 1.5, g[1]], fov: 55, focus: 12 }, 4);
     console.log('gull modes', await F(() => Engine.fauna.debug.gulls.L.map(g => g.mode).join(' ')));
   }
 }

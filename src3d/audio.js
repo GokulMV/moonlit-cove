@@ -16,7 +16,7 @@
    its highs, and pans to the side it is on. The same graph renders
    offline for the film's soundtrack.
    Recordings: Moodist sound library (Pixabay licence / CC0); the
-   van's engine and knocks: Kenney (CC0).
+   knocks: Kenney (CC0).
    ───────────────────────────────────────────────────────────── */
 const Ambience = (() => {
   function rngOf(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -140,58 +140,13 @@ const Ambience = (() => {
     function fadeIn(t0, dur = 2.5, level = opts.level ?? 0.9) { opts.level = level; master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(0, t0); master.gain.linearRampToValueAtTime(level, t0 + dur); on = true; }
     function fadeOut(t0, dur = 1.5) { master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(master.gain.value, t0); master.gain.linearRampToValueAtTime(0, t0 + dur); }
 
-    /* the van. The engine is a recorded loop (Kenney) played faster as it revs, as a real one winds up: the key turns
-       it over a few times before it catches; parking lets it wind down */
-    const vanG = G(0); vanG.connect(master);
-    let eng = null, engOn = false;
-    function engineNodes() {
-      const buf = B.engine; if (!buf) return null;
-      const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.loopStart = SNDS.engine.loopStart; s.loopEnd = Math.min(SNDS.engine.loopEnd, buf.duration - 0.01);
-      /* small speakers can't play its 28 Hz fundamental: the rumble out, the harmonics that carry it kept */
-      const hp = F('highpass', 40, 0.7), lp = F('lowpass', 1400, 0.6), crank = G(1), g = G(0);
-      chain(s, hp, lp, crank, g, vanG); s.start(ctx.currentTime, SNDS.engine.loopStart);
-      return { s, lp, crank, g, norm: 0.034 / Math.max(SNDS.engine.rms, 1e-3) };
-    }
-    function engine(on, rpm, thr) {
-      if (!eng && on) eng = engineNodes();
-      if (!eng) return;
-      const t = ctx.currentTime, e = eng;
-      if (on && !engOn) {
-        vanG.gain.cancelScheduledValues(t); vanG.gain.setValueAtTime(vanG.gain.value, t); vanG.gain.linearRampToValueAtTime(1, t + 0.05);
-        e.s.playbackRate.cancelScheduledValues(t); e.s.playbackRate.setValueAtTime(0.32, t); e.s.playbackRate.linearRampToValueAtTime(0.4, t + 0.55);
-        e.s.playbackRate.linearRampToValueAtTime(1.2, t + 0.82); e.s.playbackRate.setTargetAtTime(0.86, t + 0.85, 0.28);
-        e.crank.gain.cancelScheduledValues(t); e.crank.gain.setValueAtTime(0.35, t);
-        for (let k = 0; k < 4; k++) { const c = t + 0.04 + k * 0.14; e.crank.gain.linearRampToValueAtTime(0.8, c + 0.04); e.crank.gain.linearRampToValueAtTime(0.35, c + 0.12); }
-        e.crank.gain.linearRampToValueAtTime(1, t + 0.7);
-        e.g.gain.cancelScheduledValues(t); e.g.gain.setValueAtTime(0.9 * e.norm, t); e.g.gain.setTargetAtTime(1.0 * e.norm, t + 0.8, 0.2);
-        e.lp.frequency.setValueAtTime(900, t); e.lp.frequency.linearRampToValueAtTime(2000, t + 0.82); e.lp.frequency.setTargetAtTime(1300, t + 0.9, 0.3);
-        e.until = t + 1.25; engOn = true; return;
-      }
-      if (!on && engOn) {
-        engOn = false; e.until = t + 1.2;
-        e.s.playbackRate.cancelScheduledValues(t); e.s.playbackRate.setValueAtTime(e.s.playbackRate.value, t); e.s.playbackRate.linearRampToValueAtTime(0.3, t + 0.9);
-        vanG.gain.cancelScheduledValues(t); vanG.gain.setValueAtTime(vanG.gain.value, t); vanG.gain.linearRampToValueAtTime(0, t + 1.0);
-        return;
-      }
-      if (!on || t < e.until) return;
-      const rate = 0.86 + 0.9 * rpm + 0.2 * thr;
-      e.s.playbackRate.setTargetAtTime(rate, t, thr > 0.1 ? 0.18 : 0.4);
-      e.lp.frequency.setTargetAtTime(1100 + 1300 * thr + 800 * rpm, t, 0.12);
-      e.g.gain.setTargetAtTime((0.75 + 0.4 * thr + 0.3 * rpm) * e.norm, t, 0.12);
-    }
-    /* the horn: two soft notes, rounded off (no buzz) */
-    function horn() {
-      const t = ctx.currentTime, out = G(0), lp = F('lowpass', 1100, 0.6); chain(lp, out, master);
-      [[349, 0], [440, 0.02]].forEach(([f, d]) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f; const g = G(0.5); chain(o, g, lp); o.start(t + d); o.stop(t + 0.62); });
-      out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.05, t + 0.03); out.gain.setValueAtTime(0.05, t + 0.42); out.gain.linearRampToValueAtTime(0, t + 0.55);
-    }
     /* a knock: the recorded impact, a little lower for harder hits */
     function thud(k) {
       const buf = B.impact; if (!buf) return;
       const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = 0.9 + 0.15 * (1 - k);
       chain(s, G(Math.min(0.9, 0.15 + 0.7 * k) * 0.06 / Math.max(SNDS.impact.rms, 1e-3)), master); s.start(ctx.currentTime);
     }
-    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, page, engine, horn, thud,
+    return { ctx, ready, schedule, setEnabled, fadeIn, fadeOut, duck, page, thud,
       setLevel: v => { opts.level = v; if (on) master.gain.setTargetAtTime(v, ctx.currentTime, 0.2); },
       get enabled() { return enabled; }, get on() { return on; }, master, channels: ch };
   }

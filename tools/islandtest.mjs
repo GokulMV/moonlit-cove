@@ -7,7 +7,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + 
 const { browser, page, logs } = await open({ w: 1280, h: 720, rs: 0.6, hour, dtCap: 0.25, query: coast ? '' : '?island' });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 try {
-  await page.addStyleTag({ content: '#walkHud, #ctrl, #walkBar, #hint, #hud { display: none !important; }' });
+  await page.addStyleTag({ content: '#ctrl, #homeBar, #hint, #hud { display: none !important; }' });
   const info = await page.evaluate(() => ({ isle: Layout.isle, ms: Engine.isleMs, counts: Engine.world && Engine.world.counts }));
   console.log('  ', JSON.stringify(info));
   /* (what the forest's shapes cost to grow, the dearest first) */

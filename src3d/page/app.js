@@ -1,7 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
    app.js — the live page: render loop, chapters on objects,
    hotspots, live sky and time controls, the sound mixer and the
-   click-the-sea waves.
+   click-the-sea waves. The camera looks round the camp and goes
+   along the beach as a map turns under the hand.
    ───────────────────────────────────────────────────────────── */
 (() => {
   const $ = id => document.getElementById(id);
@@ -10,7 +11,7 @@
     get(k, d) { try { const v = localStorage.getItem('cove.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('cove.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
   };
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, isTouch = matchMedia('(pointer: coarse)').matches;
   const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
   const loc = Astro.locate(tz);
   const ALIAS = { Calcutta: 'Kolkata', Saigon: 'Ho Chi Minh', Kiev: 'Kyiv', Rangoon: 'Yangon', Katmandu: 'Kathmandu' };
@@ -36,15 +37,6 @@
     bottle: { pos: [-2.75, 1.0, -3.55], look: [-3.3, 0.12, -5.2], fov: 38, focus: 1.95 }
   };
   let anchors = null;
-  /* the view of the van is kept relative to the van, so the clipboard reads well wherever it was parked */
-  const V0van = JSON.parse(JSON.stringify(V.van)); let van0 = null;
-  function vanView() {
-    if (!van0) return V0van;
-    const P = Engine.vanPose(), dh = P.heading - van0.heading, c = Math.cos(dh), s = Math.sin(dh);
-    const rel = p => { const dx = p[0] - van0.x, dz = p[2] - van0.z; return [P.x + dx * c + dz * s, p[1], P.z - dx * s + dz * c]; };
-    return Object.assign({}, V0van, { pos: rel(V0van.pos), look: rel(V0van.look) });
-  }
-  Object.defineProperty(V, 'van', { get: vanView, enumerable: true });
 
   /* ── text content ── */
   /* (the place's name, and beneath it whose it is) */
@@ -70,7 +62,6 @@
   });
   function openChapter(id) {
     const c = Content.chapters.find(x => x.id === id);
-    if (c && wk.on) stopWalk();
     if (rd.on && rd.id === id) return;
     if (rd.on) stopReading(!!c);
     st.chapter = c ? id : null;
@@ -369,13 +360,6 @@
   $('bBrandShow').addEventListener('click', () => setBrand(true));
   $('lBrand').addEventListener('click', () => setBrand(!st.brand));
   syncBrand();
-  /* ── the map in the corner (minimap.js): where you are, and which way you face; tap it for the whole map. Shown or
-     hidden, remembered ── */
-  st.map = store.get('map', true);
-  Minimap.init();
-  function syncMap() { setSw($('lMap'), st.map); Minimap.show(st.map); }
-  $('lMap').addEventListener('click', () => { st.map = !st.map; store.set('map', st.map); syncMap(); });
-  syncMap();
 
   /* ── full screen: the page and nothing over it, the screen kept from sleeping, for watching a long while; the
      browser's own Esc (or the button, which hides itself until the pointer moves) brings everything back ── */
@@ -445,12 +429,12 @@
     rain: { cirrus: 0, alto: 0.15, cumulus: 0.45, stratus: 1, storm: 0.12, rain: 1, snow: 0 },
     storm: { cirrus: 0, alto: 0.05, cumulus: 0.55, stratus: 1, storm: 1, rain: 1, snow: 0 },
     /* (snow on a tropical island: as a dream has it. A soft grey sky, flakes on the wind, the beach and the trees going
-       white; deep enough, a snowman) */
+       white) */
     snow: { cirrus: 0, alto: 0.3, cumulus: 0.3, stratus: 0.8, storm: 0, rain: 0, snow: 1 }
   };
   /* (and now and then, by itself, snow) */
   const AUTO = ['puffy', 'wispy', 'mackerel', 'clear', 'puffy', 'mackerel', 'wispy', 'overcast', 'snow'];
-  const WXNOTE = { auto: 'Clouds drift through their kinds on their own, and now and then it snows.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.', snow: 'Snow, settling on the sand and the trees. When it lies deep enough, walk and roll a snowman.' };
+  const WXNOTE = { auto: 'Clouds drift through their kinds on their own, and now and then it snows.', clear: 'A clear sky, a few fair-weather clouds.', wispy: 'High cirrus: thin mare’s tails.', puffy: 'Cumulus all across the sky.', mackerel: 'A mackerel sky of altocumulus.', overcast: 'A grey deck of stratus.', rain: 'Rain on the sand and the sea. The fire burns low.', storm: 'A thunderstorm out at sea.', snow: 'Snow, settling on the sand and the trees.' };
   st.weather = store.get('weather', 'auto'); if (st.weather !== 'auto' && !WX[st.weather]) st.weather = 'auto'; st.wx = Object.assign({}, WX.puffy, { wet: 0 }); st.flash = null; st.nextBolt = 0;
   /* the snow lying: how deep (m); it builds while it snows, a few centimetres a minute, and melts once it stops (the
      tropical sun is quick about it) */
@@ -592,8 +576,6 @@
   const unpinch = e => { pinch.delete(e.pointerId); if (pinch.size < 2) pinch0 = null; };
   cv.addEventListener('pointerup', unpinch); cv.addEventListener('pointercancel', unpinch);
   addEventListener('pointermove', e => { if (zoomable() && !(rd.drag && rd.drag.live)) rd.panT = [Math.max(-1, Math.min(1, ((e.clientX - view.x) / view.w) * 2 - 1)) * 1.15, Math.max(-1, Math.min(1, ((e.clientY - view.y) / view.h) * 2 - 1)) * 1.15]; }, { passive: true });
-  addEventListener('pointermove', e => { if (car.on && down && e.buttons) car.yaw = Math.max(-2.6, Math.min(2.6, car.yaw - e.movementX * 0.006)); }, { passive: true });
-  addEventListener('pointerup', () => { if (car.on) car.yaw *= 0.5; });
 
   /* ── exploring: the camera turns round a point on the sand, the way a map turns under your hand. Drag to turn round
      it (up and down tilts), right-drag or Shift-drag to move it along the beach, scroll or pinch to come closer; on a
@@ -701,7 +683,7 @@
   }
   function stepOrbit(dt) {
     const T = orb.T, v = orb.v, g = orb.g;
-    /* a glide home or to the van: the targets travel there, easing in and out, the camera rising a little on a long way */
+    /* a glide home: the targets travel there, easing in and out, the camera rising a little on a long way */
     if (orb.fly) {
       const f = orb.fly; f.t += dt; const u = Math.min(1, f.t / f.dur), e = ease(u);
       for (let i = 0; i < 5; i++) T[i] = u >= 1 ? f.to[i] : f.from[i] + (f.to[i] - f.from[i]) * e;
@@ -750,7 +732,7 @@
     /* and if it is in the ground anyway (a sudden rock under a quick turn), it is lifted clear */
     if (Engine.world) { const gd = Engine.world.land(p[0], p[2]) + 0.45; if (p[1] < gd) { l[1] += gd - p[1]; p[1] = gd; } }
   }
-  /* a glide to somewhere: home, or to the van; longer ways take longer and rise a little on the way */
+  /* a glide home; a longer way takes longer and rises a little on the way */
   function orbFly(to) {
     /* the shortest way round: whole turns taken off first */
     const T = orb.T, k = Math.round(T[Y] / TAU) * TAU; T[Y] -= k; orb.v[Y] -= k;
@@ -760,14 +742,7 @@
     orb.g.fill(0);
   }
   const orbHome = () => orbFly(HOME);
-  function orbToVan() {
-    if (!ready) return;
-    const P = Engine.vanPose();
-    if (ISLE) { orbFly([orb.T[Y], orb.T[E], Math.min(orb.T[Z], Math.log(0.8)), P.x, P.z]); return; }
-    const C = sandAt(P.x, pvC), lo = pvLo(C), hi = pvHi(C);
-    orbFly([orb.T[Y], orb.T[E], Math.min(orb.T[Z], Math.log(0.8)), P.x, clamp((P.z - lo) / (hi - lo), 0, 1)]);
-  }
-  /* the point set down at once (where you stopped walking, where the van was parked), facing the way you were */
+  /* the point set down at once, facing a given way (the test bench's) */
   function orbAt(x, z, yaw, zoom) {
     let s;
     if (ISLE) s = [wrapA(yaw), EL0, zoom, clamp(x, IB[0], IB[1]), clamp(z, IB[2], IB[3])];
@@ -776,14 +751,14 @@
     orb.fly = null; orb.keys.clear(); orb.el = s[E]; orbPoint(); orb.Fs = elFloor(); orb.el = Math.max(s[E], orb.Fs); orbPoint(); orb.Fs = elFloor();
   }
   const orbNearCamp = () => Math.hypot(orb.px - P0[0], orb.pz - P0[2]) < 40;
-  /* a pin on a thing shows when the camera is round the camp, or, walking, when you have come up to it */
-  const pinNear = a => wk.on ? Math.hypot((a.x ?? a[0]) - wk.x, (a.z ?? a[2]) - wk.z) < 6.5 : orbNearCamp();
+  /* a pin on a thing shows when the camera is round the camp */
+  const pinNear = () => orbNearCamp();
 
   /* the hand on it: pointers, the wheel, the keys */
   const ex = { ptrs: new Map(), kind: 'turn', dragged: false, multi: false, two: null, ax: 0, ay: 0, wheelT: -1e9 };
   /* (something held up close, inspect.js: everything else waits while it is; see openInspect) */
   const insp = { on: false, info: null, c: null, drag: null, seen: new Set(store.get('seenLife', [])) };
-  const canExplore = () => st.entered && !rd.on && !car.on && !wk.on && !st.chapter && !seat.on && !sketch.on && !tbox.on && !insp.on;
+  const canExplore = () => st.entered && !rd.on && !st.chapter && !seat.on && !sketch.on && !tbox.on && !insp.on;
   const hintOff = () => { if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; } };
   if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = ISLE ? 'Tap a glowing dot to open it. Tap the sea to send a wave, or an animal, a shell or a flower to look at it close. Drag to look around, two fingers to move over the island and zoom.' : 'Tap a glowing dot to open it. Tap the sea to send a wave. Drag to look around, two fingers to move and zoom.';
   else if (ISLE) $('hint').textContent = 'Click a glowing dot to open it. Click the sea to send a wave, or an animal, a shell, a flower or a fruit to look at it close. Drag to look around, right-drag to move over the island, scroll to zoom.';
@@ -890,7 +865,6 @@
     else { const going = ex.dragged; ex.multi = ex.dragged = true; if (ex.ptrs.size === 2 && canExplore()) twoStart(going, e.timeStamp); }
   });
   cv.addEventListener('pointermove', e => {
-    if (wk.on && !insp.on && e.pointerType === 'mouse' && !e.buttons) hoverAt(e);
     const p = ex.ptrs.get(e.pointerId); if (!p) return;
     if (e.pointerType === 'mouse' && !e.buttons) { exUp(e); return; }
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -898,11 +872,10 @@
     if (!ex.dragged) {
       if (Math.hypot(p.x - p.x0, p.y - p.y0) < (e.pointerType === 'mouse' ? 6 : 10)) return;
       ex.dragged = true;
-      if (wk.on) hintOff(); else if (canExplore()) gestureStart(e.timeStamp);
+      if (canExplore()) gestureStart(e.timeStamp);
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety */ }
     }
-    if (wk.on) walkLook(dx, dy);
-    else if (canExplore()) { if (ex.kind === 'pan') orbPanBy(dx, dy, e.timeStamp); else orbTurn(dx, dy, e.timeStamp); }
+    if (canExplore()) { if (ex.kind === 'pan') orbPanBy(dx, dy, e.timeStamp); else orbTurn(dx, dy, e.timeStamp); }
   });
   function exUp(e) {
     if (!ex.ptrs.delete(e.pointerId)) return;
@@ -915,8 +888,7 @@
       return;
     }
     if (ex.ptrs.size) return;
-    if (wk.on) { if (ex.dragged) wk.mT = performance.now(); }
-    else if (live && (ex.dragged || ex.two)) gestureEnd(e.type !== 'pointercancel', e.timeStamp);
+    if (live && (ex.dragged || ex.two)) gestureEnd(e.type !== 'pointercancel', e.timeStamp);
     ex.two = null;
   }
   cv.addEventListener('pointerup', exUp); cv.addEventListener('pointercancel', exUp); addEventListener('pointerup', exUp);
@@ -936,769 +908,21 @@
   });
   addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 'arrowleft' || k === 'q') orb.keys.delete('l'); if (k === 'arrowright' || k === 'e') orb.keys.delete('r'); });
   addEventListener('blur', () => orb.keys.clear());
-  /* the way home, and the way to the van wherever it was left, once they are some way off; the arrow says which side of the screen */
-  $('bWalkCamp').addEventListener('click', () => { orbHome(); hintOff(); });
-  $('bWalkVan').addEventListener('click', () => { orbToVan(); hintOff(); });
-  const wbar = { camp: -2, van: -2, n: 0, vx: Layout.van.x, vz: Layout.van.z };
+  /* the way home, once the view has gone some way off; the arrow says which side of the screen the camp is on */
+  $('bHome').addEventListener('click', () => { orbHome(); hintOff(); });
+  let homeSide = -2;
   const sideOf = (x, z) => { const dx = x - orb.px, dz = z - orb.pz, yw = orbYaw(), r = (dx * Math.cos(yw) - dz * Math.sin(yw)) / (Math.hypot(dx, dz) || 1); return r < -0.35 ? 0 : r > 0.35 ? 2 : 1; };
-  function syncWalkBar() {
-    if (ready && !(wbar.n++ % 15)) { const P = Engine.vanPose(); wbar.vx = P.x; wbar.vz = P.z; }
-    const on = canExplore() && st.camT >= 1 && !car.camK && !wk.camK && !orb.fly, px = orb.px, pz = orb.pz;
-    const away = Math.hypot(px - P0[0], pz - P0[2]) > 4 || Math.abs(wrapA(orb.v[Y])) > 0.35 || Math.abs(orb.v[Z]) > 0.4 || Math.abs(orb.el - EL0) > 0.22;
-    const camp = on && away ? sideOf(P0[0], P0[2]) : -1, van = on && Math.hypot(wbar.vx - px, wbar.vz - pz) > 25 ? sideOf(wbar.vx, wbar.vz) : -1;
-    const label = (s, t) => s === 0 ? '← ' + t : s === 2 ? t + ' →' : t;
-    if (camp >= 0 || van >= 0) hintOff();
-    if (camp !== wbar.camp) { wbar.camp = camp; $('bWalkCamp').hidden = camp < 0; if (camp >= 0) $('bWalkCamp').textContent = label(camp, 'Back to camp'); }
-    if (van !== wbar.van) { wbar.van = van; $('bWalkVan').hidden = van < 0; if (van >= 0) $('bWalkVan').textContent = label(van, 'Go to the van'); }
-    /* parked a long way from the camp, and looking at the van: the camp can come here */
-    const pitchOK = on && !pitchS.on && !Engine.pitching && car.k <= 0 && Math.hypot(wbar.vx - P0[0], wbar.vz - P0[2]) > 60 && Math.hypot(wbar.vx - px, wbar.vz - pz) < 30;
-    if (pitchOK !== wbar.pitch) { wbar.pitch = pitchOK; $('bPitch').hidden = !pitchOK; }
+  function syncHomeBar() {
+    const on = canExplore() && st.camT >= 1 && !orb.fly;
+    const away = Math.hypot(orb.px - P0[0], orb.pz - P0[2]) > 4 || Math.abs(wrapA(orb.v[Y])) > 0.35 || Math.abs(orb.v[Z]) > 0.4 || Math.abs(orb.el - EL0) > 0.22;
+    const side = on && away ? sideOf(P0[0], P0[2]) : -1;
+    if (side >= 0) hintOff();
+    if (side !== homeSide) { homeSide = side; $('bHome').hidden = side < 0; if (side >= 0) $('bHome').textContent = side === 0 ? '← Back to camp' : side === 2 ? 'Back to camp →' : 'Back to camp'; }
   }
-
-  /* ── pitching camp where the van is parked. The spot has to take the camp: as much dry sand as the camp's own bay
-     has, and no rock in the way. Then, while the screen is dark for a moment, the coast is moved under the camp so
-     that the van stands where it always stands at the camp, on the beach it was parked on; the camera is set at
-     the camp, and the camp goes up again one thing at a time ── */
-  const pitchS = { on: false, phase: 0, t0: 0, ox: 0, oz: 0, fade: 1 };
-  function pitchSpot(P = Engine.vanPose()) {
-    const O = Layout.O, Co = Layout.Coast, W = Engine.world, cx = Layout.camp.x, V = Layout.van;
-    const ox = O.x + P.x - V.x, oz = Co.shoreZ(cx + ox) - Co.shoreZ(cx);
-    for (let x = cx - 16; x <= cx + 16; x += 2) {
-      const sz = Co.shoreZ(x + ox), w = Co.vegZ(x + ox) - sz, w0 = Co.vegZ(x) - Co.shoreZ(x);
-      if (Co.head(x + ox) > 0.5) return { ok: false, why: 'rock' };
-      if (w < w0 - 1.6) return { ok: false, why: 'narrow' };
-      /* (the rock is looked up in the world as it is now: the new spot's coast point, in today's coordinates) */
-      if (W) for (let z = sz - oz + 1; z <= Co.vegZ(x + ox) - oz + 4; z += 1.5) if (W.massif(x + ox - O.x, z + oz - O.z) > 0.05) return { ok: false, why: 'rock' };
-    }
-    return { ok: true, ox, oz };
-  }
-  function startPitch() {
-    if (pitchS.on || !ready || car.on || wk.on || Engine.pitching) return;
-    const sp = pitchSpot();
-    if (!sp.ok) { toast(sp.why === 'rock' ? 'Too much rock here for the camp. Try further along the beach.' : 'Not enough dry sand here for the camp. Try a wider stretch of beach.', false, 3800); return; }
-    Object.assign(pitchS, { on: true, phase: 1, t0: performance.now(), ox: sp.ox, oz: sp.oz });
-    $('bPitch').hidden = true; wbar.pitch = false; hintOff();
-  }
-  $('bPitch').addEventListener('click', startPitch);
-  /* each frame: the screen dims, the camp moves, the screen comes back up on it; returns the screen's brightness */
-  function stepPitch() {
-    if (!pitchS.on) return 1;
-    const t = (performance.now() - pitchS.t0) / 1000;
-    if (pitchS.phase === 1) {
-      if (t < 0.45) return 1 - sstep(0, 0.45, t);
-      const V = Layout.van;
-      Engine.moveCamp(pitchS.ox, pitchS.oz, P0[0]);
-      Engine.setVan({ x: V.x, z: V.z, heading: V.rot, roll: 0, pitch: 0, lift: 0, spin: 0, steer: 0, k: 1, head: 0, brake: 0 });
-      Object.assign(car, { x: V.x, z: V.z, h: V.rot, v: 0, k: 1, camK: 0, camP: null, yaw: 0, roll: 0, pitch: 0, steer: 0 });
-      wbar.vx = V.x; wbar.vz = V.z;
-      /* the camera at the camp, as if it had always been here */
-      pvC.x = wbC.x = flr.y = NaN;     /* (what was worked out about the sand here belonged to the old beach) */
-      orbAt(P0[0], P0[2], 0, 0); for (let i = 0; i < 5; i++) orb.T[i] = orb.v[i] = HOME[i]; orb.pz = P0[2];
-      st.from = st.to = orbCam; st.camT = 1; st.wrecked = false;
-      Engine.pitchStart(); unlock('pitch');
-      pitchS.phase = 2; pitchS.t0 = performance.now();
-      return 0;
-    }
-    if (t >= 0.8) { pitchS.on = false; return 1; }
-    return sstep(0.05, 0.8, t);
-  }
-
-  /* ── driving the camper van ── */
-  const car = { on: false, k: 0, x: 0, z: 0, h: 0, v: 0, steer: 0, spin: 0, roll: 0, pitch: 0, odo: 0, trackOdo: 0, splashT: 0, camK: 0, camP: null, camL: null, yaw: 0, lastV: 0, knocks: 0, wheels: null, bumpT: 0 };
-  const keys = new Set(), touch = { x: 0, y: 0, on: false };
-  const isTouch = matchMedia('(pointer: coarse)').matches;
-  /* what the van drives round: the camp's own things, and the rocks and trunks of whichever chunks of the coast
-     are built where it is (the world keeps them in buckets along each chunk, so only the near ones are looked at) */
-  const obstacles = [], campObs = [];
-  function buildObstacles() {
-    for (const [x, z] of Layout.palms.map(p => [p[0], p[1]])) campObs.push([x, z, 0.4]);
-    for (const t of Layout.trees) campObs.push([t[0], t[1], 0.5]);
-    /* (the bushes keep the van off, but a walker pushes through them) */
-    for (const b of Layout.bushes) campObs.push([b[0], b[1], b[2] * 0.7, 'bush']);
-    for (const f of Layout.fruit || []) campObs.push([f.x, f.z, f.r || 0.4]);
-    for (const [x, z] of Layout.poles) campObs.push([x, z, 0.14, 'pole']);
-    campObs.push([Layout.fire.x, Layout.fire.z, 0.62, 'fire']);
-    /* (the castle's radius goes to 0 when the sea has washed it flat: Layout.castle.ob) */
-    campObs.push(Layout.castle.ob = [Layout.castle.x, Layout.castle.z, (Layout.castle.radius || 0.9) * 0.82, 'castle']);
-    obstacles.push(...campObs);
-  }
-  /* the obstacles near (x, z), each as [dx, dz, radius, the obstacle] measured from it to the point */
-  function obstaclesNear(x, z) {
-    const out = [], W = Engine.world;
-    for (const o of campObs) if (Math.abs(x - o[0]) < 6) out.push([x - o[0], z - o[1], o[2], o]);
-    if (W) for (const o of W.obstaclesNear(x, z)) out.push([x - o[0], z - o[1], o[2], o]);
-    /* (along the beach the huts are the engine's own, not the world's: the van drives round them) */
-    if (!ISLE && Engine.huts) for (const o of Engine.huts.obstacles(x, z, [])) out.push([x - o[0], z - o[1], o[2], o]);
-    /* (and the sand castles you built: the van flattens those, a walker goes round them) */
-    if (Engine.shacks && Engine.shacks.obstacles) for (const o of Engine.shacks.obstacles(x, z, [])) out.push([x - o[0], z - o[1], o[2], o]);
-    return out;
-  }
-  const DRIVE_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift'];
-  addEventListener('keydown', e => {
-    if (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
-    const k = e.key.toLowerCase();
-    if (DRIVE_KEYS.includes(k)) {
-      if (!car.on && !wk.on && st.entered && !rd.on && ['arrowup', 'w', 'arrowdown', 's'].includes(k)) startDrive();
-      if (car.on) { keys.add(k); e.preventDefault(); }
-    }
-    if (car.on && k === 'h' && sound.amb) sound.amb.horn();
-    if (car.on && k === 'r') respawn();
-    if (car.on && (k === 'e' || k === 'escape')) stopDrive();
-  });
-  addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-  addEventListener('blur', () => keys.clear());
-  function startDrive() {
-    if (car.on || !ready) return;
-    if (wk.on) stopWalk();
-    if (st.chapter) openChapter(null);
-    toggleSettings(false);
-    const p = Engine.vanPose(); Object.assign(car, { on: true, x: p.x, z: p.z, h: p.heading, v: 0 });
-    document.body.classList.add('driving'); $('driveHud').hidden = false; $('pad').hidden = !isTouch; $('bDrive').setAttribute('aria-pressed', 'true');
-    if (!st.hintGone) { st.hintGone = true; $('hint').style.opacity = 0; }
-    unlock('roadtrip_start');
-  }
-  /* stuck against something: put the van back on open sand nearby, pointing along the beach */
-  function respawn() {
-    const x0 = car.x, dir = Math.cos(car.h) >= 0 ? 1 : -1;
-    /* (round the island: along its own shore, on its sand, facing along it the way the van was going) */
-    if (Layout.isle) {
-      const S = Layout.Shore, q = S.at(car.x, car.z, {}), A = {}, B = {}, I = {};
-      for (let k = 0; k < 40; k++) {
-        const a = q.a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 3, inf = S.info(a, I), sd = -Math.min(3.5, Math.max(1.2, (inf.W || 4) * 0.4));
-        S.pt(a, sd, A); S.pt(a + 1, sd, B); const x = A.x, z = A.z;
-        const W = Engine.world; if (W && W.massif(x, z) > 0.1) continue;
-        if (obstaclesNear(x, z).some(([dx, dz, rad]) => Math.hypot(dx, dz) < rad + 2.2)) continue;
-        const along = Math.atan2(-(B.z - A.z), B.x - A.x), fwd = Math.cos(car.h) * (B.x - A.x) - Math.sin(car.h) * (B.z - A.z) >= 0;
-        Object.assign(car, { x, z, h: fwd ? along : along + Math.PI, v: 0, stuckT: 0, wheels: null });
-        return true;
-      }
-      return false;
-    }
-    for (let k = 0; k < 40; k++) {
-      const x = x0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 3, sz = Layout.shoreZ(x), z = sz + Math.min(3.5, (Layout.vegZ(x) - sz) * 0.4);
-      const W = Engine.world; if (W && W.massif(x, z) > 0.1) continue;
-      if (obstaclesNear(x, z).some(([dx, dz, rad]) => Math.hypot(dx, dz) < rad + 2.2)) continue;
-      const along = Math.atan2(-Layout.shoreDZ(x), 1);
-      Object.assign(car, { x, z, h: dir > 0 ? along : along + Math.PI, v: 0, stuckT: 0, wheels: null });
-      return true;
-    }
-    return false;
-  }
-  function stopDrive() {
-    if (!car.on) return;
-    /* parked away from the camp: the explore camera comes to rest over the van, looking the way the van was looking;
-       parked by the camp, it goes home */
-    if (Math.hypot(car.x - Layout.camp.x, car.z - Layout.camp.z) > 30) { const H = car.h + car.yaw; orbAt(car.x, car.z, Math.atan2(-Math.cos(H), Math.sin(H)), Math.log(0.45)); }
-    else orbHome();
-    car.on = false; keys.clear(); touch.x = touch.y = 0;
-    document.body.classList.remove('driving'); $('driveHud').hidden = true; $('pad').hidden = true; $('bDrive').setAttribute('aria-pressed', 'false');
-  }
-  $('bDrive').addEventListener('click', () => car.on ? stopDrive() : startDrive());
   /* a sky lantern from the camp: first it asks what you wish for (see the wishes, below), then it fills with warm air and rises out over the sea */
   $('bLantern').addEventListener('click', () => { if (ready) openWish(); });
-  $('bPark').addEventListener('click', stopDrive);
-  /* touch pad: up/down = throttle, left/right = steer */
-  { const pad = $('pad'), knob = $('padKnob');
-    const move = e => { const r = pad.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      let dx = (e.clientX - cx) / (r.width / 2), dy = (e.clientY - cy) / (r.height / 2); const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
-      touch.x = dx; touch.y = dy; knob.style.transform = `translate(${dx * 40}px, ${dy * 40}px)`; };
-    pad.addEventListener('pointerdown', e => { touch.on = true; pad.setPointerCapture(e.pointerId); move(e); });
-    pad.addEventListener('pointermove', e => { if (touch.on) move(e); });
-    const end = () => { touch.on = false; touch.x = touch.y = 0; knob.style.transform = ''; };
-    pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end); }
-  const WB = 2.53, WR = 0.333, WHEELS = [[1.28, 0.73], [1.28, -0.73], [-1.25, 0.73], [-1.25, -0.73]];
-  function wheelWorld(x, z, h) { const c = Math.cos(h), s = Math.sin(h); return WHEELS.map(([lx, lz]) => [x + lx * c + lz * s, z - lx * s + lz * c]); }
-  /* the body on its springs: heave, pitch and roll each a damped spring, pushed by braking and accelerating,
-     by turning, by the sand, and by stones under a wheel */
-  const body = { y: 0, vy: 0, p: 0, vp: 0, r: 0, vr: 0 };
-  function jolt(rx, rz, rad) {
-    const c = Math.cos(car.h), sn = Math.sin(car.h), lx = (rx - car.x) * c - (rz - car.z) * sn, lz = (rx - car.x) * sn + (rz - car.z) * c;
-    const k = Math.min(1, Math.abs(car.v) / 4) * (0.5 + rad);
-    body.vy += 0.55 * k; body.vp += (lx > 0 ? -1 : 1) * 0.32 * k; body.vr += (lz > 0 ? 1 : -1) * 0.38 * k;
-    if (sound.amb && k > 0.25) sound.amb.thud(Math.min(0.5, k * 0.4));
-  }
-  function stepBody(dt, acc) {
-    const sp = Math.abs(car.v), turn = car.v * car.v * Math.tan(car.steer) / WB;
-    /* (the ground under the wheels: the sea floor where the van is out in the water, lower the further out; the body sits
-       down on it and leans with it) */
-    const D = car.depth || [0, 0, 0, 0], gy = -(D[0] + D[1] + D[2] + D[3]) / 4, gp = ((D[2] + D[3]) - (D[0] + D[1])) / 2 / WB, gr = ((D[1] + D[3]) - (D[0] + D[2])) / 2 / 1.46;
-    const tp = Math.max(-0.06, Math.min(0.06, -acc * 0.007)) + gp, tr = Math.max(-0.08, Math.min(0.08, turn * 0.012)) - gr;
-    /* sand is never quite flat: small heaves that grow with speed */
-    const rip = sp > 0.5 ? (Math.sin(car.odo * 2.3) * 0.6 + Math.sin(car.odo * 5.1 + 1.3) * 0.4) * Math.min(1, sp / 8) : 0;
-    const n = Math.max(1, Math.ceil(dt / 0.01)), h = dt / n;
-    for (let i = 0; i < n; i++) {
-      body.vy += (-70 * (body.y - gy - 0.006 * rip) - 9 * body.vy) * h; body.y += body.vy * h;
-      body.vp += (-60 * (body.p - tp) - 8 * body.vp) * h; body.p += body.vp * h;
-      body.vr += (-55 * (body.r - tr) - 7.5 * body.vr) * h; body.r += body.vr * h;
-    }
-    car.pitch = body.p; car.roll = body.r;
-  }
-  const CQ = {}, CQI = {};
-  /* (a long frame — a slow phone, a tab coming back — is driven as several short ones, so the van never jumps further in
-     one step than its push off a rock can undo) */
-  function stepCar(dt) {
-    if (dt <= 1 / 30) return stepCar1(dt);
-    const n = Math.min(10, Math.ceil(dt * 30)); let r; for (let i = 0; i < n; i++) r = stepCar1(dt / n); return r;
-  }
-  function stepCar1(dt) {
-    const k = keys, has = (...a) => a.some(x => k.has(x));
-    const thr = (has('w', 'arrowup') ? 1 : 0) - (has('s', 'arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
-    const str = (has('a', 'arrowleft') ? 1 : 0) - (has('d', 'arrowright') ? 1 : 0) + (touch.on ? -touch.x : 0);
-    const boost = has('shift') ? 1.6 : 1, brake = has(' ');
-    /* (how far out into the water it is: along the coast from its shore line, round the island from its own shore) */
-    const sea = Layout.isle ? Layout.Shore.at(car.x, car.z, CQ).s : Layout.shoreZ(car.x) - car.z, inWater = sea > -0.4;
-    if (brake) car.v -= Math.sign(car.v) * Math.min(Math.abs(car.v), 16 * dt);
-    else if (Math.abs(thr) > 0.1) { if (Math.sign(thr) !== Math.sign(car.v) && Math.abs(car.v) > 0.4) car.v += thr * 12 * dt; else car.v += thr * (thr > 0 ? 4.4 * boost : 3) * dt; }
-    else car.v -= Math.sign(car.v) * Math.min(Math.abs(car.v), 2.4 * dt);
-    if (inWater) car.v *= Math.pow(0.35, dt * Math.min(1, sea + 0.6));
-    car.v = Math.max(-4, Math.min(9.5 * boost, car.v));
-    const steerT = Math.max(-1, Math.min(1, str)) * 0.55 / (1 + Math.abs(car.v) * 0.07);
-    car.steer += (steerT - car.steer) * Math.min(1, dt * 5);
-    const ox = car.x, oz = car.z;
-    car.h += car.v / WB * Math.tan(car.steer) * dt;
-    const fx = Math.cos(car.h), fz = -Math.sin(car.h);
-    car.x += fx * car.v * dt; car.z += fz * car.v * dt;
-    /* the van's footprint as three circles along its length; anything it touches pushes it out sideways,
-       so it slides along rocks and trees instead of sticking, and can always back away */
-    let hit = null, impact = 0;
-    for (let it = 0; it < 3; it++) {
-      const circ = [-1.45, 0, 1.45].map(l => [car.x + Math.cos(car.h) * l, car.z - Math.sin(car.h) * l]);
-      let moved = false;
-      for (const [cx, cz] of circ) for (const [dx, dz, rad, o] of obstaclesNear(cx, cz)) {
-        if (Math.abs(dz) > rad + 1) continue;
-        const d = Math.hypot(dx, dz), min = 0.95 + rad;
-        /* small stones: the van rolls over them with a jolt instead of stopping dead */
-        if (o[3] === 'rock' && (o[5] !== undefined ? o[5] : rad) < 0.55) { if (it === 0 && d < 0.75 + rad * 0.4 && car.bumpO !== o) { car.bumpO = o; car.bumpAt = [car.x, car.z]; jolt(cx - dx, cz - dz, rad); } continue; }
-        /* a sand castle: the van rolls over it and it is flattened, with a little bump, never a wall to stop at */
-        if (o[3] === 'castle') { if (it === 0 && rad > 0 && d < 0.9 + rad * 0.6 && Math.abs(car.v) > 0.15 && Engine.shacks && Engine.shacks.squash(o[0], o[1], 0.35)) { car.shake = Math.max(car.shake || 0, 0.05); if (sound.amb) sound.amb.thud(0.22); unlock('castle_flat'); } continue; }
-        if (d < min) { const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, push = min - d + 0.002; car.x += nx * push; car.z += nz * push; moved = true;
-          const into = -(fx * nx + fz * nz) * car.v; if (into > impact) { impact = into; hit = o; } }
-      }
-      /* the beach's edges: deep water, the forest (the coast itself runs on for ever). Round the island, its own shore's
-         sand, whichever way that runs: from a little way into the water up to short of the bushes and palms along the
-         forest's foot, narrow below rock */
-      if (Layout.isle) {
-        const q = Layout.Shore.at(car.x, car.z, CQ), inf = Layout.Shore.info(q.a, CQI), top = -Math.max(2.2, (inf.W || 4) * (1 - 0.7 * Math.max(inf.rock || 0, inf.cliff || 0)) - 4.5);
-        if (q.s > 2.6) { const d = q.s - 2.6; car.x -= q.nx * d; car.z -= q.nz * d; moved = true; }
-        else if (q.s < top) { const d = top - q.s; car.x += q.nx * d; car.z += q.nz * d; moved = true; hit = hit || ['edge']; }
-      } else {
-        const zMin = Layout.shoreZ(car.x) - 3.4, zMax = Layout.vegZ(car.x) + 1.4;
-        if (car.z < zMin) { car.z = zMin; moved = true; } if (car.z > zMax) { car.z = zMax; moved = true; hit = hit || ['edge']; }
-      }
-      /* the headlands: the van can't climb the rock; wherever it touches, it slides back down onto the sand */
-      const W = Engine.world;
-      if (W) for (const l of [-1.45, 0, 1.45]) {
-        const cx = car.x + Math.cos(car.h) * l, cz = car.z - Math.sin(car.h) * l, m = W.massif(cx, cz);
-        if (m > 0.3) {
-          const e = 0.6, gx = W.massif(cx + e, cz) - W.massif(cx - e, cz), gz = W.massif(cx, cz + e) - W.massif(cx, cz - e), gl = Math.hypot(gx, gz) || 1;
-          const push = Math.min(1.2, (m - 0.3) * 0.5 + 0.06); car.x -= gx / gl * push; car.z -= gz / gl * push; moved = true;
-          const into = (fx * gx + fz * gz) / gl * car.v; if (into > impact) { impact = into; hit = ['rock']; }
-        }
-      }
-      if (!moved) break;
-    }
-    if (inWater && Math.abs(car.v) > 2) unlock('shallows');
-    /* round the first point, and on into the distance */
-    if (Math.abs(car.x) > 150) unlock('headland');
-    if (Math.abs(car.x) > 1000) unlock('far');
-    if (hit) {
-      /* lose the speed that went into the obstacle, keep the rest: a scrape, not a trap */
-      car.v *= impact > 2.5 ? 0.35 : 0.75;
-      if (impact > 1.2 && performance.now() - car.bumpT > 300) { car.bumpT = performance.now(); car.shake = Math.max(car.shake || 0, Math.min(0.35, impact * 0.05)); if (sound.amb) sound.amb.thud(Math.min(1, impact / 6)); }
-      if (hit[3] === 'pole' && impact > 1.0) { Engine.knock(hit[0], hit[1], 0.3, fx * impact, fz * impact, st.t); unlock('lights_out'); }
-      if (hit[3] === 'fire' && impact > 3.5) { Engine.knock(hit[0], hit[1], 0.4, fx * impact, fz * impact, st.t); unlock('fire_out'); }
-    }
-    { const circ = [-1.45, 0, 1.45].map(l => [car.x + Math.cos(car.h) * l, car.z - Math.sin(car.h) * l]);
-      for (const [cx, cz] of circ) { const hits = Engine.knock(cx, cz, 0.95, fx * car.v, fz * car.v, st.t); if (hits.length) { car.knocks += hits.length; if (sound.amb) sound.amb.thud(0.6); if (car.knocks >= 5) unlock('dont_break'); } }
-    }
-    const dist = Math.hypot(car.x - ox, car.z - oz); car.odo += dist; car.spin += car.v * dt / WR;
-    /* pushing hard and going nowhere for a few seconds: offer the way out */
-    if (Math.abs(thr) > 0.5 && dist < 0.12 * dt) { car.stuckT = (car.stuckT || 0) + dt; if (car.stuckT > 3 && !car.stuckTold) { car.stuckTold = true; toast('Stuck? Press R to put the van back on open sand.', false, 4200); } } else car.stuckT = 0;
-    if (car.odo > 120) unlock('roadtrip');
-    /* tyre tracks every 12 cm */
-    car.trackOdo += dist;
-    const wNow = wheelWorld(car.x, car.z, car.h);
-    if (!car.wheels) car.wheels = wNow;
-    if (car.trackOdo > 0.12) {
-      /* (round the island, only in the sand: not on the rock, the grass, a trail's earth or the jetty's deck) */
-      const sandy = (x, z) => !Layout.isle || !Engine.world || !Engine.world.walk || ((k) => k === 'sand' || k === 'camp')(Engine.world.walk(x, z).kind);
-      if (!inWater && Engine.marks) wNow.forEach((w, i) => { if (sandy(w[0], w[1])) Engine.marks.tyre(i, car.wheels[i][0], car.wheels[i][1], w[0], w[1], 0.19, 0.85 + 0.15 * Math.min(1, Math.abs(car.v) / 6), sandWet(w[0], w[1]), st.t); });
-      car.wheels = wNow; car.trackOdo = 0;
-    }
-    /* water thrown up off each wheel that is in the sea (or in a wave's run-up over the sand): out to the side and up off
-       the tyre, back behind it, mist hanging after; the front wheels push a sheet on ahead. How deep it is at each wheel
-       sets how much, and how far down the van sits */
-    car.depth = car.depth || [0, 0, 0, 0];
-    wNow.forEach(([x, z], i) => {
-      let d = 0;
-      if (!Layout.isle) { const g = Layout.shoreDZ(x), out = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g); d = out > 0 ? 0.06 * out : (Engine.swashFront && -out < Engine.swashFront(x, st.t) ? 0.025 : 0); }
-      else { const q = Layout.Shore.at(x, z, CQ); d = q.s > 0 ? Math.min(0.5, 0.06 * q.s) : 0; }
-      car.depth[i] = d;
-      if (d > 0 && Engine.spray && Math.abs(car.v) > 0.5) Engine.spray.wheel(i, x, z, fx, fz, car.v, WHEELS[i][1] > 0 ? 1 : -1, d, dt, Engine.waveAt ? Math.max(-0.05, Engine.waveAt(x, z)) : 0, i < 2);
-    });
-    /* body: pitch with acceleration, roll in turns, a little sand bounce */
-    const acc = (car.v - car.lastV) / Math.max(dt, 1e-3); car.lastV = car.v;
-    stepBody(dt, acc);
-    if (car.bumpAt && Math.hypot(car.x - car.bumpAt[0], car.z - car.bumpAt[1]) > 2.5) { car.bumpO = null; car.bumpAt = null; }
-    return { thr: Math.max(0, Math.abs(thr)), brake, inWater };
-  }
-  function chaseCam(dt) {
-    const fx = Math.cos(car.h + car.yaw), fz = -Math.sin(car.h + car.yaw);
-    /* further back and a little higher the faster it goes; a knock shakes the camera for a moment */
-    const sp = Math.abs(car.v), pull = 7.8 + 3.2 * Math.min(1, Math.max(0, (sp - 3) / 11)) ** 2, hgt = 3.3 + 0.5 * Math.min(1, sp / 14);
-    car.shake = (car.shake || 0) * Math.exp(-dt * 7); const sk = car.shake, tn = performance.now() / 1000;
-    const tp = [car.x - fx * pull + sk * Math.sin(tn * 47), hgt + sk * 0.7 * Math.sin(tn * 59 + 1), car.z - fz * pull + sk * Math.sin(tn * 53 + 2)], tl = [car.x + fx * 3.5, 0.7, car.z + fz * 3.5];
-    if (!car.camP) { car.camP = tp.slice(); car.camL = tl.slice(); }
-    const a = 1 - Math.exp(-dt * 3.2), b = 1 - Math.exp(-dt * 5);
-    for (let i = 0; i < 3; i++) { car.camP[i] += (tp[i] - car.camP[i]) * a; car.camL[i] += (tl[i] - car.camL[i]) * b; }
-    /* never let the lagging camera fall inside the van, or into a rock */
-    const dx = car.camP[0] - car.x, dz = car.camP[2] - car.z, dd = Math.hypot(dx, dz);
-    if (dd < 6.2) { car.camP[0] = car.x + dx / Math.max(dd, 1e-3) * 6.2; car.camP[2] = car.z + dz / Math.max(dd, 1e-3) * 6.2; }
-    if (Engine.world) { const W = Engine.world; let g = W.land(car.camP[0], car.camP[2]) + 1.6;
-      /* (nor into a boulder: over one it comes to, eased up onto it and down off it again, never inside it) */
-      if (W.stones) {
-        const topAt = (x, z) => { const T = W.stones.top(x, z); return T.y > -1e8 ? T.y : -1e9; };
-        const need = Math.max(g, Math.max(topAt(tp[0], tp[2]), topAt(car.camP[0], car.camP[2]), topAt((car.camP[0] + car.x) / 2, (car.camP[2] + car.z) / 2) - 0.6) + 1.1);
-        car.lift = car.lift === undefined ? need : car.lift + (need - car.lift) * (1 - Math.exp(-dt * (need > car.lift ? 6 : 1.2)));
-        g = Math.max(g, car.lift, topAt(car.camP[0], car.camP[2]) + 0.35);
-      }
-      if (car.camP[1] < g) car.camP[1] = g; }
-    return { pos: car.camP.slice(), look: car.camL.slice(), fov: 54 + Math.min(8, Math.abs(car.v) * 0.7), focus: 7.4 };
-  }
-
-  /* ── walking the beach: a person on the sand, at eye height. W A S D or the arrows walk and turn, a drag looks round,
-     Shift jogs, and each step presses a footprint into the sand (the sea smooths them away). On Auto the walker
-     strolls the beach alone, round the rocks and along the sand at the foot of the headlands, turning back now and
-     then, the gaze drifting out to the moon over the sea, along the beach ahead, back to the lights of the camp ── */
-  const PACE = { stroll: 0.9, walk: 1.4, jog: 2.8 }, EYE = 1.65, WALK_R = 0.35;
-  const wk = { on: false, x: 0, z: 0, h: 0, hT: 0, turn: 0, v: 0, pitchT: -0.05, phase: 0, foot: 1, camK: 0, odo: 0, prints: 0,
-               auto: false, pace: PACE[store.get('walkPace', 'walk')] ? store.get('walkPace', 'walk') : 'walk',
-               hy: { v: 0, d: 0 }, hp: { v: -0.05, d: 0 },      /* the head: its turn from the body, and its tilt, easing */
-               my: 0, mp: 0, mT: -1e9,                         /* a look taken by hand while on Auto, and when it was let go */
-               van: [], cam: { pos: [0, EYE, 0], look: [0, EYE, -1], fov: 60, focus: 20 } };
-  /* a critically damped step toward a target: smooth, never past it, the same at any frame rate */
-  function damp(s, T, w, dt) { const e = s.v - T, k = Math.exp(-w * dt), t1 = (s.d + w * e) * dt; s.v = T + (e + t1) * k; s.d = (s.d - w * t1) * k; }
-  /* what is near the walker, gathered into flat arrays once a frame: the coast's rocks and trunks, the camp's things,
-     and, for a person if not for the van, the van itself, the table, the chairs, the basket and the lanterns */
-  const GO = { n: 0, x: new Float64Array(192), z: new Float64Array(192), r: new Float64Array(192) }, gq = [0, 0, 0];
-  const CAMP_EXTRA = [[Layout.table.x, Layout.table.z, 0.85], [Layout.table.x + 1.4, Layout.table.z - 1.05, 0.32]].concat(Layout.chairs.map(c => [c.x, c.z, 0.42]), Layout.lanterns.map(l => [l[0], l[1], 0.2]));
-  function goAdd(ox, oz, r) { if (GO.n < 192 && Math.abs(ox - gq[0]) < gq[2] + r && Math.abs(oz - gq[1]) < gq[2] + r) { GO.x[GO.n] = ox; GO.z[GO.n] = oz; GO.r[GO.n] = r; GO.n++; } }
-  function gather(x, z, R) {
-    GO.n = 0; gq[0] = x; gq[1] = z; gq[2] = R;
-    for (let i = 0; i < campObs.length; i++) { const o = campObs[i]; if (o[3] !== 'bush') goAdd(o[0], o[1], o[2]); }
-    const W = Engine.world;
-    /* (not a groyne's foot, though: that keeps the van off it, but a person climbs up onto its blocks and walks out; nor,
-       round the island, a stone no higher than a long step up from where the walker stands: they step up onto it) */
-    if (W) { const L = W.obstaclesNear(x, z), foot = Layout.isle && W.walk ? W.walk(x, z).y + ISLE_STEP : 1e9;
-      for (let i = 0; i < L.length; i++) if (L[i][3] !== 'reef' && L[i][3] !== 'hut' && !(L[i][4] !== undefined && L[i][4] <= foot)) goAdd(L[i][0], L[i][1], L[i][2]); }
-    for (let i = 0; i < wk.van.length; i += 3) goAdd(wk.van[i], wk.van[i + 1], wk.van[i + 2]);
-    if (Engine.snowmen) { const L = Engine.snowmen.obstacles(x, z, []); for (const o of L) goAdd(o[0], o[1], o[2]); }
-    if (Engine.shacks && Engine.shacks.obstacles) { const L = Engine.shacks.obstacles(x, z, []); for (const o of L) goAdd(o[0], o[1], o[2]); }
-    if (Math.abs(x - Layout.camp.x) < 30) for (let i = 0; i < CAMP_EXTRA.length; i++) goAdd(CAMP_EXTRA[i][0], CAMP_EXTRA[i][1], CAMP_EXTRA[i][2]);
-  }
-  /* bumping into things: pushed out round them (so a walk slides along a rock instead of sticking), kept out of the
-     sea past the shallows and out of the forest, and off the headlands' rock, back down onto the sand */
-  /* round the island: pushed out of things as on the coast, and kept to where a walker can go there (the beaches, the
-     trails, the jetty and the boardwalk, the clearings): a step that would leave it slides along its edge, or is not
-     taken */
-  const ISLE_STEP = 0.75;
-  function walkCollideIsle() {
-    const W = Engine.world, foot = wk.ox !== undefined ? W.walk(wk.ox, wk.oz).y : undefined;
-    for (let it = 0; it < 3; it++) {
-      let moved = false;
-      for (let j = 0; j < GO.n; j++) {
-        const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
-        if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
-      }
-      if (!moved) break;
-    }
-    if (!W.walk(wk.x, wk.z, undefined, foot).ok && wk.ox !== undefined) {
-      /* (off the side of a trail: back onto it, sliding along it, as a path keeps a walker to itself) */
-      const q = W.trails && W.trails.nearest(wk.x, wk.z);
-      if (q && q.d < q.t.w / 2 + 3) {
-        const t = q.t, a = Math.max(0, q.i - 1), b = Math.min(t.n - 1, q.i + 1), ex = t.X[b] - t.X[a], ez = t.Z[b] - t.Z[a], el = Math.hypot(ex, ez) || 1, ux = ex / el, uz = ez / el;
-        const px = wk.x - t.X[q.i], pz = wk.z - t.Z[q.i], al = px * ux + pz * uz, ac = -px * uz + pz * ux, lim = t.w / 2 + 0.4, ac2 = Math.max(-lim, Math.min(lim, ac));
-        wk.x = t.X[q.i] + ux * al - uz * ac2; wk.z = t.Z[q.i] + uz * al + ux * ac2;
-      }
-      if (!W.walk(wk.x, wk.z, undefined, foot).ok) { if (W.walk(wk.x, wk.oz, undefined, foot).ok) wk.z = wk.oz; else if (W.walk(wk.ox, wk.z, undefined, foot).ok) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; wk.blocked = (wk.blocked || 0) + 1; }
-      else wk.blocked = 0;
-    } else wk.blocked = 0;
-  }
-  /* (along the beach: how far out a walker wades, m from the water's edge, where the sand under the water (glsl.js
-     shoreFloor, 6 in 100) is about 0.8 m down) */
-  const WADE_OUT = 13.5, hutQ = { ok: true, y: 0, kind: '', wade: 0 };
-  /* the ground a walker stands on along the beach: a hut's floor or its steps, the sand under the sea (glsl.js shoreFloor:
-     6 in 100 down from the water's edge), the land */
-  function groundAt(x, z) {
-    const W = Engine.world, H = Engine.huts;
-    if (H) { hutQ.ok = true; hutQ.y = -1e9; if (H.walk(x, z, hutQ, wk.foot ?? 0) && hutQ.ok && hutQ.y > -1e8) return hutQ.y; }
-    const g = Layout.shoreDZ(x), out = (Layout.shoreZ(x) - z) / Math.sqrt(1 + g * g);
-    return out > 0 ? -0.06 * out : Math.max(0, W ? W.land(x, z) : 0);
-  }
-  function walkCollide() {
-    const W = Engine.world;
-    if (Layout.isle && W && W.walk) return walkCollideIsle();
-    /* (the huts: their walls and railings stand in the way, and a floor too high to step up onto from where one stands;
-       their steps go up onto the verandah, the door in when it is open. A step that would go into one slides along it) */
-    if (Engine.huts && wk.ox !== undefined) {
-      const blocked = (x, z) => { hutQ.ok = true; hutQ.y = -1e9; return Engine.huts.walk(x, z, hutQ, wk.foot ?? 0) && !hutQ.ok; };
-      if (blocked(wk.x, wk.z)) { if (!blocked(wk.x, wk.oz)) wk.z = wk.oz; else if (!blocked(wk.ox, wk.z)) wk.x = wk.ox; else { wk.x = wk.ox; wk.z = wk.oz; } wk.v *= 0.6; }
-    }
-    for (let it = 0; it < 3; it++) {
-      let moved = false;
-      for (let j = 0; j < GO.n; j++) {
-        const dx = wk.x - GO.x[j], dz = wk.z - GO.z[j], m = GO.r[j] + WALK_R, q = dx * dx + dz * dz;
-        if (q < m * m) { const d = Math.sqrt(q), nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0; wk.x += nx * (m - d + 1e-3); wk.z += nz * (m - d + 1e-3); moved = true; }
-      }
-      /* (out on a reef the sea is no wall: walk along its top as far as it goes; step off its edge and you are kept on it.
-         Into the sea a walker wades out till it is near waist deep; up the beach, in among the palms and the trees as far
-         as the open ground goes, till the canopy closes over: world.js reach) */
-      const zMin = Layout.shoreZ(wk.x) - WADE_OUT, zMax = Layout.vegZ(wk.x) + (W && W.walkIn ? W.walkIn : Math.max(6, (W && W.reach ? W.reach(wk.x) : 8) - 1)), onReef = W && W.reefTop(wk.x, wk.z) > -9;
-      if (wk.z < zMin && !onReef) {
-        if (wk.reef && W.reefTop(wk.ox, wk.oz) > -9) { wk.x = wk.ox; wk.z = wk.oz; wk.v *= 0.5; }
-        else wk.z = zMin;
-        moved = true;
-      } else if (wk.z > zMax) { wk.z = zMax; moved = true; }
-      wk.reef = onReef;
-      if (W) {
-        const m = W.massif(wk.x, wk.z);
-        if (m > 0.6) {
-          const e = 0.4, gx = W.massif(wk.x + e, wk.z) - W.massif(wk.x - e, wk.z), gz = W.massif(wk.x, wk.z + e) - W.massif(wk.x, wk.z - e), gl = Math.hypot(gx, gz) || 1;
-          const push = Math.min(0.6, (m - 0.6) / Math.max(0.2, gl / (2 * e)) + 0.005); wk.x -= gx / gl * push; wk.z -= gz / gl * push; moved = true;
-        }
-      }
-      if (!moved) break;
-    }
-  }
-  /* the head's tilt and turn come from the hand, or (on Auto) from the gaze; a drag turns the whole body when
-     walking by hand, and only the head on Auto, which turns back to its own gaze a few seconds after letting go */
-  /* walking with a mouse, the view turns without a button held: rest the pointer toward a side of the screen and you
-     turn that way, faster the nearer the edge; toward the top or the bottom you look up or down. The middle of the
-     screen stays still, so what is there can be clicked */
-  const hov = { x: 0, y: 0 };
-  function hoverAt(e) {
-    const fx = ((e.clientX - view.x) / view.w) * 2 - 1, fy = ((e.clientY - view.y) / view.h) * 2 - 1, zone = (f, a) => Math.sign(f) * Math.max(0, (Math.abs(f) - a) / (1 - a)) ** 1.6;
-    hov.x = zone(fx, 0.55); hov.y = zone(fy, 0.6);
-  }
-  cv.addEventListener('pointerleave', () => { hov.x = hov.y = 0; });
-  addEventListener('blur', () => { hov.x = hov.y = 0; });
-  function hoverLook(dt) {
-    if (!hov.x && !hov.y) return;
-    walkLook(-hov.x * 1.0 * dt * Math.max(320, view.w) / 2.2, -hov.y * 0.7 * dt * Math.max(320, view.h) / 1.4);
-  }
-  function walkLook(dx, dy) {
-    const gy = dx * 2.2 / Math.max(320, view.w), gp = dy * 1.4 / Math.max(320, view.h);
-    if (wk.auto) { wk.my += gy; wk.mp = clamp(wk.mp + gp, -1.0, 0.9); wk.mT = performance.now(); }
-    else { wk.hT += gy; wk.pitchT = clamp(wk.pitchT + gp, -1.0, 0.9); }
-  }
-  /* ── on Auto ── */
-  const ai = { dir: 1, ph1: 0, ph2: 0, nextTurn: 0, nextPause: 0, turnSign: 0, progX: 0, progT: 0, pause: 0, side: 0, gaze: 'ahead', gazeT: 0, gside: 1, gy: 0, gp: 0 };
-  const CAND = [0, 0.3, -0.3, 0.62, -0.62, 0.95, -0.95, 1.35, -1.35, 1.8, -1.8], wbC = { x: NaN };
-  /* the cost of heading hh: anything in the way over the next few metres, the sea, the trees, the rock */
-  function probe(hh) {
-    const fx = -Math.sin(hh), fz = -Math.cos(hh), W = Engine.world; let c = 0;
-    for (let i = 1; i <= 3; i++) {
-      const d = i * 0.9, px = wk.x + fx * d, pz = wk.z + fz * d, w = 1 / (1 + 0.4 * (i - 1));
-      for (let j = 0; j < GO.n; j++) { const ox = px - GO.x[j], oz = pz - GO.z[j], m = GO.r[j] + 0.6, q = ox * ox + oz * oz; if (q < m * m) c += (m - Math.sqrt(q)) * 3 * w; }
-      const sz = Layout.shoreZ(px), vz = Layout.vegZ(px);
-      if (pz < sz + 0.15) c += (sz + 0.15 - pz) * 2 * w;
-      if (pz > vz - 0.1) c += (pz - vz + 0.1) * 2 * w;
-      if (W) { const m = W.massif(px, pz); if (m > 0.25) c += (m - 0.25) * 3 * w; }
-    }
-    return c;
-  }
-  /* turning back goes round by the sea side, facing the water on the way */
-  function turnBack() { ai.dir = -ai.dir; ai.turnSign = ai.dir < 0 ? 1 : -1; ai.progT = 0; ai.progX = wk.x; }
-  /* the next thing to look at, for a while: the way ahead, the moon over the sea, along the beach, the camp's lights, the sky */
-  function pickGaze(kind) {
-    const r = Math.random(), S = st.S, camp = Math.abs(wk.x - Layout.camp.x) < 140 && st.L.string > 0.3;
-    ai.gaze = kind || (r < 0.34 ? 'ahead' : r < 0.64 ? 'sea' : r < 0.8 ? 'beach' : r < 0.92 && camp ? 'camp' : S && S.night > 0.5 ? 'sky' : 'sea');
-    ai.gazeT = 6 + Math.random() * 8; ai.gside = Math.random() < 0.5 ? -1 : 1;
-  }
-  /* where that is, as a turn in the world and a tilt */
-  const gzQ = {};
-  function gazeAt(t) {
-    const S = st.S, k = ai.gaze;
-    if (k === 'sea' || k === 'sky') {
-      /* (out to sea, toward the moon or the sun if it is out over the water and low enough to look at; never straight up
-         at a high sun, nor round at one setting inland behind the trees) */
-      const sh = Layout.Shore.at(wk.x, wk.z, gzQ), over = v => v[0] * sh.nx + v[2] * sh.nz > 0.25 * Math.hypot(v[0], v[2]);
-      const ok = (v, top) => v[1] < top && (k === 'sky' || over(v));
-      const d = S && S.mAlt > -1 && ok(S.moonDirV, k === 'sky' ? 0.8 : 0.45) ? S.moonDirV : S && S.sAlt > 0 && ok(S.sunDirV, 0.3) ? S.sunDirV : null;
-      if (d) { ai.gy = Math.atan2(-d[0], -d[2]); ai.gp = Math.atan2(d[1], Math.hypot(d[0], d[2])) * 0.7 + 0.01; }
-      else { ai.gy = Math.atan2(-sh.nx, -sh.nz); ai.gp = 0.02; }
-      if (k === 'sky') { ai.gy += 0.45 * ai.gside; ai.gp = Math.max(ai.gp, 0.36); }
-    } else if (k === 'beach') { ai.gy = (ai.dir > 0 ? -Math.PI / 2 : Math.PI / 2) + 0.38 * ai.gside; ai.gp = -0.03; }
-    else if (k === 'camp') { ai.gy = Math.atan2(-(Layout.camp.x - wk.x), -(Layout.camp.z - wk.z)); ai.gp = 0.02; }
-    else { ai.gy = wk.h; ai.gp = -0.06; }
-    /* and never quite still */
-    ai.gy += 0.05 * Math.sin(t * 0.21); ai.gp += 0.02 * Math.sin(t * 0.17 + 1.3);
-  }
-  /* on Auto round the island: along the trail it is on, toward one end, and at the end on along whichever trail meets it
-     there (or back); along a beach, mid-way up the sand, turning back where the sand ends; out along the jetty and back */
-  const iw = { trail: null, i: 0, dir: 1, beachDir: 1, until: 0 };
-  function autoSteerIsle(dt) {
-    const sp = PACE[wk.pace], W = Engine.world, I = Layout.island(), now = st.t;
-    if (wk.odo > ai.nextPause && !ai.turnSign) { ai.nextPause = wk.odo + 90 + Math.random() * 140; ai.pause = 5 + Math.random() * 5; pickGaze('sea'); ai.gazeT = ai.pause + 1; }
-    if (ai.pause > 0) ai.pause -= dt;
-    let tx = wk.x, tz = wk.z;
-    const q = W.trails && W.trails.nearest(wk.x, wk.z);
-    if (q && q.d < q.t.w / 2 + 2) {
-      /* (on a trail: a point some metres on along it) */
-      if (iw.trail !== q.t) { iw.trail = q.t; iw.dir = q.i > q.t.n / 2 ? -1 : 1; }
-      const t = q.t, j = Math.max(0, Math.min(t.n - 1, q.i + iw.dir * Math.round(4 + 2 * sp)));
-      if ((j === 0 || j === t.n - 1) && Math.hypot(t.X[j] - wk.x, t.Z[j] - wk.z) < 3) {
-        /* (at its end: on along another that starts here, or back) */
-        const next = W.trails.trails.find(o => o !== t && (Math.hypot(o.X[0] - wk.x, o.Z[0] - wk.z) < 30 || Math.hypot(o.X[o.n - 1] - wk.x, o.Z[o.n - 1] - wk.z) < 30) && Math.random() < 0.7);
-        if (next) { iw.trail = next; iw.dir = Math.hypot(next.X[0] - wk.x, next.Z[0] - wk.z) < 30 ? 1 : -1; } else iw.dir = -iw.dir;
-      }
-      tx = t.X[j]; tz = t.Z[j];
-    } else {
-      /* (on a beach or a deck: along the shore, half way up the sand; or along the jetty) */
-      iw.trail = null;
-      const a = I.uAt(wk.x, wk.z), SQ = {}, sh = I.shore(a, SQ), L = I.data.line, P = L.P || L.n;
-      const u2 = a + iw.beachDir * (5 + 2 * sp), k = ((Math.round((u2 + L.u0) / (L.ds || 1)) % L.n) + L.n) % L.n, tl = Math.hypot(L.TX[k], L.TZ[k]) || 1;
-      let nx = L.TZ[k] / tl, nz = -L.TX[k] / tl; if (I.sdf(L.X[k] + nx * 6, L.Z[k] + nz * 6) < I.sdf(L.X[k] - nx * 6, L.Z[k] - nz * 6)) { nx = -nx; nz = -nz; }
-      const up = Math.max(1.5, sh.W * (0.3 + 0.2 * Math.sin(wk.odo * 0.02)));
-      tx = L.X[k] - nx * up; tz = L.Z[k] - nz * up;
-      if (!W.walk(tx, tz).ok || wk.blocked > 8) { iw.beachDir = -iw.beachDir; wk.blocked = 0; }
-      void P;
-    }
-    let hd = Math.atan2(-(tx - wk.x), -(tz - wk.z));
-    if (ai.pause > 0) hd = ai.gy;
-    const err = wrapA(hd - wk.hT), R = 0.55 + 0.15 * sp;
-    wk.turn += (clamp(err * 1.4, -R, R) - wk.turn) * (1 - Math.exp(-dt / 0.35));
-    wk.hT += wk.turn * dt;
-    void now;
-    return ai.pause > 0 ? 0 : 0.55 + 0.45 * Math.max(0, Math.cos(wrapA(hd - wk.h)));
-  }
-  function autoSteer(dt) {
-    if (Layout.isle && Engine.world && Engine.world.walk) return autoSteerIsle(dt);
-    const sp = PACE[wk.pace];
-    /* now and then: turn back (a long way from the camp, always toward it), or stop a while and look */
-    if (wk.odo > ai.nextTurn) {
-      ai.nextTurn = wk.odo + 150 + Math.random() * 260;
-      if (Math.abs(wk.x - Layout.camp.x) > 260 ? Math.sign(Layout.camp.x - wk.x) !== ai.dir : Math.random() < 0.5) turnBack();
-    }
-    if (wk.odo > ai.nextPause && !ai.turnSign) { ai.nextPause = wk.odo + 80 + Math.random() * 120; ai.pause = 6 + Math.random() * 5; pickGaze(Math.random() < 0.7 ? 'sea' : 'camp'); ai.gazeT = ai.pause + 1; }
-    /* stuck, somewhere the rocks leave no way round: turn back (not while stopped, or already turning) */
-    if (ai.pause > 0 || ai.turnSign) { if (ai.pause > 0) ai.pause -= dt; ai.progT = 0; ai.progX = wk.x; }
-    else if ((ai.progT += dt) > 4) { if ((wk.x - ai.progX) * ai.dir < 0.15 * sp * ai.progT) turnBack(); ai.progT = 0; ai.progX = wk.x; }
-    /* the way ahead: a point a few metres on, its line across the sand wandering slowly from the waterline to the trees */
-    const L = 3 + 1.6 * sp, xa = wk.x + ai.dir * L, C = sandAt(xa, wbC), lo = C.sz + 0.5, hi = Math.max(lo + 0.8, Math.min(C.vz - 0.4, C.foot - 1.2)), s = wk.odo + L;
-    const u = clamp(0.45 + 0.24 * Math.sin(s * 0.019 + ai.ph1) + 0.13 * Math.sin(s * 0.053 + ai.ph2) + 0.06 * Math.sin(s * 0.11), 0.06, 0.94);
-    let hd = Math.atan2(-(xa - wk.x), -(lo + u * (hi - lo) - wk.z));
-    if (ai.turnSign) { let er = wrapA(hd - wk.h); if (Math.abs(er) < 0.9) ai.turnSign = 0; else { if (Math.sign(er) !== ai.turnSign) er += ai.turnSign * TAU; hd = wk.h + ai.turnSign * Math.min(Math.abs(er), 1.1); } }
-    /* stopped to look: the body turns to face it */
-    if (ai.pause > 0) hd = ai.gy;
-    /* round whatever is in the way: headings either side are tried, and the cheapest taken (keeping to one side) */
-    let best = 0, bc = Infinity;
-    for (let i = 0; i < CAND.length; i++) { const o = CAND[i], c = Math.abs(o) * 0.8 + (ai.side && o && Math.sign(o) !== ai.side ? 0.3 : 0) + (ai.pause > 0 ? 0 : probe(hd + o)); if (c < bc) { bc = c; best = o; } }
-    ai.side = Math.sign(best);
-    /* the turn eases in and out, no quicker than a person turns while walking */
-    const err = wrapA(hd + best - wk.hT), R = 0.55 + 0.15 * sp;
-    wk.turn += (clamp(err * 1.4, -R, R) - wk.turn) * (1 - Math.exp(-dt / 0.35));
-    wk.hT += wk.turn * dt;
-    return ai.pause > 0 ? 0 : 0.55 + 0.45 * Math.max(0, Math.cos(wrapA(hd + best - wk.h)));
-  }
-  function setAuto(on) {
-    if (on === wk.auto) return;
-    wk.auto = on; $('bWalkAuto').setAttribute('aria-pressed', String(on));
-    if (on) {
-      Object.assign(ai, { dir: -Math.sin(wk.h) >= 0 ? 1 : -1, ph1: Math.random() * TAU, ph2: Math.random() * TAU, nextTurn: wk.odo + 150 + Math.random() * 250, nextPause: wk.odo + 40 + Math.random() * 60, turnSign: 0, progX: wk.x, progT: 0, pause: 0, side: 0, gazeT: 0 });
-      wk.turn = 0;
-    } else {
-      /* taking over by hand: the body turns to where the head was looking, so the view doesn't move */
-      wk.h = wk.hT = wk.h + wk.hy.v + wk.my; wk.hy.v = wk.hy.d = 0; wk.my = 0;
-      wk.hp.v = clamp(wk.hp.v + wk.mp, -1.0, 0.9); wk.pitchT = wk.hp.v; wk.mp = 0; wk.turn = 0;
-    }
-  }
-  /* (how long a castle takes to build, kneeling over it: castleHere) */
-  const KNEEL = 3.9;
-  function stepWalk(dt) {
-    const k = keys, t = st.t;
-    const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0) + (touch.on ? -touch.y : 0);
-    const trn = (k.has('a') || k.has('arrowleft') ? 1 : 0) - (k.has('d') || k.has('arrowright') ? 1 : 0) + (touch.on ? -touch.x : 0);
-    /* a hand on the keys (or the pad) takes over from Auto */
-    if (wk.auto && (Math.abs(fwd) > 0.2 || Math.abs(trn) > 0.2)) setAuto(false);
-    const base = k.has('shift') ? PACE.jog : PACE[wk.pace];
-    gather(wk.x, wk.z, 6);
-    let want;
-    if (wk.auto) want = base * autoSteer(dt);
-    else {
-      want = base * clamp(fwd, -0.6, 1);
-      wk.turn += (clamp(trn, -1, 1) * 1.5 - wk.turn) * (1 - Math.exp(-dt / 0.16));
-      wk.hT += wk.turn * dt;
-    }
-    /* the pace eases up and down as a body's does; wading slows it */
-    const sz = Layout.shoreZ(wk.x), wade = Layout.isle && Engine.world && Engine.world.walk ? Engine.world.walk(wk.x, wk.z).wade : wk.reef ? 0 : sstep(sz + 0.2, sz - 1.0, wk.z);
-    /* (and deeper in, the water's weight against the legs: slower still) */
-    want *= (1 - 0.45 * wade) * (Layout.isle ? 1 : 1 - 0.35 * sstep(sz - 2, sz - WADE_OUT, wk.z));
-    if (Engine.snowmen && Engine.snowmen.rolling) want *= 1 - 0.5 * Math.min(1, Engine.snowmen.rolling.r / 0.55);
-    /* (kneeling over a castle you are building: you stay where you are till it is up) */
-    if (wk.build) { if (t - wk.build.t0 > KNEEL || t < wk.build.t0) wk.build = null; else { want = 0; wk.turn = 0; wk.hT = wk.h; } }
-    wk.v += (want - wk.v) * (1 - Math.exp(-dt / (Math.abs(want) > Math.abs(wk.v) ? 0.5 : 0.35)));
-    wk.h += wrapA(wk.hT - wk.h) * (1 - Math.exp(-dt * (wk.auto ? 5 : 16)));
-    const ox = wk.x, oz = wk.z; wk.ox = ox; wk.oz = oz;
-    wk.x -= Math.sin(wk.h) * wk.v * dt; wk.z -= Math.cos(wk.h) * wk.v * dt;
-    walkCollide();
-    /* (a snowball being rolled: on ahead of you, growing; the button for it there while the snow lies deep enough) */
-    if (Engine.snowmen && Engine.snowmen.rolling) { Engine.snowmen.roll(wk.x, wk.z, wk.h, st.snowD || 0); }
-    { const sb = !!(Engine.snowmen && ((st.snowD || 0) > 0.05 || Engine.snowmen.rolling)); if (sb !== wk.sbShown) { wk.sbShown = sb; $('bSnowball').hidden = !sb; } }
-    { const cb = !!(Engine.shacks && Engine.shacks.raise) && !((st.snowD || 0) > 0.05) && onSand(wk.x, wk.z); if (cb !== wk.cbShown) { wk.cbShown = cb; $('bCastle').hidden = !cb; } }
-    const dist = Math.hypot(wk.x - ox, wk.z - oz), ph0 = wk.phase;
-    wk.odo += dist;
-    /* a step every stride's half, left and right in turn */
-    wk.phase += Math.PI * dist / (0.55 + 0.21 * Math.abs(wk.v));
-    if (Math.floor(wk.phase / Math.PI) !== Math.floor(ph0 / Math.PI)) footstep(wade);
-    /* the head: on Auto it drifts from one view to the next, slowly; a look taken by hand is kept a few seconds, then let go */
-    if (wk.auto) {
-      if ((ai.gazeT -= dt) <= 0) pickGaze();
-      gazeAt(t);
-      if (performance.now() - wk.mT > 3500 && !(ex.dragged && ex.ptrs.size)) { const d = 1 - Math.exp(-dt / 1.1); wk.my -= wk.my * d; wk.mp -= wk.mp * d; }
-      damp(wk.hy, clamp(wrapA(ai.gy - wk.h), -1.6, 1.6), 1.5, dt); damp(wk.hp, ai.gp, 1.5, dt);
-    } else { damp(wk.hy, 0, 4, dt); damp(wk.hp, wk.pitchT, 16, dt); }
-    walkCamera();
-  }
-  /* the eye: at head height, bobbing a little with each step and swaying from foot to foot, more as the pace quickens
-     (and not at all for those who would rather things kept still) */
-  /* ── the torch: in hand when walking after dark. It comes on by itself as the light goes (F, or the button, switches it
-     on or off), sways with each step, and lags a moment behind a turn of the head ── */
-  const tch = { user: null, k: 0, lagY: 0, lagP: 0, lastY: null, lastP: null };
-  const torchWanted = () => tch.user === null ? !!(st.S && st.S.night > 0.5) : tch.user;
-  function syncTorchBtn() { const b = $('bTorch'); if (b) b.setAttribute('aria-pressed', String(wk.on && torchWanted())); }
-  function torchState(dt) {
-    const want = wk.on && wk.camK > 0.6 && torchWanted();
-    tch.k += ((want ? 1 : 0) - tch.k) * Math.min(1, dt / 0.22);
-    if (!want && tch.k < 0.003) { tch.k = 0; tch.lastY = null; return null; }
-    const v = Math.min(1, Math.abs(wk.v) / 1.4), ph = wk.phase, yaw = wk.h + wk.hy.v + wk.my, pitch = wk.hp.v + wk.mp;
-    if (tch.lastY === null) { tch.lastY = yaw; tch.lastP = pitch; }
-    const dy = wrapA(yaw - tch.lastY), dp = pitch - tch.lastP; tch.lastY = yaw; tch.lastP = pitch;
-    tch.lagY += (clamp(-dy / Math.max(dt, 1e-3) * 0.05, -0.14, 0.14) - tch.lagY) * Math.min(1, dt * 7);
-    tch.lagP += (clamp(-dp / Math.max(dt, 1e-3) * 0.05, -0.1, 0.1) - tch.lagP) * Math.min(1, dt * 7);
-    return { k: tch.k, off: [0.215, 0.19 + 0.012 * v * Math.sin(2 * ph), 0.46], sway: [0.022 * v * Math.sin(ph) + tch.lagY, 0.018 * v * Math.sin(2 * ph) + tch.lagP], held: !insp.on };
-  }
-  function walkCamera() {
-    const v = Math.abs(wk.v), bob = reduced ? 0 : 0.012 * v + 0.0035 * v * v, ph = wk.phase, W = Engine.world;
-    /* (kneeling to build a castle: down on the sand and looking at it, then up again) */
-    const kt = wk.build ? st.t - wk.build.t0 : -1, kn = kt < 0 ? 0 : sstep(0, 0.5, kt) * (1 - sstep(KNEEL - 0.5, KNEEL, kt));
-    const yaw = wk.h + wk.hy.v + wk.my + (reduced ? 0 : 0.006 * Math.min(1, v / 1.4) * Math.sin(ph)), pitch0 = clamp(wk.hp.v + wk.mp, -1.05, 0.95), pitch = pitch0 + (-0.72 - pitch0) * 0.9 * kn, cp = Math.cos(pitch);
-    const sway = 0.6 * bob * Math.sin(ph), g0 = Layout.isle ? Math.max(0, W ? (W.walk ? W.walk(wk.x, wk.z).y : W.land(wk.x, wk.z)) : 0) : groundAt(wk.x, wk.z), p = wk.cam.pos, l = wk.cam.look;
-    wk.foot = g0;
-    /* (the ground underfoot, eased: stepping from one block of a groyne up or down onto the next lifts the eye or lowers it
-       over a moment, as a step does, rather than all at once) */
-    const now = performance.now(), gdt = Math.min(0.1, (now - (wk.gT || now)) / 1000); wk.gT = now;
-    const g = wk.gs = wk.gs == null || Math.abs(g0 - wk.gs) > 1.2 ? g0 : wk.gs + (g0 - wk.gs) * Math.min(1, gdt * 10);
-    p[0] = wk.x + Math.cos(wk.h) * sway; p[1] = g + EYE - bob * (0.5 + 0.5 * Math.cos(2 * ph)) - 0.78 * kn; p[2] = wk.z - Math.sin(wk.h) * sway;
-    /* (wading: the eyes kept up out of the swell that is passing, lifted by it as it goes by) */
-    if (!Layout.isle && g < 0 && Engine.waveAt) { const wv = Engine.waveAt(wk.x, wk.z), lift = Math.max(0, wv + 0.55 - p[1]); wk.lift = (wk.lift || 0) + (lift - (wk.lift || 0)) * Math.min(1, gdt * 6); p[1] += wk.lift; } else wk.lift = 0;
-    l[0] = p[0] - Math.sin(yaw) * cp * 12; l[1] = p[1] + Math.sin(pitch) * 12; l[2] = p[2] - Math.cos(yaw) * cp * 12;
-    wk.cam.fov = 60 + 4 * sstep(1.6, 2.8, v);
-    /* focused where the eyes meet the sand (or far off, looking up), eased so it doesn't hunt */
-    const fd = pitch < -0.03 ? clamp(EYE / Math.sin(-pitch), 1.5, 40) : 40;
-    wk.cam.focus += (fd - wk.cam.focus) * 0.08;
-  }
-  /* how wet the sand is at a point: soaked at the water's edge, dry a few metres up the beach */
-  /* how wet the sand is at (x, z): soaked at the water's edge, dry a few metres up (round the island, up its own shore) */
-  const SWQ = {};
-  function sandWet(x, z) { let up; if (Layout.isle) up = -Layout.Shore.at(x, z, SWQ).s; else { const g = Layout.shoreDZ(x); up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g); } return clamp(1 - (up - 0.4) / 2.6, 0, 1); }
-  /* a footprint, left and right in turn a hand's width either side of the line walked, toes the way the walker is going,
-     turned out a touch as feet are; deeper and darker in wet sand, none in the water (a ripple instead) */
-  function footstep(wade) {
-    wk.foot = -wk.foot;
-    const s = wk.foot * 0.095, x = wk.x + Math.cos(wk.h) * s, z = wk.z - Math.sin(wk.h) * s;
-    if (wade < 0.35 && Engine.marks && !wk.reef) {
-      Engine.marks.foot(x, z, wk.h - wk.foot * 0.09, wk.foot < 0, sandWet(x, z), st.t);
-      wk.prints++;
-    } else if (wade > 0.6 && wk.foot > 0) { const ss = Engine.surgeState(); ss.ripples.push({ x, z, t0: st.t, A: 0.16 }); if (ss.ripples.length > 6) ss.ripples.shift(); }
-    /* (and in the water, the splash of the foot coming down: more the deeper, and the faster the walk) */
-    if (wade > 0.12 && Engine.spray) { const d = Math.max(0.02, -groundAt(x, z)) * (0.6 + 0.4 * Math.min(1, Math.abs(wk.v) / 1.6)); Engine.spray.foot(x, z, d, Engine.waveAt ? Math.max(-0.05, Engine.waveAt(x, z)) : 0); }
-  }
-  /* ── snowballs, when the snow lies deep enough: one started at your feet and rolled on ahead as you walk, let go where it
-     is, or up against a bigger one, on top of it; three high, a snowman ── */
-  function snowball() {
-    const S = Engine.snowmen; if (!S || !wk.on) return;
-    if (S.rolling) { const r = S.letGo(); $('bSnowball').setAttribute('aria-pressed', 'false');
-      if (r && r.man) { toast('A snowman! Pebbles for eyes, a carrot, a coconut shell for a hat.', false, 4200); unlock && unlock('snowman'); }
-      else if (r && r.stacked > 1) toast('Up on top of the other. One more makes a snowman.', false, 2800);
-      else toast('You let the snowball go. Roll another, smaller, and let it go against this one to stack it.', false, 3800);
-      return; }
-    if ((st.snowD || 0) < 0.05) { toast('Not enough snow yet: wait till it lies deeper.', false, 2600); return; }
-    if (S.start(wk.x, wk.z, wk.h, st.snowD)) { $('bSnowball').setAttribute('aria-pressed', 'true'); toast('A snowball at your feet. Walk to roll it bigger; B lets it go.', false, 3400); }
-  }
-  $('bSnowball').addEventListener('click', snowball);
-  /* ── a sand castle of your own: you kneel, and pat one up out of the damp sand in front of you, a heap first and then its
-     walls and towers, in a few seconds. Close to the water the waves will soon have it; the van flattens it ── */
-  function onSand(x, z) {
-    if (Layout.isle) { const W = Engine.world, q = W && W.walk ? W.walk(x, z) : null; return !!q && q.ok && q.kind === 'sand' && !(q.wade > 0.1); }
-    const g = Layout.shoreDZ(x), up = (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g);
-    return up > -0.25 && z < Layout.vegZ(x) - 0.7 && !(Engine.world && Engine.world.massif(x, z) > 0.05);
-  }
-  function castleHere() {
-    const S = Engine.shacks; if (!S || !S.raise || !wk.on || wk.build) return;
-    if ((st.snowD || 0) > 0.05) { toast('The sand is under snow: roll a snowball instead.', false, 2600); return; }
-    const x = wk.x - Math.sin(wk.h) * 1.05, z = wk.z - Math.cos(wk.h) * 1.05;
-    if (!onSand(x, z)) { toast(onSand(wk.x, wk.z) ? 'Not there: turn toward the open sand.' : 'Out on the sand: a castle needs sand to build it from.', false, 2600); return; }
-    if (obstaclesNear(x, z).some(([dx, dz, rad]) => rad > 0 && Math.hypot(dx, dz) < rad + 0.7)) { toast('Not enough room there.', false, 2200); return; }
-    const g = Layout.isle ? 0 : Layout.shoreDZ(x), up = Layout.isle ? 9 : (z - Layout.shoreZ(x)) / Math.sqrt(1 + g * g);
-    wk.build = { t0: st.t, x, z };
-    S.raise(x, z, wk.h);
-    toast(up < 1.6 ? 'You kneel and pack the wet sand into a castle, right where the waves run up. It won’t last long.' : 'You kneel, scoop the damp sand together and pat it into walls and towers…', false, 3400);
-    setTimeout(() => { if (wk.on) toast('A sand castle of your own. The tide will have it, sooner or later.', false, 3200); }, 3500);
-    unlock('castle');
-  }
-  $('bCastle').addEventListener('click', castleHere);
-  addEventListener('keydown', e => { if ((e.key === 'b' || e.key === 'B') && wk.on && !(e.target && e.target.closest && e.target.closest('input, textarea'))) snowball(); });
-  addEventListener('keydown', e => { if ((e.key === 'c' || e.key === 'C') && wk.on && !e.ctrlKey && !e.metaKey && !(e.target && e.target.closest && e.target.closest('input, textarea'))) castleHere(); });
-  function startWalk() {
-    if (wk.on || !ready) return;
-    const fromVan = car.on;
-    if (car.on) stopDrive();
-    if (seat.on) leaveSeat();
-    if (st.chapter) openChapter(null);
-    toggleSettings(false);
-    /* the van, for a person to walk round */
-    const P = Engine.vanPose(), vc = Math.cos(P.heading), vs = Math.sin(P.heading); wk.van.length = 0;
-    for (const l of [-1.45, 0, 1.45]) wk.van.push(P.x + vc * l, P.z - vs * l, 0.95);
-    /* where to stand: out of the van, beside it, if it was being driven (or the view is on it); at the camp, just
-       behind the picnic, looking out to sea; otherwise on the point the view turns round, facing the way it faces */
-    let x = orb.px, z = orb.pz, h = orbYaw();
-    if (!fromVan && Math.hypot(x - Layout.camp.x, z - Layout.camp.z) < 5) { x = Layout.camp.x; z = Layout.camp.z + 3; h = 0; }
-    else if (fromVan || Math.hypot(x - P.x, z - P.z) < 4) {
-      const ok = sd => { const qx = P.x + vs * sd * 1.9, qz = P.z + vc * sd * 1.9; return qz > Layout.shoreZ(qx) - 0.5 && qz < Layout.vegZ(qx) + 1 && !(Engine.world && Engine.world.massif(qx, qz) > 0.4); };
-      const sd = ok(1) ? 1 : -1; x = P.x + vs * sd * 1.9; z = P.z + vc * sd * 1.9; h = Math.atan2(-vc, vs);
-    }
-    /* (round the island, if that is somewhere no one can stand, the nearest place that isn't: a beach, a trail, a deck;
-       looked for in widening rings, as far as the view may have been over the forest or out at sea) */
-    if (Layout.isle && Engine.world && Engine.world.walk && !Engine.world.walk(x, z).ok) {
-      let best = null;
-      for (let r = 2; r < 700 && !best; r = r < 40 ? r + 2 : r * 1.12) {
-        const n = Math.min(64, Math.max(24, Math.ceil(r * TAU / 8)));
-        for (let k = 0; k < n; k++) { const a = k / n * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (Engine.world.walk(px, pz).ok) { best = [px, pz]; break; } }
-      }
-      if (best) { x = best[0]; z = best[1]; }
-    }
-    Object.assign(wk, { on: true, x, z, h, hT: h, turn: 0, v: 0, my: 0, mp: 0, pitchT: -0.05, ox: x, oz: z });
-    wk.hy.v = wk.hy.d = wk.hp.d = 0; wk.hp.v = -0.05;
-    gather(x, z, 6); walkCollide(); walkCamera();
-    keys.clear(); orb.keys.clear(); touch.x = touch.y = 0;
-    if (wk.auto) { wk.auto = false; setAuto(true); }
-    document.body.classList.add('walking'); $('walkHud').hidden = false; $('pad').hidden = !isTouch; $('bWalk').setAttribute('aria-pressed', 'true');
-    hintOff();
-  }
-  function stopWalk() {
-    if (!wk.on) return;
-    wk.on = false; keys.clear(); touch.x = touch.y = 0;
-    /* the explore camera takes up where you stand, looking the way you were looking */
-    orbAt(wk.x, wk.z, wk.h + wk.hy.v + wk.my, Math.log(0.45));
-    document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
-  }
-  $('bWalk').addEventListener('click', () => wk.on ? stopWalk() : startWalk());
-  $('bTorch').addEventListener('click', () => { tch.user = !torchWanted(); syncTorchBtn(); });
-  $('bWalkExit').addEventListener('click', stopWalk);
-  $('bWalkAuto').addEventListener('click', () => setAuto(!wk.auto));
-  document.querySelectorAll('[data-pace]').forEach(b => b.addEventListener('click', () => { wk.pace = b.dataset.pace; store.set('walkPace', wk.pace); seg('pace', wk.pace); }));
-  seg('pace', wk.pace);
+  /* (the eyes' height, standing, before you sit down) */
+  const EYE = 1.65;
   /* ── holding one of the cove's small lives up close (inspect.js): a click on a crab, a shell, a starfish, a flower
      picks it up; drag to turn it over, scroll to look closer; flick it away (or the button) and it is thrown back where
      it belongs, the sea's to the sea and the land's to the land; or put it down where it was ── */
@@ -1712,8 +936,7 @@
   function openInspect(c) {
     if (insp.on || !c) return false;
     const info = Engine.inspect.hold(c); if (!info) return false;
-    insp.on = true; insp.info = info; insp.c = c; insp.fruitT = 0; keys.clear(); touch.x = touch.y = 0;
-    if (wk.on && wk.auto) setAuto(false);
+    insp.on = true; insp.info = info; insp.c = c; insp.fruitT = 0;
     $('iName').textContent = info.name; $('iLatin').textContent = info.latin; $('iNote').textContent = info.note;
     $('iThrow').textContent = info.big ? 'Let it go' : throwWords(info.home); $('iKeep').hidden = !info.flower; $('iKeep').textContent = 'Add it to the bouquet'; $('iPut').hidden = !!info.big;
     $('iPut').firstChild.textContent = info.fruit ? 'Drop it ' : 'Put it down ';
@@ -1781,25 +1004,16 @@
     else return;
     e.preventDefault(); e.stopImmediatePropagation();
   }, true);
-  const WALK_KEYS = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', 'shift'];
-  addEventListener('keydown', e => {
-    if (!wk.on || (e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable]'))) return;
-    const k = e.key.toLowerCase();
-    if (k === 'e' || k === 'escape') { stopWalk(); e.preventDefault(); return; }
-    if (k === 'f' && !e.repeat) { tch.user = !torchWanted(); syncTorchBtn(); e.preventDefault(); return; }
-    if (WALK_KEYS.includes(k)) { keys.add(k); e.preventDefault(); }
-  });
   /* ── finds: small things to discover, kept in this browser ── */
   const FINDS = [
-    ['roadtrip_start', 'Keys in the ignition', 'took the van out'], ['roadtrip', 'Down the beach', 'drove 120 metres of sand'],
-    ['headland', 'Round the point', 'drove past the rocks at the end of the bay'], ['far', 'Over the horizon', 'drove a kilometre down the coast'], ['shallows', 'Wet wheels', 'drove through the shallows'],
     ['big_wave', 'Make a wave', 'stacked clicks into one big swell'], ['tide', 'The tide took the camp', 'sent a wave all the way to the fire'],
-    ['lights_out', 'Lights out', 'knocked over a light pole'], ['fire_out', 'Too close to the fire', 'drove into the campfire'],
-    ['dont_break', 'Bull in a china shop', 'knocked five things over'], ['reader', 'Read the room', 'opened every chapter'],
-    ['lantern', 'Make a wish', 'let a sky lantern go'], ['star', 'Wish upon a star', 'made a wish on a shooting star'], ['pitch', 'Home is where you park it', 'pitched camp somewhere new'], ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'], ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'], ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked'], ['snowman', 'Snow on the equator', 'built a snowman on the beach'], ['castle', 'King of the castle', 'built a sand castle'], ['castle_flat', 'Steamroller', 'drove the van over a sand castle']];
+    ['reader', 'Read the room', 'opened every chapter'], ['lantern', 'Make a wish', 'let a sky lantern go'], ['star', 'Wish upon a star', 'made a wish on a shooting star'],
+    ['storm', 'Weathered it', 'called up a thunderstorm'], ['night', 'Night owl', 'stayed three minutes under the stars'], ['artist', 'Left your mark', 'put a drawing in the toolbox'],
+    ['bouquet', 'Say it with flowers', 'picked a bouquet of twelve'], ['naturalist', 'Naturalist', 'held five kinds of shore life up close'], ['crab_home', 'Back you go', 'threw a ghost crab back into the sea'],
+    ['orchard', 'Fresh off the tree', 'ate a ripe fruit you picked']];
   const found = new Set(store.get('finds', [])), findQ = [], readSeen = new Set();
   function renderFinds() {
-    $('fCount').textContent = `${found.size} of ${FINDS.length}`;
+    $('fCount').textContent = `${FINDS.filter(f => found.has(f[0])).length} of ${FINDS.length}`;
     $('finds').innerHTML = FINDS.map(([id, t, d]) => found.has(id) ? `<li class="got"><b>${esc(t)}</b> · ${esc(d)}</li>` : `<li><b>${esc(t)}</b></li>`).join('');
   }
   function showFinds() {
@@ -1829,7 +1043,7 @@
      compiled next, in the background, and the loader stays until the first frames have been drawn */
   const afterPaint = fn => { let go = false; const run = () => { if (!go) { go = true; setTimeout(fn, 0); } }; requestAnimationFrame(() => requestAnimationFrame(run)); setTimeout(run, document.hidden ? 0 : 3000); };
   afterPaint(() => {
-    try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40, forest: window.__coveForest !== false }); ready = true; buildObstacles(); van0 = Engine.vanPose(); }
+    try { Engine.init(cv, { shadowSize: window.__coveShadow || 2048, decalPPM: 40, forest: window.__coveForest !== false }); ready = true; }
     catch (e) { introFailed(); console.error(e); return; }
     /* print the menu card with the résumé's own words once the page fonts are ready */
     const printCovers = () => { Engine.books.journal.paintCover(c => Paint.journalCover(c, { title: 'Build notes', name: Content.name })); try { Engine.paintClip(doc('stack').canvases[0]); } catch (e) { /* the list prints when it is first opened */ } };
@@ -1889,23 +1103,18 @@
   }
 
   /* ── the beach's two ends joined (Layout.P, 2 km round): the page keeps everything within half a loop of the camp. When
-     the van, the walker or the explore camera goes on past that, they are carried back a whole loop, to the same place on
-     the beach coming the other way, and the engine carries the world's frame with them (Engine.loopShift), so nothing is
-     seen to jump: drive on and you come round to the camp again ── */
+     the view goes on past that, it is carried back a whole loop, to the same place on the beach coming the other way,
+     and the engine carries the world's frame with it (Engine.loopShift), so nothing is seen to jump: go on along the
+     beach and you come round to the camp again ── */
   function loopWrap() {
     if (ISLE || !Layout.P || !isFinite(Layout.P)) return;
-    const ax = car.on ? car.x : wk.on ? wk.x : orb.px, off = ax - Layout.camp.x;
+    const off = orb.px - Layout.camp.x;
     if (Math.abs(off) <= Layout.P / 2) return;
     const d = -Layout.P * Math.sign(off);
-    car.x += d; if (car.camP) car.camP[0] += d; if (car.camL) car.camL[0] += d; if (car.bumpAt) car.bumpAt[0] += d;
-    /* (and where its wheels were a moment ago, which its next stretch of tyre track runs from: left behind, that stretch
-       would have run the whole loop's length, a ruler-straight track across the sand and the sea) */
-    if (car.wheels) for (const w of car.wheels) w[0] += d;
-    wk.x += d; if (wk.ox !== undefined) wk.ox += d; ai.progX += d;
     orb.v[X] += d; orb.T[X] += d; orb.px += d; if (orb.fly) { orb.fly.from[X] += d; orb.fly.to[X] += d; }
-    /* (the cameras that move with them, once each; the fixed views of the camp stay where the camp is) */
+    /* (the cameras that move with it, once each; the fixed views of the camp stay where the camp is) */
     const fixed = new Set(Object.values(V).filter(v => v !== orbCam)), done = new Set();
-    for (const v of [orbCam, wk.cam, rd.cam, st.from, st.to, st.cur, st.camFinal]) if (v && v.pos && v.look && !fixed.has(v) && !done.has(v)) { done.add(v); v.pos[0] += d; v.look[0] += d; }
+    for (const v of [orbCam, rd.cam, st.from, st.to, st.cur, st.camFinal]) if (v && v.pos && v.look && !fixed.has(v) && !done.has(v)) { done.add(v); v.pos[0] += d; v.look[0] += d; }
     Engine.loopShift(d);
   }
 
@@ -1945,23 +1154,8 @@
     /* walking up to a seat: a step's bob */
     if (seat.on && seat.approach && seat.approach.stage === 1 && seat.approach.walk && !reduced) { const d = ease(st.camT) * seat.approach.dist; cam = Object.assign({}, cam, { pos: cam.pos.slice() }); cam.pos[1] -= 0.028 * (0.5 - 0.5 * Math.cos(2 * Math.PI * d / 0.72)); }
     st.cur = cam;
-    /* driving: physics, van pose, chase camera, sound */
-    car.k = Math.max(0, Math.min(1, car.k + (car.on ? dtR / 1.6 : -dtR / 1.8)));
-    car.camK = Math.max(0, Math.min(1, car.camK + (car.on ? dtR / 1.4 : -dtR / 2.0)));
-    let drv = null;
-    if (car.on) drv = stepCar(dtR);
-    if (car.on || car.k > 0) Engine.setVan({ x: car.on ? car.x : undefined, z: car.z, heading: car.h, roll: car.roll, pitch: car.pitch, lift: body.y, spin: car.spin, steer: car.steer, k: car.k, head: car.on ? 1 : Math.max(0, car.k * 2 - 1), brake: drv && (drv.brake || car.v < -0.3) ? 1 : 0 });
-    if (car.camK > 0.001 && car.camP !== null || car.on) {
-      const cc = chaseCam(dtR), e = ease(car.camK);
-      cam = lerpCam(cam, cc, e);
-    } else car.camP = null;
-    /* walking: the steps, and the eyes they carry */
-    wk.camK = clamp(wk.camK + (wk.on ? dtR / 1.4 : -dtR / 1.6), 0, 1);
-    if (wk.on) { hoverLook(dtR); stepWalk(dtR); } else hov.x = hov.y = 0;
-    if (wk.camK > 0) { const e = ease(wk.camK); cam = e >= 1 ? wk.cam : lerpCam(cam, wk.cam, e); }
     if (window.__coveCamFix) cam = window.__coveCamFix;     /* (the test bench can put the camera anywhere) */
     st.camFinal = cam;
-    if (sound.amb) sound.amb.engine(car.on, Math.min(1, Math.abs(car.v) / 14), drv ? drv.thr : 0, Math.min(1, Math.abs(car.v) / 8));
     const aspect = view.w / view.h;
     if (aspect < 1.2 && !rd.on) cam = Object.assign({}, cam, { fov: Math.min(80, cam.fov * (1 + (1.2 - aspect) * 0.75)) });
     const wideScreen = view.w > 900;
@@ -1989,7 +1183,6 @@
        shader's sums precise) */
     if (st.ms0 == null) st.ms0 = ms;
     const cloudT = st.t + (ms - st.ms0) / 60000 * 6;
-    const fade = stepPitch();
     /* (the eyes adapting: in under the forest's canopy, round the island, the dark under the trees opens up over a second
        or two, as eyes open to it; and closes down again out in the sun) */
     { let tgt = 1; const Wd = Engine.world;
@@ -2000,31 +1193,27 @@
         tgt = 1 + 2.6 * cov * (1 - smf(16, 40, up)); st.forF = cov * (1 - smf(10, 34, up)); }
       else st.forF = 0;
       st.eyeK = (st.eyeK || 1) + (tgt - (st.eyeK || 1)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.5)); }
-    const torchO = torchState(dtR); if (wk.on && (st.frameN = (st.frameN || 0) + 1) % 20 === 0) syncTorchBtn();
     if (window.__coveInspStep) window.__coveInspT = (window.__coveInspT || 0) + window.__coveInspStep;
     /* (the sun and moon swing over to the other path in a second or so, rather than jumping) */
     st.frontK += ((st.skyPath === 'front' ? 1 : 0) - st.frontK) * (1 - Math.exp(-dtR / 0.45)); if (Math.abs(st.frontK - (st.skyPath === 'front' ? 1 : 0)) < 1e-3) st.frontK = st.skyPath === 'front' ? 1 : 0;
-    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, torch: torchO, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: MS[Math.min(st.rsI, msTop())] || 0, grassQ: 0.55 + 0.45 * Math.min(1, st.rsI / (RS.length - 2)), fade, renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
+    const S = Engine.render({ ms, loc, t: st.t, waveT: st.t, cloudT, skyFront: st.frontK, buildMs: window.__coveBuildMs, cloudQ: st.rs < 0.75 ? 0.7 : 1, dens: st.dens, cam, shiftX, msaa: MS[Math.min(st.rsI, msTop())] || 0, grassQ: 0.55 + 0.45 * Math.min(1, st.rsI / (RS.length - 2)), renderScale: Math.min(window.__coveMaxRS || 1, rd.on || sketch.on ? Math.max(st.rs, 0.9) : st.rs), soft: st.soft * (1 - 0.8 * st.readK), read: st.readK,
       lights: Ls, fire: { i: tod.fire * (1 - 0.6 * W.rain), smoke: (0.3 + 0.7 * tod.fire) * (1 + 0.6 * W.rain), steam: tod.fire }, flies: 1 - W.rain, flow: st.flow,
       sky: { cirrus: W.cirrus, alto: W.alto, cumulus: W.cumulus, stratus: W.stratus, storm: W.storm, flash: wxf.flash, bolt: wxf.bolt }, rain: W.rain, wet: W.wet, pud: W.pud || 0, flood: W.flood || 0, rough: W.storm * 0.8 + W.rain * 0.3, wind: 1 + 1.6 * W.storm + 0.5 * W.rain, rainSlant: 0.1 + 0.3 * W.storm, expMul: (1 + 1.4 * wxf.flash * W.storm) * (st.eyeK || 1), forestFog: st.forFs = (st.forFs || 0) + ((st.forF || 0) - (st.forFs || 0)) * (1 - Math.exp(-Math.min(dtR, 0.25) / 1.2)),
-      push: wk.on ? [wk.x, wk.z] : null,
       snow: sstep(0.0, 0.035, st.snowD || 0), snowD: st.snowD || 0, snowFall: st.wx.snow || 0 });
     st.S = S;
     if (!st.shown && ++drawn >= 3) introReady();
     updateSky(ms, S);
     syncLightsUI();
 
-    /* hotspots follow their objects (a wave or the van can move them), and go while one lies knocked over */
+    /* hotspots follow their objects (a wave can move them), and go while one lies knocked over */
     anchors = Engine.anchors();
     /* pins: a glint on each object, hidden while something is open */
     Content.chapters.forEach(c => { const a = c.anchor === 'clipboard' ? (Engine.anchorNow('clipboard') || anchors.clipboard) : anchors[c.anchor];
-      const p = Engine.project(a), el = c.spot, vis = !rd.on && !car.on && pinNear(a) && !Engine.pitching && !Engine.knocked(c.id) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const p = Engine.project(a), el = c.spot, vis = !rd.on && pinNear(a) && !Engine.knocked(c.id) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; el.style.visibility = vis ? 'visible' : 'hidden'; });
 
     extras(dtR);
-    syncWalkBar();
-    /* the map: you (or the van, while you drive it) and the van; put away while something else is open */
-    Minimap.frame({ driving: car.on, van: Engine.vanPose(), hide: !st.entered || rd.on || !!st.chapter || insp.on || sketch.on || tbox.on || !$('settings').hidden || !$('credits').hidden || Engine.pitching });
+    syncHomeBar();
     /* (a fruit in the hand goes on ripening: its card keeps up) */
     if (insp.on && insp.info && insp.info.fruit && (insp.fruitT += dtR) > 0.25) { insp.fruitT = 0; const h = Engine.inspect.held; if (h && h.info && h.info.name !== $('iName').textContent) fruitCard(h.info); else if (h && h.info) $('iKeep').hidden = !h.info.edible; }
     /* the sea's verdict */
@@ -2166,9 +1355,7 @@
     if (!ready || !st.entered || isDown('board')) return;
     if (seat.on) leaveSeat();
     if (rd.on) stopReading(true);
-    if (car.on) stopDrive();
     toggleSettings(false);
-    if (wk.on) stopWalk();
     st.chapter = 'wishes';
     dock.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', 'false'));
     Content.chapters.forEach(x => { x.spot.classList.remove('on'); x.spot.classList.add('dim'); });
@@ -2233,7 +1420,7 @@
   $('wCancel').addEventListener('click', closeWish);
   $('wishVeil').addEventListener('click', closeWish);
   $('wForm').addEventListener('submit', e => { e.preventDefault(); letGo(); });
-  /* keys typed in the dialog are the dialog's (not the reader's, the van's or the beach's), and Tab stays inside it */
+  /* keys typed in the dialog are the dialog's (not the reader's or the beach's), and Tab stays inside it */
   $('wish').addEventListener('keydown', e => {
     e.stopPropagation();
     if (e.key !== 'Tab') return;
@@ -2289,35 +1476,28 @@
     const look = P.kind === 'rug' ? [P.eye[0] + fx * 1.6, 0.45, P.eye[2] + fz * 1.6] : [P.eye[0] - fx * 0.3, 0.72, P.eye[2] - fz * 0.3];
     return { pos: [x, g + EYE, z], look, fov: 58, focus: 2, swing: true };
   }
-  /* walking stops where you are: the eyes go on from there (the explore camera does not come back first) */
-  function endWalkHere() {
-    if (!wk.on) return;
-    wk.on = false; wk.camK = 0; keys.clear(); touch.x = touch.y = 0;
-    document.body.classList.remove('walking'); $('walkHud').hidden = true; $('pad').hidden = true; $('bWalk').setAttribute('aria-pressed', 'false');
-  }
   /* things a wave has knocked over say so, and offer to put the camp back up */
   const downMsg = { seat: 'That seat is lying in the wet sand. Put the camp back up to sit there again.', radio: 'The radio went over with the table. Put the camp back up to play it.',
     sketch: 'The wave took the drawing board. Put the camp back up to draw.', toolbox: 'The toolbox is lying in the wet sand. Put the camp back up to open it.', board: 'The wish board is down. Put the camp back up to read the wishes.' };
   const isDown = (key, msgKey) => { if (!Engine.knocked || !Engine.knocked(key)) return false; toast(downMsg[msgKey || key], true, 4500); return true; };
   const seatDown = i => { const P = Engine.seatPose(i); return !!(P && Engine.knocked && Engine.knocked(P.id)); };
   function sit(i) {
-    if (!ready || !st.entered || car.on || (seat.on && seat.i === i) || !(i >= 0 && i < Engine.seatCount())) return;
+    if (!ready || !st.entered || (seat.on && seat.i === i) || !(i >= 0 && i < Engine.seatCount())) return;
     if (seatDown(i)) { toast(downMsg.seat, true, 4500); return; }
     if (rd.on || st.chapter) openChapter(null);
     toggleSettings(false);
-    const moving = seat.on, walking = wk.on;
-    /* from where the eyes are now: the walker's, the seat you are getting up from, or the explore camera */
+    const moving = seat.on;
+    /* from where the eyes are now: the seat you are getting up from, or the explore camera */
     const from = JSON.parse(JSON.stringify(st.camFinal || st.cur || V.wide));
-    if (walking) { endWalkHere(); seat.wasWalking = true; } else if (!moving) seat.wasWalking = false;
     if (moving) Engine.seatProps(seat.i, false);
     Object.assign(seat, { on: true, i, yaw: 0, pitch: 0, yawT: 0, pitchT: 0, drag: null, pose: Engine.seatPose(i) });
     Engine.seatProps(i, true);
-    /* up (if you were sitting), over to the seat at standing height, walking if you were walking; then round and down */
+    /* up (if you were sitting), over to the seat at standing height, walking there from the seat you left; then round and down */
     const P = Engine.seatPose(i), stand = standCam(P), dist = Math.hypot(from.pos[0] - stand.pos[0], from.pos[1] - stand.pos[1], from.pos[2] - stand.pos[2]);
     st.from = from; st.camT = 0;
     if (dist > 0.35) {
-      seat.approach = { stage: 1, stand, dist, walk: walking || moving };
-      st.to = stand; st.camDur = clamp(walking || moving ? dist / 1.4 : 0.9 + dist / 9, 0.8, walking || moving ? 7 : 2.4);
+      seat.approach = { stage: 1, stand, dist, walk: moving };
+      st.to = stand; st.camDur = clamp(moving ? dist / 1.4 : 0.9 + dist / 9, 0.8, moving ? 7 : 2.4);
       seat.sitAt = Infinity;
     } else { seat.approach = null; st.to = seatCam(); st.camDur = 1.5; seat.sitAt = performance.now() + 1500 * 0.5; }
     document.body.classList.add('seated'); document.body.classList.remove('seat-hint-off'); $('seatHud').hidden = false;
@@ -2348,14 +1528,7 @@
   function leaveSeat() { if (!seat.on) return; Engine.seatProps(seat.i, false); seat.on = false; seat.drag = null; document.body.classList.remove('seated', 'look-drag'); $('seatHud').hidden = true; radioOff(); }
   function standUp() {
     if (!seat.on) return;
-    const P = seat.pose, back = seat.wasWalking; leaveSeat();
-    if (back && P) {
-      /* you walked here: you get up and walk on, from in front of the seat */
-      /* (the eyes rise from the seat into the walker's as the walk view blends in) */
-      const s = standCam(P); startWalk(); wk.x = s.pos[0]; wk.z = s.pos[2]; wk.h = wk.hT = -P.yaw; wk.hy.v = 0; wk.my = 0; walkCamera();
-      return;
-    }
-    goView('wide');
+    leaveSeat(); goView('wide');
   }
   $('bStand').addEventListener('click', standUp);
   $('bSeatPrev').addEventListener('click', () => nextSeat(-1)); $('bSeatNext').addEventListener('click', () => nextSeat(1));
@@ -2370,7 +1543,7 @@
   }, { passive: true });
   const unlook = e => { if (seat.drag && seat.drag.id === e.pointerId) { seat.drag = null; document.body.classList.remove('look-drag'); } };
   addEventListener('pointerup', unlook); addEventListener('pointercancel', unlook);
-  /* Esc closes the wish, then gets you up; the arrow keys look around while seated (and don't start the van); [ ] or
+  /* Esc closes the wish, then gets you up; the arrow keys look around while seated; [ ] or
      , . change seat; Q E turn the chair */
   addEventListener('keydown', e => {
     if (e.key === 'Escape') {
@@ -2730,7 +1903,7 @@
   cv.addEventListener('pointerdown', e => { pdown = e.isPrimary ? { x: e.clientX, y: e.clientY } : null; });
   addEventListener('pointerup', e => {
     const d = pdown; pdown = null;
-    if (!d || e.target !== cv || !ready || !st.entered || rd.on || car.on || sketch.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
+    if (!d || e.target !== cv || !ready || !st.entered || rd.on || sketch.on || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return;
     if (insp.on) { down = null; return; }
     const hit = pickAt(e);
     if (!hit) {
@@ -2750,8 +1923,8 @@
   cv.addEventListener('pointermove', e => {
     if (e.pointerType !== 'mouse' || e.buttons) return;
     const now = performance.now(); if (now - hoverT < 80) return; hoverT = now;
-    let hit = ready && st.entered && !rd.on && !car.on && !insp.on ? pickAt(e) : null;
-    if (!hit && ready && st.entered && !rd.on && !car.on && !insp.on && !sketch.on) { const r = cv.getBoundingClientRect(); if (Engine.inspect.pick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)) hit = 'life'; }
+    let hit = ready && st.entered && !rd.on && !insp.on ? pickAt(e) : null;
+    if (!hit && ready && st.entered && !rd.on && !insp.on && !sketch.on) { const r = cv.getBoundingClientRect(); if (Engine.inspect.pick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)) hit = 'life'; }
     document.body.classList.toggle('pick-hover', !!hit && hit !== (seat.on && seat.pose ? seat.pose.id : ''));
   });
   /* ── the bouquet: wild flowers picked at the forest's edge, kept in this browser; put in a jar on the picnic table,
@@ -2799,9 +1972,6 @@
   $('bqJar').addEventListener('click', () => { bouquet.jar = !bouquet.jar; store.set('bouquetJar', bouquet.jar); syncBouquet(false); if (bouquet.jar) toast('In a jar on the picnic table.', false, 2400); });
   $('bqFree').addEventListener('click', () => { bouquet.list = []; bouquet.jar = false; store.set('bouquet', []); store.set('bouquetJar', false); syncBouquet(false); toast('You let them go. They drift back into the grass.', false, 2400); });
 
-  /* the van drives round the board, as it does round everything else at the camp */
-  campObs.push([Layout.board.x, Layout.board.z, 0.9, 'board']);
-
   /* dots on the board and the chairs (and the radio, while you sit) */
   const extraSpots = [['board', 'Wishes', 'Read the wishes', openWishes], ['chair0', 'Sit', 'Sit in this chair', () => sit(seatBy('chair0'))], ['chair1', 'Sit', 'Sit in this chair', () => sit(seatBy('chair1'))], ['radio', 'Radio', 'Switch the radio on or off', radioToggle], ['sketch', 'Draw', 'Draw a picture on the board', () => openSketch()], ['toolbox', 'Drawings', 'Look through everyone’s drawings', () => openToolbox()]].map(([key, label, aria, fn]) => {
     const s = document.createElement('button'); s.type = 'button'; s.className = 'spot extra'; s.setAttribute('aria-label', aria);
@@ -2814,7 +1984,7 @@
       if (!A[x.key]) { x.el.style.visibility = 'hidden'; continue; }
       const atTable = seat.on && seat.pose && seat.pose.near === 'table', p = Engine.project(A[x.key]);
       const want = !sketch.on && !tbox.on && (x.key === 'radio' ? seat.on && !atTable : x.key === 'sketch' || x.key === 'toolbox' ? !st.chapter && (!seat.on || atTable) : !seat.on && !st.chapter);
-      const vis = want && !rd.on && !car.on && pinNear(A[x.key]) && !Engine.pitching && !Engine.knocked(x.key) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
+      const vis = want && !rd.on && pinNear(A[x.key]) && !Engine.knocked(x.key) && p[2] < 1 && p[0] > 0.02 && p[0] < 0.98 && p[1] > 0.1 && p[1] < 0.97;
       x.el.style.transform = `translate(${(view.x + p[0] * view.w).toFixed(1)}px, ${(view.y + p[1] * view.h).toFixed(1)}px)`; x.el.style.visibility = vis ? 'visible' : 'hidden';
     }
   }
@@ -2870,12 +2040,11 @@
     return { pos, look, fov, focus: d };
   }
   function openSketch() {
-    if (!ready || !st.entered || car.on || sketch.on || isDown('sketch')) return;
+    if (!ready || !st.entered || sketch.on || isDown('sketch')) return;
     if (rd.on || st.chapter) openChapter(null);
     if (tbox.on) closeToolbox(true);
     toggleSettings(false);
     sketch.from = seat.on ? seat.i : -1;
-    if (wk.on) stopWalk();
     if (seat.on) leaveSeat();
     sketchInit(); sketchCompose();
     sketch.on = true; document.body.classList.add('sketching'); $('sketchBar').hidden = false; $('skMsg').textContent = '';
@@ -2990,11 +2159,10 @@
       (tbox.list ? '<p class="tb-empty">No drawings yet. Sit at the picnic table, draw on the board, and put the first one in.</p>' : '');
   }
   function openToolbox() {
-    if (!ready || !st.entered || car.on || tbox.on || isDown('toolbox')) return;
+    if (!ready || !st.entered || tbox.on || isDown('toolbox')) return;
     if (rd.on || st.chapter) openChapter(null);
     if (sketch.on) closeSketch(true);
     toggleSettings(false);
-    if (wk.on) stopWalk();
     tbox.on = true; tbox.view = -1; document.body.classList.add('toolbox-open'); $('tbox').hidden = false; $('tbView').hidden = true;
     if (!seat.on) { const a = Engine.propAnchors().toolbox; if (a) { st.from = st.cur ? JSON.parse(JSON.stringify(st.cur)) : V.wide; st.to = { pos: [a[0] - 1.1, 1.35, a[2] + 1.25], look: [a[0], a[1] - 0.12, a[2]], fov: 44, focus: 1.6 }; st.camT = 0; st.camDur = camDur(st.from, st.to); } }
     renderToolbox(); loadDrawings();
@@ -3019,7 +2187,7 @@
   $('tbox').addEventListener('keydown', e => { if (tbox.view >= 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { tbShow(tbox.view + (e.key === 'ArrowLeft' ? -1 : 1)); e.preventDefault(); } e.stopPropagation(); });
   function stepToolbox(dt) { const t = tbox.on ? 1 : 0; if (Math.abs(t - tbox.k) > 1e-3) { tbox.k += (t - tbox.k) * Math.min(1, dt * 3.2); Engine.toolboxOpen(tbox.k); } }
 
-  /* where each sound comes from, as heard from the camera (or the walker's ears): the surf from the waterline, birds and
+  /* where each sound comes from, as heard from the camera: the surf from the waterline, birds and
      crickets from the trees, the crackle from the fire. Each fades with distance (the fire, a point, quickly; the long
      line of the surf more slowly; trees muffle the sea), the air takes the highs off what is far, and each pans to the
      side it is on */
@@ -3052,8 +2220,8 @@
   /* every frame, after the scene is drawn: the seated view, the board's light, the radio's dial, the dots */
   function extras(dt) {
     if (!wish.started) startWishes();
-    /* opening something else, or taking the van, gets you up out of the chair */
-    if (seat.on && (rd.on || car.on || wk.on || st.chapter)) { leaveSeat(); if (!rd.on && !st.chapter && !wk.on) goView('wide'); }
+    /* opening something else gets you up out of the chair */
+    if (seat.on && (rd.on || st.chapter)) leaveSeat();
     stepChairs(dt); stepSketch(dt); stepToolbox(dt);
     if (seat.on) {
       const a = 1 - Math.exp(-dt * 6); seat.yaw += (seat.yawT - seat.yaw) * a; seat.pitch += (seat.pitchT - seat.pitch) * a;
@@ -3079,6 +2247,6 @@
   }
 
   syncTimeUI(); syncLightsUI(); syncSoundUI(); renderFinds();
-  window.__cove = { st, rd, openChapter, toast, readNav, view, car, keys, stepCar, startDrive, stopDrive, obstacles, obstaclesNear, body, orb, orbCam, orbHome, orbToVan, ex, wk, ai, startWalk, stopWalk, setAuto, stepWalk, hutUse };
-  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, pitchSpot, startPitch, pitchS, filmStep, film, orbAt, WX, hearing, radioHeard, sketch, openSketch, closeSketch, tbox, openToolbox, closeToolbox });
+  window.__cove = { st, rd, openChapter, toast, readNav, view, orb, orbCam, orbHome, ex, hutUse };
+  Object.assign(window.__cove, { wish, seat, radio, sit, standUp, openWishes, openWish, radioOn, radioOff, radioClick, filmStep, film, orbAt, WX, hearing, radioHeard, sketch, openSketch, closeSketch, tbox, openToolbox, closeToolbox });
 })();

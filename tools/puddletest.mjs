@@ -6,7 +6,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + 
 const { browser, page, logs } = await open({ w: 960, h: 600, rs: 0.6, hour, init: () => { try { localStorage.setItem('cove.weather', JSON.stringify('rain')); } catch (e) {} } });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 try {
-  await page.addStyleTag({ content: '#walkHud, #ctrl, #walkBar, #hint, #dock { display: none !important; }' });
+  await page.addStyleTag({ content: '#ctrl, #homeBar, #hint, #dock { display: none !important; }' });
   /* (a long rain already: the clouds, the rain and the wet as they are after it) */
   await page.evaluate(() => { const st = window.__cove.st; st.weather = 'rain'; Object.assign(st.wx, { rain: 1, wet: 1, pud: 1, flood: 0.8, stratus: 1, cumulus: 0.4 }); });
   await page.evaluate(() => { window.__coveCamFix = { pos: [-4.5, 1.65, -1.2], look: [-1.5, 0.1, 5.5], fov: 55, focus: 5 }; });

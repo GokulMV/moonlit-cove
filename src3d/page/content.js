@@ -27,13 +27,10 @@ const Content = {
   notes: [
     { title: 'The sea looked like fog', problem: 'A few metres out the water smeared into a grey haze.', fix: 'The water’s textures are now filtered along the view, each ripple fades by how much sea a pixel covers, and three plain swell trains replaced a blotchy swell texture. The sea stays water all the way to the horizon.' },
     { title: 'Ripples, not waves', problem: 'A click on the sea made rings, like a pond.', fix: 'A click now sends a real swell along the wave field. Clicks close together stack into a taller one, and it runs up the sand by the same rule in the shader and in the code that knocks things over.' },
-    { title: 'Pins pointing at nothing', problem: 'The dots for the chapters floated in the air, one of them out at sea.', fix: 'Each dot is measured from its object every frame: the book, the bottle, the clipboard on the van, wherever the van has been driven.' },
+    { title: 'Pins pointing at nothing', problem: 'The dots for the chapters floated in the air, one of them out at sea.', fix: 'Each dot is measured from its object every frame: the book, the bottle, the clipboard on the van, wherever a wave has knocked it.' },
     { title: 'A book of loose paper', problem: 'The journal looked like sheets thrown on a pad.', fix: 'Now it has boards larger than the pages, a spine that stands up as it shuts, page blocks that thicken as you read, and pages that dive into a shaded gutter.' },
-    { title: 'Footprints like figures of eight', problem: 'Footprints were two dark ovals, the tyre tracks plain smudges, and the beach never cleared either.', fix: 'A footprint is now the shape of a foot, heel to toes, left and right, pressed into the sand as a relief the light shades; tyres leave a rut with a tread. Both soften away over a couple of minutes, and a wave smooths them out wherever it actually runs.' },
-    { title: 'The engine', problem: 'The first engine was synthesised, and it was rude.', fix: 'A recorded engine loop, pitched by speed and throttle, with a starter crank before it catches.' },
     { title: 'Robotic on headphones', problem: 'The surf, the crickets and the birds sounded garbled and robotic, and a 111 Hz tone hummed underneath like a beep.', fix: 'The recordings had been squeezed to low bitrates, then chopped and pitch-shifted. Now the originals are cut into seamless loops at clean bitrates and played whole, at their own pitch; the tone and every synthesised sound are gone.' },
-    { title: 'Stuck van', problem: 'The van hit a rock and couldn’t get out.', fix: 'The van is three circles. Anything it touches pushes it out sideways, so it slides along rocks instead of sticking, and R puts it back on open sand.' },
-    { title: 'The end of the beach', problem: 'The beach stopped at a wall.', fix: 'The beach is two kilometres long and its two ends are joined: drive on along it and you come round to the camp again, with no seam anywhere. It is built in 128-metre chunks around you, a few milliseconds a frame.' },
+    { title: 'The end of the beach', problem: 'The beach stopped at a wall.', fix: 'The beach is two kilometres long and its two ends are joined: move the view on along it and you come round to the camp again, with no seam anywhere. It is built in 128-metre chunks around you, a few milliseconds a frame.' },
     { title: 'A flickering horizon', problem: 'With softness at zero the horizon shimmered.', fix: 'Ripples fade before they can alias, ambient occlusion fades out far away, and the ground is cut into cells so depth doesn’t tear.' },
     { title: 'The eraser line', problem: 'Where the sea drew back, the wet sand dried along a straight line, like someone rubbing it out.', fix: 'Each wave’s reach now wanders along the beach, the sand dries in patches and soaks in from the edge, and the foam breaks into lace as it goes.' }
   ],
@@ -43,7 +40,7 @@ const Content = {
     { group: 'In your browser', items: ['JavaScript, no framework', 'GLSL shaders', 'three.js r160', 'WebGL 2', 'Web Audio API', 'Canvas 2D'] },
     { group: 'Type', items: ['Fraunces', 'Instrument Sans', 'Caveat', 'JetBrains Mono', 'via Fontsource'] },
     { group: 'Sky', items: ['SunCalc’s sun and moon formulas', 'your time zone, for where you are'] },
-    { group: 'Sound', items: ['Moodist field recordings', 'Kenney’s engine and knocks', 'Web Audio, mixed live'] },
+    { group: 'Sound', items: ['Moodist field recordings', 'Kenney’s knocks', 'Web Audio, mixed live'] },
     { group: 'Server', items: ['Node.js 22', 'a server with no dependencies', 'brotli, ETags, CSP'] },
     { group: 'Shipping', items: ['GitHub', 'Docker', 'Railway', 'Cloudflare'] },
     { group: 'Tools', items: ['Playwright + headless Chromium', 'ffmpeg', 'Git', 'Claude, as pair programmer'] }
@@ -53,7 +50,7 @@ const Content = {
   credits: [
     { group: 'Sound', items: [
       { what: 'Surf, crickets, birds, seagulls, owl, campfire, rain, thunder and turning pages', who: 'The Moodist sound library by MAZE (remvze)', link: ['github.com/remvze/moodist', 'https://github.com/remvze/moodist'], licence: 'Each sound under the Pixabay Content License or CC0' },
-      { what: 'The van’s engine and knocks', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
+      { what: 'The knock of a hut’s door and shutters', who: 'Kenney, Starter Kit Racing', link: ['github.com/KenneyNL/Starter-Kit-Racing', 'https://github.com/KenneyNL/Starter-Kit-Racing'], licence: 'Sounds CC0 (the kit’s code is MIT)' }
     ] },
     { group: 'Radio', items: [
       { what: 'World radio, on the table by the fire', who: 'Stations from the Radio Browser community directory. Every stream belongs to its broadcaster and plays straight from them; nothing is recorded or re-hosted here', link: ['radio-browser.info', 'https://www.radio-browser.info'], licence: 'Your own songs play from your device and never leave it' },

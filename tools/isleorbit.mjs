@@ -11,7 +11,7 @@ const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = (
 const shot = name => page.screenshot({ path: path.join('shots', `${prefix}_${name}.png`), timeout: 240000 });
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fails++; };
 try {
-  await page.addStyleTag({ content: '#walkHud, #walkBar, #hint, #hud .brand, #spots { display: none !important; }' });
+  await page.addStyleTag({ content: '#homeBar, #hint, #hud .brand, #spots { display: none !important; }' });
   /* (the way in over: the camera come to the home view) */
   await page.waitForFunction(() => window.__cove.st.camT >= 1, null, { timeout: 180000 }); await frames(8);
   /* (how the view stands: the point, the camera over the top of what is under it, the top under the point) */

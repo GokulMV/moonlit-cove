@@ -14,7 +14,7 @@ let fails = 0; const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + 
 const { browser, page, logs } = await open({ w: 1280, h: 720, rs: 0.6, hour: views[0].hour, dtCap: 0.25, query: isle ? '?island' : '', tz: process.env.SKYTZ || 'Asia/Kolkata' });
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 try {
-  await page.addStyleTag({ content: '#walkHud, #ctrl, #walkBar, #hint, #hud { display: none !important; }' });
+  await page.addStyleTag({ content: '#ctrl, #homeBar, #hint, #hud { display: none !important; }' });
   if (isle) console.log('   trees:', await page.evaluate(() => { const f = Engine.world.forest; return f ? f.protos.map(p => p.kind + ' ' + p.H.toFixed(1)).join(', ') : ''; }));
   for (const v of views) {
     /* (the hour and the path, the path at once rather than swinging over) */

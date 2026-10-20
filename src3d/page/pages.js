@@ -230,7 +230,7 @@ const Pages = (() => {
       d.box(86, 652, 580, 150, 'REFLECTIONS', ['the sky, prefiltered into a cube map,', 'rebuilt only when the sky changes'], { dash: true });
       d.box(714, 652, 600, 150, 'ADAPTIVE SIZE', ['the render scale drops when frames run', 'slow, and climbs back when they’re quick'], { dash: true });
     }, ['everything renders in half float, then tone-maps', 'the fire is ray-marched, not a sprite', 'occlusion fades out far away (no shimmer)', 'phones get fewer pixels, not fewer effects']],
-    ['The beach, from above', 'Two kilometres of beach, its two ends joined: drive on along it and you come round to the camp again.', d => {
+    ['The beach, from above', 'Two kilometres of beach, its two ends joined: go on along it and you come round to the camp again.', d => {
       /* drawn from the coast itself (Layout.Coast): the whole loop, the camp in the middle, its bends drawn deeper so
          they show, the beach many times wider */
       const a = d.a, C = Layout.Coast, X0 = 86, X1 = 1314, SPAN = Layout.P, Y0 = 404, K = 2.2, KB = 4.2, base = Layout.SH.base, PXM = (X1 - X0) / SPAN, cx0 = Layout.camp.x + Layout.O.x;
@@ -260,9 +260,9 @@ const Pages = (() => {
       d.text('chunks', px(cx0) + 200, 200, { size: 13, color: d.ACC });
       /* a scale */
       d.line([[1130, 806], [1130 + 250 * PXM, 806]], { color: d.TXT, w: 2 }); d.text('250 m', 1130 + 125 * PXM, 798, { align: 'center', size: 13, color: d.TXT });
-    }, ['drawn from the coast itself, as you will find it', 'two kilometres round, its ends joined with no seam', 'built round you, a few milliseconds a frame', 'park anywhere: the camp can be pitched there']],
+    }, ['drawn from the coast itself, as you will find it', 'two kilometres round, its ends joined with no seam', 'built round you, a few milliseconds a frame', 'the rainforest packed close behind the sand']],
     ['Sound', 'Recordings, mixed live and timed to what you see.', d => {
-      const src = [['SEA', 'a long seamless loop'], ['WAVES', 'a second take swells in'], ['PAGES', 'real paper turning'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder'], ['VAN', 'engine, pitched by speed']];
+      const src = [['SEA', 'a long seamless loop'], ['WAVES', 'a second take swells in'], ['PAGES', 'real paper turning'], ['NIGHT', 'crickets · owl'], ['DAY', 'birds · gulls'], ['FIRE', 'only while it burns'], ['WEATHER', 'rain · thunder']];
       src.forEach(([t, l], i) => d.box(86, 178 + i * 80, 380, 68, t, [l], { ts: 17, ls: 14, lh: 20 }));
       const bus = [['OCEAN', 300], ['FOREST', 420], ['FIRE', 540], ['INSECTS', 640], ['WEATHER', 740]];
       bus.forEach(([t, y]) => d.box(560, y - 34, 220, 68, t, [], { center: true, middle: true, ts: 18 }));
@@ -270,7 +270,6 @@ const Pages = (() => {
       [[0, 'OCEAN'], [1, 'OCEAN'], [3, 'INSECTS'], [4, 'FOREST'], [5, 'FIRE'], [6, 'WEATHER']].forEach(([i, n]) => d.arrow([[466, sy(i)], [512, sy(i)], [512, by(n)], [560, by(n)]], { soft: true, w: 1.5 }));
       d.box(870, 400, 200, 110, 'MIX', ['left uncoloured'], { center: true });
       bus.forEach(([, y]) => d.arrow([[780, y], [830, y], [830, 455], [870, 455]], { soft: true, w: 1.5 }));
-      d.arrow([[466, sy(7)], [846, sy(7)], [846, 470], [870, 470]], { soft: true, w: 1.5 });
       d.box(1114, 400, 200, 110, 'LIMITER', ['nothing clips'], { center: true });
       d.box(1114, 600, 200, 110, 'SPEAKERS', [], { center: true, middle: true, bold: true });
       d.arrow([[1070, 455], [1114, 455]]); d.arrow([[1214, 510], [1214, 600]]);

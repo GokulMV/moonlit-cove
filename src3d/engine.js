@@ -14,7 +14,7 @@ const Engine = (() => {
   /* the finely meshed surf that carries the waves' heights: its size and its cells (it follows the view, see render) */
   /* (round the island it reaches further out: the swell breaks out on the reefs' edges, a hundred metres off the rocks) */
   const NEAR = { W: 192, D: Layout.isle ? 140 : 100, CELL: 0.4 };
-  let envSkyMat, envScene, pmrem, n3Tex, noiseT, marks = null, spray = null;
+  let envSkyMat, envScene, pmrem, n3Tex, noiseT;
   const vanS = { k: 0, brake: 0, head: 0, moved: false };
   const BIAS = new T.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const hash = x => { const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -485,62 +485,7 @@ const Engine = (() => {
     canDone = false;
     surge.dyn.forEach(d => { if (d.L0) { d.L.copy(d.L0); d.S.crossVectors(UP, d.L); d.axis.copy(d.S).normalize(); } });
   }
-  /* ── pitching camp somewhere new. moveCamp: while the screen is dark, the coast is moved under the camp (the camp
-     stays where it is in the world, the beach it stands on changes): the world is built again round it, the tide's
-     mess and the old tracks are gone. pitchStart: then everything goes up again, one thing at a time ── */
-  const pitch = { on: false, t0: 0, items: null, k: { string: 1, lantern: 1, fire: 1 } };
-  function pitchList() {
-    const L = [], add = (o, t, d, kind) => { if (o) L.push({ o, t, d, kind, p: o.position.clone(), s: o.scale.clone() }); };
-    add(camp.rugMesh, 1.1, 0.9, 'unroll');
-    add(camp.table, 1.8, 0.55, 'grow');
-    (camp.cushions || []).forEach((o, i) => add(o, 2.1 + i * 0.1, 0.35, 'grow'));
-    add(camp.basket, 2.5, 0.4, 'grow'); add(camp.bookLoose, 2.6, 0.3, 'grow');
-    (camp.chairs || []).forEach((o, i) => add(o, 2.8 + i * 0.3, 0.5, 'grow'));
-    (camp.poles || []).forEach((o, i) => add(o, 3.4 + i * 0.14, 0.55, 'rise'));
-    (camp.poleCaps || []).forEach((o, i) => add(o, 3.4 + i * 0.14, 0.55, 'lift'));
-    (camp.strands || []).forEach(o => add(o, 4.2, 0.05, 'show')); add(camp.bulbMesh, 4.2, 0.05, 'show');
-    (camp.lanternGroups || []).forEach((o, i) => add(o, 4.8 + i * 0.2, 0.4, 'grow'));
-    add(camp.fireGroup, 5.3, 0.6, 'grow'); add(camp.tripod, 5.9, 0.45, 'grow'); add(camp.mug, 6.3, 0.3, 'grow'); add(camp.kettle, 6.6, 0.35, 'grow');
-    add(camp.woodpile, 6.0, 0.45, 'grow'); add(camp.logRound, 6.2, 0.4, 'grow'); add(camp.driftwood, 6.4, 0.5, 'grow'); add(camp.bottle, 6.5, 0.4, 'grow');
-    if (camp.board) add(camp.board.group, 6.8, 0.6, 'grow');
-    if (camp.crate) add(camp.crate, 6.1, 0.4, 'grow');
-    if (camp.toolbox) add(camp.toolbox, 2.7, 0.4, 'grow');
-    return L;
-  }
-  const backOut = u => { const c = 1.5; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
-  function pitchPose(it, u) {
-    const o = it.o; u = Math.min(1, u);
-    o.visible = u > 0; if (u <= 0) return;
-    const e = u >= 1 ? 1 : Math.max(1e-3, backOut(u));
-    if (it.kind === 'grow') o.scale.copy(it.s).multiplyScalar(e);
-    else if (it.kind === 'rise') { o.scale.set(it.s.x, it.s.y * Math.min(1, e), it.s.z); o.position.y = it.p.y * Math.min(1, e); }
-    else if (it.kind === 'lift') o.position.y = it.p.y * Math.min(1, e);
-    else if (it.kind === 'unroll') { const w = u >= 1 ? 1 : Math.max(1e-3, 1 - Math.pow(1 - u, 2.2)); o.scale.set(it.s.x * w, it.s.y, it.s.z); o.position.x = it.p.x - (1 - w) * Layout.rug.w / 2; }
-  }
-  function pitchStart() {
-    pitch.items = pitch.items || pitchList();
-    for (const it of pitch.items) pitchPose(it, 0);
-    pitch.k.string = pitch.k.lantern = pitch.k.fire = 0; pitch.t0 = performance.now() / 1000; pitch.on = true; canDone = false;
-  }
-  function pitchStep() {
-    if (!pitch.on) return;
-    const tt = window.__covePitchT ?? performance.now() / 1000 - pitch.t0;      /* (the test bench can hold it at a moment) */
-    for (const it of pitch.items) pitchPose(it, (tt - it.t) / it.d);
-    pitch.k.string = sm01(4.3, 5.9, tt); pitch.k.lantern = sm01(4.8, 5.8, tt); pitch.k.fire = sm01(6.0, 7.2, tt);
-    canDone = false;
-    if (tt > 7.6) { pitch.on = false; for (const it of pitch.items) { it.o.visible = true; it.o.scale.copy(it.s); it.o.position.copy(it.p); } pitch.k.string = pitch.k.lantern = pitch.k.fire = 1; }
-  }
-  function moveCamp(ox, oz, camX) {
-    Layout.setOrigin(ox, oz);
-    rebuildCamp(); registerDyn(surge.dyn); surge.ripples.length = 0;
-    if (marks) marks.clear(); if (inspect) inspect.clear(); if (shacks && shacks.clearMine) shacks.clearMine();
-    coastFollow(camX ?? Layout.camp.x);
-    /* the chunk round the camp at once, then a quarter of a second of the rest (more follows as the frames go on) */
-    if (world) world.update(camX ?? Layout.camp.x, 250);
-    /* (the fruit trees stand by the camp as its palms do: on the new ground under them) */
-    if (orchard) orchard.reground();
-  }
-  Object.assign(api, { moveCamp, pitchStart, waveAt: (x, z) => waveAt(x, z) });
+  Object.assign(api, { waveAt: (x, z) => waveAt(x, z) });
   /* ── the beach's two ends joined: the page keeps its own frame within half a loop of the camp, and when the van, the
      walker or the eye goes past that it carries them back a whole loop (d, m) and tells the engine, which carries back
      what moves round the eye with them and keeps everything laid along the beach where it is on it (loopX: how far the
@@ -560,15 +505,10 @@ const Engine = (() => {
     if (shallows && shallows.shift) shallows.shift(d, 0);
     if (isFauna && isFauna.shift) isFauna.shift(d);
     if (fauna && fauna.shift) fauna.shift(d, 0);
-    if (snowmen && snowmen.shift) snowmen.shift(d, near);
-    if (marks && marks.shift) marks.shift(d, near);
-    if (spray) spray.shift(d);
-    if (shacks && shacks.shift) shacks.shift(d, near);
     camera.position.x += d; camera.updateMatrixWorld();
   }
   Object.assign(api, { loopShift });
   Object.defineProperty(api, 'loopX', { get: () => loopX });
-  Object.defineProperty(api, 'pitching', { get: () => pitch.on });
   /* upcoming breakers (tide + click swells) for the soundscape: arrival times on the wave clock */
   function waveSchedule(wt0, wt1) {
     const WT = 9.0, out = [];
@@ -580,7 +520,7 @@ const Engine = (() => {
     return out;
   }
   /* the coast's wildlife (fauna.js), and what it is told each frame */
-  let grass = null, huts = null, hutT = null, snowFx = null, snowT = null, skyfall = null, sfT = null, snowmen = null, fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
+  let grass = null, huts = null, hutT = null, snowFx = null, snowT = null, skyfall = null, sfT = null, fauna = null, faunaT = null, roughNow = 0, shacks = null, flora = null, bouquetJar = null, inspect = null, shallows = null, waveNow = 0, orchard = null, orchT = null; const faunaIn = {};
   /* how far up the sand the water reaches at x just now, in metres from the waterline: the tide's swash as the ground
      shader draws it (the same six waves, timed along the beach the same way), and any clicked swell's. For the birds
      that chase the water's edge and the crabs that keep out of it */
@@ -667,7 +607,6 @@ const Engine = (() => {
     placeVanProps(k);
   }
   const vanPose = () => { const g = camp.vanGroup; _e.setFromQuaternion(g.quaternion, 'YXZ'); return { x: g.position.x, z: g.position.z, heading: _e.y }; };
-  /* footprints and tyre tracks are decals pressed into the sand (marks.js) */
   /* the van (or anything) shoving props: a hit with its own direction, no backwash */
   function knock(x, z, rad, vx, vz, wt) {
     const sp = Math.hypot(vx, vz), hits = [];
@@ -734,7 +673,6 @@ const Engine = (() => {
     keyLight.target.position.set(Layout.camp.x, 0, Layout.camp.z);
     scene.add(keyLight, keyLight.target);
     hemi = new T.HemisphereLight(0xffffff, 0x000000, Math.PI); scene.add(hemi);
-    torch = makeTorch(opts.torchShadow || (opts.shadowSize && opts.shadowSize < 1024 ? 512 : 1024));
     /* the lights are on the local shadow cameras' layers too (2, 3; see localShadow): those depth passes then find the
        same lights as the main pass, instead of none, and three no longer looks every material's program over again
        twice a frame whenever the fire is lit */
@@ -881,13 +819,8 @@ const Engine = (() => {
     inspect = Inspect.build({ scene, root: natG, camera, ground: (x, z) => world.land(x, z),
       sources: [(L, c) => fauna.pickables(L, c), (L, c) => life.pickables(L, c), (L, c) => flora.pickables(L, c), (L, c) => shallows.pickables(L, c), (L, c) => orchard.pickables(L, c), (L, c) => { if (isFauna) isFauna.pickables(L, c); }],
       splash: (x, z, s) => { fauna.splash(x, z, s); surge.ripples.push({ x, z, t0: waveNow, A: 0.3 + 0.25 * s }); if (surge.ripples.length > 12) surge.ripples.shift(); } });
-    marks = Marks.build(natG); Object.assign(api, { marks });
-    /* (water thrown up: off the van's tyres in the shallows, under a foot in the sea: spray.js) */
-    if (typeof Spray !== 'undefined') { spray = Spray.build(natG); Object.assign(api, { spray }); }
     /* snow falling, when the weather brings it (snow.js) */
     snowFx = Snow.build(scene); Object.assign(api, { snowFx });
-    /* and the snowballs and snowmen rolled in it (snowman.js), each facing whoever made it */
-    snowmen = Snowmen.build(natG, world, { face: () => [camera.position.x, camera.position.z] }); Object.assign(api, { snowmen });
     post = makePost(); gU.uSunVis.value = post.visTex;
     return { casters: nCast };
   }
@@ -909,81 +842,6 @@ const Engine = (() => {
   function blendCam(a, b, t) {
     const L = (x, y) => x.map((v, i) => lerp(v, y[i], t));
     return { pos: L(a.pos, b.pos), look: L(a.look, b.look), fov: lerp(a.fov, b.fov, t), focus: lerp(a.focus || 25, b.focus || 25, t) };
-  }
-
-  /* ── the walker's torch: a small aluminium torch held low in the right hand, its rubber grip rings, the switch, a
-     chrome bezel round the lens and the reflector behind it. Its light is a spot light's: three renders its shadow map
-     (everything that casts a shadow, leaves cut out of their cards), and the scene's own shaders light with it
-     (artLight: a bright hotspot in a softer spill, shadowed), so the palms, the rocks and the camp throw shadows across
-     the sand that swing as the beam does. A faint cone of light shows in the night air ── */
-  let torch = null;
-  function makeTorch(size) {
-    const L = new T.SpotLight(0xffffff, 0, 34, 0.52, 0.4, 2);
-    L.castShadow = true; L.shadow.mapSize.set(size, size); L.shadow.bias = -0.0004; L.shadow.normalBias = 0.02;
-    Object.assign(L.shadow.camera, { near: 0.12, far: 34 }); L.shadow.autoUpdate = false;
-    scene.add(L, L.target);
-    /* the torch itself (models/camp/torch.js): its metal takes the sky's light from the scene's own environment map, so
-       it shows the night it is held up in */
-    const g = Models.make('camp/torch'), { lens, lensM, ledM } = g.userData;
-    /* (the torch in hand is drawn over the finished frame, in a little scene of its own with the night's light on it:
-       held this close it would otherwise be lost in the depth of field's blur) */
-    const tS = new T.Scene(), amb = new T.AmbientLight(0xffffff, 0), key = new T.DirectionalLight(0xffffff, 0), glow = new T.PointLight(0xfff0d8, 0, 0.6, 2);
-    /* (and the light its own beam throws back off the ground ahead, on its underside) */
-    const bounce = new T.DirectionalLight(0xffeedd, 0);
-    /* (and a soft light from over your shoulder, the way an eye used to the dark still makes out what is in its hand) */
-    const view = new T.DirectionalLight(0xdfe8ff, 0);
-    tS.add(g, amb, key, key.target, glow, bounce, bounce.target, view, view.target); g.visible = false;
-    /* the beam in the air: an open cone, brightest along its axis and near the lens, fading out with distance */
-    const bg = new T.ConeGeometry(Math.tan(0.4) * 14, 14, 32, 1, true); bg.translate(0, -7, 0); bg.rotateX(Math.PI / 2);
-    const beamM = new T.ShaderMaterial({ uniforms: { uK: { value: 0 }, uFog: Mats.U.uFog }, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide,
-      vertexShader: `varying vec3 vL; varying vec3 vW; void main(){ vL = position; vec4 w = modelMatrix*vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
-      fragmentShader: `uniform float uK; varying vec3 vL; varying vec3 vW;
-void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = normalize(cameraPosition - vW);
-  float a = uK*exp(-d/5.5)*pow(max(0.0, 1.0 - r), 1.6)*smoothstep(0.0, 0.6, d)*0.05;
-  gl_FragColor = vec4(vec3(1.0, 0.94, 0.84)*a, 1.0); }` });
-    const beam = new T.Mesh(bg, beamM); beam.frustumCulled = false; beam.visible = false; scene.add(beam);
-    return { L, g, lens, lensM, ledM, beam, beamM, k: 0, tS, amb, key, glow, bounce, view };
-  }
-  const _tq = new T.Quaternion(), _te = new T.Euler(), _tv = new T.Vector3(), _tf = new T.Vector3();
-  /* o.torch: { k: how far on (0..1), off: [right, down, forward] in the camera's frame, sway: [yaw, pitch] } */
-  function stepTorch(o, S) {
-    if (!torch) return;
-    const tt = o.torch, k = tt ? tt.k : 0, on = k > 0.001;
-    torch.g.visible = on && (tt.held !== false); torch.beam.visible = on; torch.L.shadow.autoUpdate = on;
-    Mats.U.uTorch.value.w = 0; torch.lensM.color.setRGB(0.08, 0.08, 0.08); torch.lensM.opacity = 0.55; torch.ledM.color.setRGB(0.25, 0.24, 0.2);
-    if (!on) return;
-    const off = tt.off || [0.19, 0.21, 0.44], sw = tt.sway || [0, 0];
-    _tv.set(off[0], -off[1], -off[2]).applyQuaternion(camera.quaternion).add(camera.position);
-    _te.set(-0.15 + sw[1], 0.04 + sw[0], 0, 'YXZ'); _tq.setFromEuler(_te); torch.g.quaternion.copy(camera.quaternion).multiply(_tq); torch.g.position.copy(_tv);
-    torch.g.updateMatrixWorld(true);
-    const lp = torch.lens.getWorldPosition(new T.Vector3()); _tf.set(0, 0, -1).applyQuaternion(torch.g.quaternion);
-    torch.L.position.copy(lp); torch.L.target.position.copy(lp).addScaledVector(_tf, 10); torch.L.target.updateMatrixWorld(); torch.L.updateMatrixWorld();
-    torch.beam.position.copy(lp); torch.beam.quaternion.copy(torch.g.quaternion);
-    /* (as bright to the eye whatever the night: the eye that has got used to a dark night finds the torch brighter, so it
-       is turned down as far as the frame's exposure is turned up) */
-    const flick = 0.985 + 0.015 * Math.sin(o.t * 37.0) * Math.sin(o.t * 11.0), ex = Math.max(0.05, S.exposure * (o.expMul || 1)), adapt = Math.min(1.6, Math.max(0.3, 5 / ex));
-    Mats.U.uTorch.value.set(lp.x, lp.y, lp.z, 0.62 * k * flick * adapt); Mats.U.uTorchDir.value.copy(_tf);
-    if (torch.L.shadow.map) { Mats.U.uTorchSh.value = torch.L.shadow.map.texture; Mats.U.uTorchShM.value = torch.L.shadow.matrix; Mats.U.uTorchShS.value.copy(torch.L.shadow.mapSize); }
-    torch.lensM.color.setRGB(1.6 * k, 1.5 * k, 1.35 * k); torch.lensM.opacity = 0.55 + 0.4 * k; torch.ledM.color.setRGB(6 * k, 5.7 * k, 5.1 * k); torch.beamM.uniforms.uK.value = k;
-    /* the night's light on the torch in hand: the sky's, the moon's, and a little of its own spill on the bezel */
-    torch.tS.environment = scene.environment; torch.amb.color.setRGB(S.amb[0], S.amb[1], S.amb[2]); torch.amb.intensity = scene.environment ? 0 : Math.PI;
-    torch.key.color.setRGB(S.keyCol[0], S.keyCol[1], S.keyCol[2]); torch.key.intensity = Math.PI * campShade; torch.key.position.copy(torch.g.position).add(_tv.set(S.keyDir[0], S.keyDir[1], S.keyDir[2]).multiplyScalar(5)); torch.key.target.position.copy(torch.g.position); torch.key.target.updateMatrixWorld();
-    /* the lit sand ahead, a couple of metres off and below: what it gives back */
-    _tv.set(0, -1, 0).addScaledVector(_tf, 1.4); torch.bounce.position.copy(torch.g.position).addScaledVector(_tv, 3); torch.bounce.target.position.copy(torch.g.position); torch.bounce.target.updateMatrixWorld();
-    torch.bounce.intensity = 0.45 * k * adapt;
-    _tv.set(0.25, 0.7, 0.9).applyQuaternion(camera.quaternion); torch.view.position.copy(torch.g.position).addScaledVector(_tv, 3); torch.view.target.position.copy(torch.g.position); torch.view.target.updateMatrixWorld();
-    torch.view.intensity = 1.1 * k / ex;
-    torch.glow.position.copy(lp).addScaledVector(_tf, -0.02); torch.glow.intensity = 0.04 * k;
-  }
-  /* the torch in hand, over the finished frame, tone-mapped near enough as the frame was */
-  function drawTorch(exp) {
-    if (!torch || !torch.g.visible) return;
-    /* (the frame itself is tone-mapped and encoded by the post pass; this is drawn straight to the screen, so it must be
-       encoded here) */
-    const tm = R.toneMapping, te = R.toneMappingExposure, ac = R.autoClear, cs = R.outputColorSpace;
-    R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = exp; R.autoClear = false; R.outputColorSpace = T.SRGBColorSpace; R.setRenderTarget(null);
-    R.clearDepth(); R.render(torch.tS, camera);
-    R.toneMapping = tm; R.toneMappingExposure = te; R.autoClear = ac; R.outputColorSpace = cs;
   }
 
   /* ── round the island the near-shore sea's fine mesh is laid along whichever shore is being looked at: turned to face
@@ -1053,7 +911,6 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     const rs = o.renderScale || 1, w = Math.max(2, Math.round(canvas.width * rs)), h = Math.max(2, Math.round(canvas.height * rs));
     post.resize(w, h, o.msaa ?? 4);
     setCamera(o.cam || Layout.cameras.wide, canvas.width / canvas.height, o.shiftX || 0);
-    stepTorch(o, S);
     /* what is held up close, or thrown and on its way (its own clock: real time, whatever time of day is doing) */
     waveNow = o.waveT ?? t;
     if (inspect) inspect.update(iClock(), S);
@@ -1112,7 +969,7 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     if (huts) { const dtH = hutT === null ? 0 : Math.max(0, Math.min(0.1, t - hutT)); hutT = t; huts.update(dtH, t, camera.position, S); }
     /* the snow lying (how much, how deep) for every shader that lays it, and the flakes in the air */
     Mats.U.uSnow.value.set(o.snow || 0, o.snowD || 0, o.snowFall || 0, 0);
-    if (snowFx) { const now = performance.now() / 1000, dtS = snowT === null ? 0 : Math.max(0, Math.min(0.1, now - snowT)); snowT = now; snowFx.update(dtS, camera.position, camera, { fall: o.snowFall || 0, wind: o.wind ?? 1, height: post.height() }); if (snowmen) snowmen.update(dtS, o.snowD || 0); }
+    if (snowFx) { const now = performance.now() / 1000, dtS = snowT === null ? 0 : Math.max(0, Math.min(0.1, now - snowT)); snowT = now; snowFx.update(dtS, camera.position, camera, { fall: o.snowFall || 0, wind: o.wind ?? 1, height: post.height() }); }
     if (grass) grass.update(camera.position, { ground: world ? world.land(camera.position.x, camera.position.z) : 0, wind: o.wind ?? 1, gust: Mats.U.uWindK.value.y, push: o.push || null, snow: o.snow || 0, snowD: o.snowD || 0, q: o.grassQ ?? 1 });
     const V = setV;
     V(skyU.uZen, S.zen); V(skyU.uHor, S.hor); V(skyU.uGlow, S.glow); V(skyU.uSunDirV, S.sunDirV); V(skyU.uMoonDirV, S.moonDirV);
@@ -1148,13 +1005,8 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     const fireK = surge.fireOut == null ? 1 : 1 - sm01(surge.fireOut, surge.fireOut + 0.8, wt);
     const L = Object.assign(Lw, o.lights), F = Object.assign(Fw, o.fire), vf = vanFlicker(t) * (surge.vanHit == null ? 1 : 0.35 + 0.65 * flickOut(surge.vanHit, wt, 2.0)), ff = fireFlicker(t);
     F.i *= fireK; F.smoke *= fireK; L.string *= flickOut(surge.lightsOut, wt);
-    /* a camp going up: its lights come on and its fire is lit as each is put in place */
-    pitchStep();
-    if (pitch.on) { const P = pitch.k; L.string *= P.string; L.fairy *= P.string; L.lantern *= P.lantern; F.i *= P.fire; F.smoke *= P.fire; F.steam *= P.fire; }
     if (camp.rugMat && surge.rugWet != null) { const e = sm01(surge.rugWet, surge.rugWet + 1.5, wt); camp.rugMat.color.setRGB(1 - 0.5 * e, 1 - 0.5 * e, 1 - 0.46 * e); }
     Mats.U.uLights.value.set(L.string, L.lantern, L.van * vf * (1 - vanS.k), L.fairy);
-    if (marks) marks.update(t, wt, S, swashFront);
-    if (spray) spray.update(t, { blur: 1 / 50 });
     Mats.U.uFire.value.set(F.i, ff, F.smoke, F.steam);
     if (o.lightK) Mats.U.uLightK.value.set(...o.lightK);
     uBulb.uProg.value = L.string; uFairy.uProg.value = L.fairy > 0 ? 1 : 0; uFairy.uI.value = 0.5 * L.fairy * vf;
@@ -1245,7 +1097,6 @@ void main(){ float d = -vL.z, r = length(vL.xy)/max(d*tan(0.4), 1e-3); vec3 V = 
     pp.ao = o.ao === false ? 0 : 0.85; pp.haze = haze; pp.noiseT = noiseT; pp.rain = o.rain || 0; pp.rainSlant = o.rainSlant; pp.fire = volFire ? ppFire : null;
     const tc = performance.now();
     post.render(pp);
-    drawTorch(pp.exp * (pp.fade ?? 1));
     if (inspect) inspect.draw(R, pp.exp * (pp.fade ?? 1), canvas.width / Math.max(1, canvas.height));
     if (o.prof) { const a = pp.prof; S.prof = { cpu: Math.round(a[0] - tc), scene: Math.round(a[1] - a[0]), bloom: Math.round(a[2] - a[1]), final: Math.round(a[3] - a[2]) }; }
     S.splashes = splashes;

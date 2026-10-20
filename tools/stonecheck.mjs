@@ -8,7 +8,7 @@ const { browser, page, logs } = await open({ w: 960, h: 540, rs: 0.8, hour: 10, 
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 try {
   await page.waitForFunction(() => window.__cove.st.camT >= 1, null, { timeout: 180000 });
-  await page.addStyleTag({ content: '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap { display: none !important; }' });
+  await page.addStyleTag({ content: '#homeBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots { display: none !important; }' });
   const L = await page.evaluate(() => { const S = Engine.world.stones, C = Layout.camp; return S.all.filter(s => !s.brook && s.s > 1.4).map(s => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(2), z: +s.z.toFixed(1), s: +s.s.toFixed(2), p: s.p, d: +Math.hypot(s.x - C.x, s.z - C.z).toFixed(0), sea: +Layout.Shore.at(s.x, s.z, {}).s.toFixed(1) })).sort((a, b) => a.d - b.d).slice(0, 5); });
   console.log('nearest big stones:', JSON.stringify(L));
   for (const [i, st] of L.slice(0, 2).entries()) {

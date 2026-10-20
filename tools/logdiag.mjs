@@ -7,7 +7,7 @@ const { browser, page, logs } = await open({ w: 800, h: 450, rs: 1, hour: 10, dt
 const frames = n => page.evaluate(n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }), n);
 try {
   await page.waitForFunction(() => window.__cove.st.camT >= 1, null, { timeout: 180000 });
-  await page.addStyleTag({ content: '#walkHud, #walkBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots, #hud .minimap { display: none !important; }' });
+  await page.addStyleTag({ content: '#homeBar, #hint, #hud .brand, #hud .dock, #hud .ctrl, #hud .sky, #hud .fsbtn, #spots { display: none !important; }' });
   await page.evaluate(() => { window.__coveCamFix = { pos: [3.4, 1.0, -6.4], look: [6.4, 0.2, -6.0], fov: 40, focus: 3.2 }; });
   await frames(10);
   /* (the log's meshes: the driftwood group is the one with a 2.6 m trunk lying along x by the fire) */

@@ -98,12 +98,6 @@
    ]
   ]
  },
- "engine": {
-  "rms": 0.2129,
-  "loopStart": 0.15,
-  "loopEnd": 7.35,
-  "peak": 0.8572
- },
  "impact": {
   "rms": 0.0789,
   "peak": 0.8549

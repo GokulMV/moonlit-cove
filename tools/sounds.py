@@ -88,11 +88,11 @@ meta['rain'] = loop('rain', 'rain/light-rain.mp3', 5.0, 45.0, xfade=3.0, kbps=12
 meta['owl'] = events('owl', 'animals/owl.mp3', [[3.2, 4.8], [10.2, 12.4]], kbps=80, mono=True, fade=0.12)
 meta['thunder'] = events('thunder', 'rain/thunder.mp3', [[0.5, 7.2], [20.5, 30.5], [41.0, 55.0]], kbps=160, fade=0.6)
 meta['page'] = events('page', 'things/paper.mp3', [[0.8, 1.6], [5.2, 6.1], [7.9, 8.9], [10.8, 11.6]], kbps=112, fade=0.06)
-# the van's engine and knocks (Kenney, CC0) are kept as they are
+# the knocks (Kenney, CC0) are kept as they are
 old = os.path.join(OUT, 'meta.json')
 if os.path.exists(old):
     prev = json.load(open(old))
-    for k in ('engine', 'impact'):
+    for k in ('impact',):
         if k in prev: meta[k] = prev[k]
 json.dump(meta, open(os.path.join(OUT, 'meta.json'), 'w'), indent=1)
 print(json.dumps(meta, indent=1))

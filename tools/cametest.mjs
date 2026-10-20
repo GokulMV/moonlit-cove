@@ -1,6 +1,6 @@
-/* The explore camera and walking: drag to turn, one swipe against several, the wheel, right-drag to move, a tap on the
-   sea, walking (footprints, a rock in the way, Auto) and, on a phone, one finger to turn, pinch and twist.
-   node tools/cametest.mjs [orbit|walk|mobile]   (all three when none is named) */
+/* The explore camera: drag to turn, one swipe against several, the wheel, right-drag to move, a tap on the sea and, on
+   a phone, one finger to turn, pinch and twist.
+   node tools/cametest.mjs [orbit|mobile]   (both when neither is named) */
 import { open, shot, wait, until } from './lib.mjs';
 const only = process.argv[2];
 const r3 = v => Math.round(v * 1000) / 1000;
@@ -117,61 +117,6 @@ if (!only || only === 'orbit') {
   await until(page, () => window.__cove.st.camT >= 1, null, 90000);
   const after = await page.evaluate(() => { const c = window.__cove; return { same: c.st.cur === c.orbCam, yaw: c.orb.v[0] }; });
   check(after.same && Math.abs(after.yaw - before.yaw) < 1e-3, 'closing a chapter returns to where the camera was turning');
-  await browser.close();
-}
-
-if (!only || only === 'walk') {
-  const { browser, page } = await open({ w: 960, h: 600, rs: 0.3 });
-  const W = () => page.evaluate(() => { const w = window.__cove.wk; return { on: w.on, x: w.x, z: w.z, h: w.h, v: w.v, prints: w.prints, auto: w.auto, camK: w.camK }; });
-  await page.click('#bWalk');
-  const w0 = await W();
-  check(w0.on && await page.evaluate(() => document.body.classList.contains('walking') && !document.getElementById('walkHud').hidden), 'walk button starts walking, with its bar');
-  await until(page, () => window.__cove.wk.camK >= 1, null, 90000);
-  await shot(page, 'walk_start');
-  console.log('standing at', { x: r3(w0.x), z: r3(w0.z), h: r3(w0.h) });
-
-  /* walking forward: it moves and leaves footprints */
-  await page.keyboard.down('w'); await wait(page, 14000); await page.keyboard.up('w');
-  const w1 = await W();
-  console.log('after holding W:', { x: r3(w1.x), z: r3(w1.z), moved: r3(Math.hypot(w1.x - w0.x, w1.z - w0.z)), prints: w1.prints });
-  check(Math.hypot(w1.x - w0.x, w1.z - w0.z) > 1 && w1.prints > 0, 'W walks forward and leaves footprints');
-
-  /* a rock in the way: put the walker a few metres from one, facing it, and walk into it */
-  const rock = await page.evaluate(() => {
-    const c = window.__cove, cand = Engine.world.chunks.flatMap(ch => ch.obs.flat()).filter(o => o[3] === 'rock' && o[2] > 0.5 && Math.abs(o[0]) < 300 && o[1] > Layout.shoreZ(o[0]) + 2 && o[1] < Layout.vegZ(o[0]) - 3 && Engine.world.massif(o[0], o[1] + 3) < 0.2);
-    cand.sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]));
-    const o = cand[0]; if (!o) return null;
-    const w = c.wk; w.x = o[0]; w.z = o[1] + o[2] + 2.6; w.h = w.hT = 0; w.v = 0;
-    return o;
-  });
-  if (!rock) check(false, 'found a rock on the sand to walk into');
-  else {
-    let minD = 1e9;
-    await page.keyboard.down('w');
-    for (let i = 0; i < 10; i++) { await wait(page, 1200); const w = await W(); minD = Math.min(minD, Math.hypot(w.x - rock[0], w.z - rock[1])); }
-    await shot(page, 'walk_rock');
-    await page.keyboard.up('w');
-    console.log('rock at', rock.slice(0, 3).map(r3), 'closest the walker came', r3(minD), 'needed at least', r3(rock[2] + 0.35));
-    check(minD >= rock[2] + 0.35 - 0.02, 'a rock stops the walker');
-  }
-
-  /* Auto: it walks on its own */
-  await page.evaluate(() => { const w = window.__cove.wk; w.x = 20; w.z = Layout.shoreZ(20) + 4; w.h = w.hT = -Math.PI / 2; });
-  await page.click('#bWalkAuto');
-  const a0 = await W();
-  await wait(page, 14000);
-  const a1 = await W();
-  console.log('Auto:', { from: [r3(a0.x), r3(a0.z)], to: [r3(a1.x), r3(a1.z)], moved: r3(Math.hypot(a1.x - a0.x, a1.z - a0.z)), gaze: await page.evaluate(() => window.__cove.ai.gaze) });
-  check(a1.auto && Math.hypot(a1.x - a0.x, a1.z - a0.z) > 1.5, 'Auto walks on its own');
-  await shot(page, 'walk_auto');
-
-  /* E: back to exploring, the camera's point where the walker stood */
-  await page.keyboard.press('e');
-  const ex = await page.evaluate(() => { const c = window.__cove; return { on: c.wk.on, x: c.wk.x, z: c.wk.z, px: c.orb.v[3], pz: c.orb.pz, yaw: c.orb.v[0], h: c.wk.h + c.wk.hy.v }; });
-  console.log('exit:', { walker: [r3(ex.x), r3(ex.z)], point: [r3(ex.px), r3(ex.pz)] });
-  check(!ex.on && Math.abs(ex.px - ex.x) < 1e-6 && Math.abs(ex.pz - ex.z) < 1.5, 'E stops walking and the camera turns round where you stood');
-  await until(page, () => window.__cove.wk.camK <= 0, null, 90000);
-  await shot(page, 'walk_exit');
   await browser.close();
 }
 

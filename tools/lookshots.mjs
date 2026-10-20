@@ -15,11 +15,13 @@ for (const v of only) {
   if (v === 'water') { await orb([0.1, 0.62, Math.log(0.3), H[3] + 8, 0.0]); await frames(3); }
   if (v === 'forest') { await orb([Math.PI - 0.2, 0.3, Math.log(0.9), H[3] + 30, 0.4]); await frames(3); }
   if (v === 'walk' || v === 'sky') {
-    await page.evaluate(([sky]) => { const c = window.__cove; if (!c.wk.on) c.startWalk(); const w = c.wk; w.x = Layout.camp.x - 18; w.z = Layout.shoreZ(w.x) + 2.6; w.h = w.hT = sky ? 0.4 : Math.PI / 2 + 0.2; w.pitchT = w.hp.v = sky ? 0.75 : -0.12; w.camK = 1; }, [v === 'sky']);
+    /* (standing on the sand down the beach from the camp, at eye height: along the beach, or up at the sky) */
+    await page.evaluate(([sky]) => { const x = Layout.camp.x - 18, z = Layout.shoreZ(x) + 2.6, h = sky ? 0.4 : Math.PI / 2 + 0.2, p = sky ? 0.75 : -0.12, y = 1.65;
+      window.__coveCamFix = { pos: [x, y, z], look: [x - Math.sin(h) * Math.cos(p) * 12, y + Math.sin(p) * 12, z - Math.cos(h) * Math.cos(p) * 12], fov: 60, focus: 20 }; }, [v === 'sky']);
     await frames(settle + 1);
   }
   await shot(page, `look_${v}_${tag}`);
-  if (v === 'walk' || v === 'sky') await page.evaluate(() => window.__cove.stopWalk());
+  if (v === 'walk' || v === 'sky') await page.evaluate(() => { window.__coveCamFix = null; });
 }
 const errs = logs.filter(l => /\[(error|pageerror)\]/.test(l));
 console.log(errs.length ? 'page errors:\n  ' + errs.slice(0, 6).join('\n  ') : 'no page errors');
