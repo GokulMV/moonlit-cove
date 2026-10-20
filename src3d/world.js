@@ -1020,22 +1020,34 @@ void main(){
       return (col.crowns = { M, A: new Float32Array(A) });
     }
     /* how far the world point (x, y, z) stands clear of the nearest crown (m, as far as CRM: out from its rim, up from its
-       dome, or down from its lowest leaves; less than nothing in among them). The stretches either side too, near their
-       edges; one not yet worked out has no trees drawn either */
+       dome, or down from its lowest leaves; less than nothing in among them): the camp's own, and the forest's, of the
+       stretches either side too near their edges (one not yet worked out has no trees drawn either) */
+    /* (and the camp's own palms, trees, bushes and fruit trees, in the world's frame, where Layout has them: each its
+       crown's middle, how wide, its lowest leaves and its top) */
+    const campCrowns = (() => {
+      const A = [];
+      for (const p of Layout.palms || []) A.push(p[0] + (p[3] || 0), p[1] + (p[4] || 0), p[5] || 3.3, Math.max(0, p[2] - 1.8), p[2] + 1.2);
+      for (const t of Layout.trees || []) A.push(t[0], t[1], t[2], Math.max(0.4, t[3] - t[2]), t[3] + 0.7 * t[2]);
+      for (const b of Layout.bushes || []) A.push(b[0], b[1], b[2], 0, b[3] + 0.3);
+      for (const f of Layout.fruit || []) { const H = (f.opts && f.opts.H) || (f.kind === 'banana' ? 3.6 : 4.2); A.push(f.x, f.z, Math.max(1.6, 0.38 * H), 0.3 * H, H + 0.3); }
+      return new Float32Array(A);
+    })();
+    const domeClear = (A, i, x, y, z, best) => {
+      const R = A[i + 2], d = Math.hypot(x - A[i], z - A[i + 1]); if (d - R >= best) return best;
+      const lo = A[i + 3], hi = A[i + 4], u = Math.min(1, d / R), top = lo + (hi - lo) * Math.sqrt(1 - u * u);
+      return Math.min(best, Math.max(d - R, y - top, lo - y));
+    };
     function crownClear(xw, y, zw) {
-      if (!IF) return CRM;
-      const x = xw + lx + o.x, z = zw + o.z, c0 = Math.floor((x - X0) / CW), e0 = x - (X0 + c0 * CW);
       let best = CRM;
+      for (let i = 0; i < campCrowns.length; i += 5) best = domeClear(campCrowns, i, xw, y, zw, best);
+      if (!IF) return best;
+      const x = xw + lx + o.x, z = zw + o.z, c0 = Math.floor((x - X0) / CW), e0 = x - (X0 + c0 * CW);
       for (let c = c0 - 1; c <= c0 + 1; c++) {
         if ((c < c0 && e0 > 36) || (c > c0 && CW - e0 > 36)) continue;
         const cw = cwOf(c), col = FCOL.get(cw); if (!col || !col.done) continue;
         const G = crownGrid(col), xq = x - (c - cw) * CW, a = G.M.get(Math.floor(xq / CRC) * 4096 + Math.floor(z / CRC)); if (!a) continue;
         const A = G.A;
-        for (let j = 0; j < a.length; j++) {
-          const i = a[j], R = A[i + 2], d = Math.hypot(xq - A[i], z - A[i + 1]); if (d - R >= best) continue;
-          const lo = A[i + 3], hi = A[i + 4], u = Math.min(1, d / R), top = lo + (hi - lo) * Math.sqrt(1 - u * u);
-          const g = Math.max(d - R, y - top, lo - y); if (g < best) best = g;
-        }
+        for (let j = 0; j < a.length; j++) best = domeClear(A, a[j], xq, y, z, best);
       }
       return best;
     }
